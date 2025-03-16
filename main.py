@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from registrar_gastos import registrar_gasto
+from configuracoes import GOOGLE_SHEETS_URL
 from enviar_whatsapp import enviar_whatsapp
 from enviar_email import enviar_email
+import requests
 
 app = FastAPI()
 
@@ -13,42 +14,22 @@ class Gasto(BaseModel):
     valor: float
     forma_pagamento: str
 
-class Mensagem(BaseModel):
-    mensagem: str
-    numero: str
+@app.post("/registrar_gasto")
+def registrar_gasto(gasto: Gasto):
+    dados = {
+        'usuario': gasto.usuario,
+        'descricao': gasto.descricao,
+        'categoria': gasto.categoria,
+        'valor': gasto.valor,
+        'forma_pagamento': gasto.forma_pagamento
+    }
 
-class Email(BaseModel):
-    destinatario: str
-    assunto: str
-    mensagem: str
-
-@app.post("/registrar-gasto")
-async def registrar_gasto_api(gasto: dict):
     try:
-        registrar_gasto(
-            gasto["descricao"], 
-            gasto["categoria"], 
-            gasto["valor"], 
-            gasto["forma_pagamento"]
-        )
-        return {"status": "✅ Gasto registrado com sucesso!"}
+        resposta = requests.post(GOOGLE_SHEETS_URL, json=dados)
+        if resposta.status_code == 200:
+            return {"status": "✅ Gasto registrado com sucesso."}
+        else:
+            raise HTTPException(status_code=400, detail="Erro ao registrar gasto no Sheets.")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/enviar-whatsapp")
-async def enviar_whatsapp_api(dados: dict):
-    try:
-        from enviar_whatsapp import enviar_whatsapp
-        enviar_whatsapp(dados["mensagem"], dados["numero"])
-        return {"status": "Mensagem enviada com sucesso!"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/enviar-email")
-async def enviar_email_api(email: Email):
-    try:
-        from enviar_email import enviar_email
-        enviar_email(email.destinatario, email.assunto, email.mensagem)
-        return {"status": "Email enviado com sucesso!"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
