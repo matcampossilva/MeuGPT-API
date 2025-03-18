@@ -13,7 +13,7 @@ LIMIT_INTERACOES = 10  # Limite de interações gratuitas
 # Configuração Google Sheets API
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name('meugpt-api-sheets-92a9d439900d.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/meugpt-api-sheets-92a9d439900d.json', scope)
     client = gspread.authorize(creds)
     return client
 
