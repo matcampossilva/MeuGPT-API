@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from twilio.rest import Client
+import os
 
 app = FastAPI()
 
@@ -43,13 +45,32 @@ def atualiza_gratuitos(numero, nome, email):
         sheet.append_row([nome, numero, email, 1])
         return 1
 
+# Função para envio via WhatsApp (Twilio)
+def enviar_whatsapp(numero_destino, mensagem):
+    try:
+        account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+        auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+        whatsapp_number = os.getenv('TWILIO_WHATSAPP_NUMBER')
+
+        client = Client(account_sid, auth_token)
+
+        message = client.messages.create(
+            body=mensagem,
+            from_=f'whatsapp:{whatsapp_number}',
+            to=f'whatsapp:+55{numero_destino}'
+        )
+        print(f"✅ Mensagem enviada para {numero_destino}. SID: {message.sid}")
+
+    except Exception as e:
+        print(f"❌ Erro ao enviar WhatsApp: {e}")
+
 # Endpoint principal
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
     dados = await request.json()
     nome = dados['nome']
     numero = dados['whatsapp']
-    email = dados.get('email', '')  # Se estiver disponível
+    email = dados.get('email', '')
     mensagem_usuario = dados['mensagem'].lower()
 
     if verifica_pagante(numero):
@@ -61,4 +82,8 @@ async def receber_mensagem(request: Request):
         else:
             resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
 
+    # Envia via WhatsApp automaticamente
+    enviar_whatsapp(numero, resposta)
+
+    # Retorno no terminal
     return {"resposta": resposta}
