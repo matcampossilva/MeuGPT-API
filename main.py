@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
@@ -21,14 +21,13 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # Configuração OpenAI API
 openai.api_key = OPENAI_API_KEY
 
-# Configuração Google Sheets API
+# --- Google Sheets ---
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/meugpt-api-sheets-92a9d439900d.json', scope)
     client = gspread.authorize(creds)
     return client
 
-# Verifica se número é pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url(URL_GOOGLE_SHEETS).worksheet(SHEET_PAGANTES)
@@ -38,7 +37,6 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza/Registra usuários gratuitos
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url(URL_GOOGLE_SHEETS).worksheet(SHEET_GRATUITOS)
@@ -54,7 +52,7 @@ def atualiza_gratuitos(numero, nome, email):
         sheet.append_row([nome, numero, email, 1])
         return 1
 
-# Envio WhatsApp
+# --- Twilio WhatsApp ---
 def enviar_whatsapp(mensagem, numero_destino):
     client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
@@ -67,7 +65,7 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro no envio do WhatsApp: {e}")
 
-# Consulta ChatGPT - corrigido
+# --- ChatGPT ---
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
@@ -85,14 +83,20 @@ Conselheiro:
 """
 
     resposta = openai.chat.completions.create(
-        model="gpt-4",  # pode trocar por gpt-3.5-turbo se quiser economizar
+        model="gpt-4",  # ou gpt-3.5-turbo
         messages=[{"role": "system", "content": prompt}],
         max_tokens=300
     )
-    return resposta.choices[0].message.content.strip()
+    resposta_texto = resposta.choices[0].message.content.strip()
+    print(f"🤖 Resposta do ChatGPT: {resposta_texto}")
+    return resposta_texto
 
-# Endpoint principal
-from fastapi import Form
+# --- Endpoints ---
+
+@app.get("/")
+def root():
+    return {"status": "OK - Meu Conselheiro Financeiro rodando 🎯"}
+
 @app.post("/webhook")
 async def receber_mensagem(
     Body: str = Form(...),
@@ -102,9 +106,9 @@ async def receber_mensagem(
     numero = From.replace("whatsapp:", "").replace("+", "").replace(" ", "")
     nome = ProfileName
     mensagem_usuario = Body
-    email = ""  # Não vem do Twilio, então deixamos vazio.
+    email = ""  # Não vem do Twilio
 
-    print(f"📩 Mensagem recebida de {nome}: {mensagem_usuario}")
+    print(f"📩 Mensagem recebida de {nome} ({numero}): {mensagem_usuario}")
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
@@ -112,9 +116,12 @@ async def receber_mensagem(
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
+        print(f"🔢 Interação nº {interacoes} do usuário gratuito {nome}")
+
         if interacoes <= LIMIT_INTERACOES:
             resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
         else:
             resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
+        
         enviar_whatsapp(resposta, numero_destino=f"+{numero}")
         return {"resposta": resposta}
