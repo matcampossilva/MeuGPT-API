@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-import openai
+from openai import OpenAI
 import os
 
 app = FastAPI()
@@ -17,17 +17,19 @@ LIMIT_INTERACOES = 10
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 
-# Configuração OpenAI API
-openai.api_key = OPENAI_API_KEY
+client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+client_openai = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- Google Sheets ---
+# Configuração Google Sheets API
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/meugpt-api-sheets-92a9d439900d.json', scope)
     client = gspread.authorize(creds)
     return client
 
+# Verifica se número é pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url(URL_GOOGLE_SHEETS).worksheet(SHEET_PAGANTES)
@@ -37,6 +39,7 @@ def verifica_pagante(numero):
             return True
     return False
 
+# Atualiza/Registra usuários gratuitos
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url(URL_GOOGLE_SHEETS).worksheet(SHEET_GRATUITOS)
@@ -52,12 +55,11 @@ def atualiza_gratuitos(numero, nome, email):
         sheet.append_row([nome, numero, email, 1])
         return 1
 
-# --- Twilio WhatsApp ---
+# Envio WhatsApp via Messaging Service
 def enviar_whatsapp(mensagem, numero_destino):
-    client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client_twilio.messages.create(
-            from_='whatsapp:+14155238886',
+            messaging_service_sid=MESSAGING_SERVICE_SID,  # Aqui usamos o Messaging Service SID
             body=mensagem,
             to=f'whatsapp:{numero_destino}'
         )
@@ -65,7 +67,7 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro no envio do WhatsApp: {e}")
 
-# --- ChatGPT ---
+# Consulta ChatGPT
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
@@ -82,31 +84,21 @@ Usuário: {mensagem_usuario}
 Conselheiro:
 """
 
-    resposta = openai.chat.completions.create(
-        model="gpt-4",  # ou gpt-3.5-turbo
-        messages=[{"role": "system", "content": prompt}],
-        max_tokens=300
+    resposta = client_openai.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": prompt}]
     )
-    resposta_texto = resposta.choices[0].message.content.strip()
-    print(f"🤖 Resposta do ChatGPT: {resposta_texto}")
-    return resposta_texto
+    return resposta.choices[0].message.content.strip()
 
-# --- Endpoints ---
-
-@app.get("/")
-def root():
-    return {"status": "OK - Meu Conselheiro Financeiro rodando 🎯"}
-
+# Endpoint principal
 @app.post("/webhook")
-async def receber_mensagem(
-    Body: str = Form(...),
-    From: str = Form(...),
-    ProfileName: str = Form(default="Usuário")
-):
-    numero = From.replace("whatsapp:", "").replace("+", "").replace(" ", "")
-    nome = ProfileName
-    mensagem_usuario = Body
-    email = ""  # Não vem do Twilio
+async def receber_mensagem(request: Request):
+    dados = await request.json()
+    print(f"📩 Mensagem recebida: {dados}")  # Log para debug se necessário
+
+    nome = dados.get('profile', {}).get('name', 'Usuário')
+    numero = dados.get('from', '').replace('whatsapp:', '').replace('+', '')
+    mensagem_usuario = dados.get('body', '')
 
     print(f"📩 Mensagem recebida de {nome} ({numero}): {mensagem_usuario}")
 
@@ -115,13 +107,11 @@ async def receber_mensagem(
         enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
         return {"resposta": resposta_gpt}
     else:
-        interacoes = atualiza_gratuitos(numero, nome, email)
+        interacoes = atualiza_gratuitos(numero, nome, '')
         print(f"🔢 Interação nº {interacoes} do usuário gratuito {nome}")
-
         if interacoes <= LIMIT_INTERACOES:
             resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
         else:
             resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-        
         enviar_whatsapp(resposta, numero_destino=f"+{numero}")
         return {"resposta": resposta}
