@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-from openai import OpenAI
+import openai
 import os
 
 app = FastAPI()
@@ -17,6 +17,9 @@ LIMIT_INTERACOES = 10
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# Configuração da API OpenAI
+openai.api_key = OPENAI_API_KEY
 
 # Configuração Google Sheets API
 def conecta_google_sheets():
@@ -66,7 +69,6 @@ def enviar_whatsapp(mensagem, numero_destino):
 
 # Consulta ChatGPT
 def consulta_chatgpt(nome, mensagem_usuario):
-    client_openai = OpenAI(api_key=OPENAI_API_KEY)
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
 
@@ -82,12 +84,12 @@ Usuário: {mensagem_usuario}
 Conselheiro:
 """
 
-    resposta = client_openai.chat.completions.create(
+    resposta = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": prompt}],
         max_tokens=300
     )
-    return resposta.choices[0].message.content.strip()
+    return resposta.choices[0].message['content'].strip()
 
 # Endpoint principal
 @app.post("/webhook")
