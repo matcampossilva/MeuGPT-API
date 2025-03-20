@@ -5,7 +5,8 @@ load_dotenv()
 
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-WHATSAPP_FROM = 'whatsapp:+14155238886'
+WHATSAPP_FROM = 'whatsapp:+14155238886'  # Pode até remover depois, já que vamos usar Messaging Service
+MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')  # 👈🏽 NOVO!
 
 EMAIL_REMETENTE = os.getenv('EMAIL_REMETENTE')
 SENHA_REMETENTE = os.getenv('SENHA_REMETENTE')
