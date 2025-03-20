@@ -92,17 +92,23 @@ Conselheiro:
     return resposta.choices[0].message.content.strip()
 
 # Endpoint principal
+from fastapi import Form
 @app.post("/webhook")
-async def receber_mensagem(request: Request):
-    dados = await request.json()
-    nome = dados['nome']
-    numero = dados['whatsapp']
-    email = dados.get('email', '')
-    mensagem_usuario = dados['mensagem']
+async def receber_mensagem(
+    Body: str = Form(...),
+    From: str = Form(...),
+    ProfileName: str = Form(default="Usuário")
+):
+    numero = From.replace("whatsapp:", "").replace("+", "").replace(" ", "")
+    nome = ProfileName
+    mensagem_usuario = Body
+    email = ""  # Não vem do Twilio, então deixamos vazio.
+
+    print(f"📩 Mensagem recebida de {nome}: {mensagem_usuario}")
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
@@ -110,5 +116,5 @@ async def receber_mensagem(request: Request):
             resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
         else:
             resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
+        enviar_whatsapp(resposta, numero_destino=f"+{numero}")
         return {"resposta": resposta}
