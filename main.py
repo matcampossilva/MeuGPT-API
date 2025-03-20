@@ -75,16 +75,19 @@ Jamais mencione fontes ou arquivos, apenas incorpore os conhecimentos naturalmen
 """
 
 # Função consulta ChatGPT
-def consulta_chatgpt(nome, mensagem):
-    openai.api_key = os.getenv('OPENAI_API_KEY')
-    resposta = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+def consulta_chatgpt(nome, mensagem_usuario):
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",  # Ou gpt-4.0 se tiver ativado
         messages=[
             {"role": "system", "content": PROMPT_BASE},
-            {"role": "user", "content": f"Usuário: {nome}. Mensagem: {mensagem}"}
-        ]
+            {"role": "user", "content": f"Usuário: {nome}. Mensagem: {mensagem_usuario}"}
+        ],
+        max_tokens=500,
+        temperature=0.7
     )
-    return resposta['choices'][0]['message']['content'].strip()
+    return response.choices[0].message.content.strip()
 
 # Webhook principal
 @app.post("/webhook")
