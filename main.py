@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Request
-from twilio.rest import Client
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os
 import openai
+import os
+from enviar_whatsapp import enviar_whatsapp
 
 app = FastAPI()
 
@@ -11,7 +11,7 @@ app = FastAPI()
 URL_GOOGLE_SHEETS = 'https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing'
 SHEET_PAGANTES = 'Pagantes'
 SHEET_GRATUITOS = 'Gratuitos'
-LIMIT_INTERACOES = 10  # Limite grátis
+LIMIT_INTERACOES = 10  # Limite de interações gratuitas
 
 # Configuração Google Sheets API
 def conecta_google_sheets():
@@ -20,6 +20,7 @@ def conecta_google_sheets():
     client = gspread.authorize(creds)
     return client
 
+# Verifica se número é pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url(URL_GOOGLE_SHEETS).worksheet(SHEET_PAGANTES)
@@ -29,6 +30,7 @@ def verifica_pagante(numero):
             return True
     return False
 
+# Atualiza/Registra usuários gratuitos
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url(URL_GOOGLE_SHEETS).worksheet(SHEET_GRATUITOS)
@@ -37,23 +39,17 @@ def atualiza_gratuitos(numero, nome, email):
     for i, linha in enumerate(lista):
         if str(linha['WHATSAPP']) == numero:
             novo_valor = int(linha['CONTADOR']) + 1
-            sheet.update_cell(i+2, 4, novo_valor)
+            sheet.update_cell(i+2, 4, novo_valor)  # coluna CONTADOR
             encontrado = True
             return novo_valor
     if not encontrado:
         sheet.append_row([nome, numero, email, 1])
         return 1
 
-# ENV Variables Twilio e OpenAI
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# Configuração OpenAI
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-openai.api_key = OPENAI_API_KEY
-
-# Prompt fixo do Meu Conselheiro Financeiro
+# Prompt fixo
 PROMPT_BASE = """
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
 
@@ -66,20 +62,24 @@ Sua comunicação é sempre leve, amigável e intimista, com leve toque goiano (
 Seja conciso e prático, sem respostas muito longas. Oriente o usuário a lançar seus gastos, perguntar sobre dívidas, investimentos ou qualquer questão financeira.
 
 Jamais mencione fontes ou arquivos, apenas incorpore os conhecimentos naturalmente. Nunca recomende divórcio. Para crises financeiras no casamento, sempre proponha estratégias práticas e espirituais alinhadas com São Josemaria Escrivá e a Doutrina Católica.
-
 """
 
-# Função para enviar WhatsApp
-def enviar_whatsapp(mensagem, numero_destino):
+# Função para consultar o ChatGPT
+def consulta_chatgpt(nome, mensagem_usuario):
+    mensagem_final = f"{PROMPT_BASE}\nUsuário: {mensagem_usuario}\nMeu Conselheiro Financeiro:"
     try:
-        message = client_twilio.messages.create(
-            from_=TWILIO_PHONE_NUMBER,
-            body=mensagem,
-            to=f'whatsapp:{numero_destino}'
+        resposta = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": PROMPT_BASE},
+                {"role": "user", "content": mensagem_usuario}
+            ],
+            max_tokens=500,
+            temperature=0.7
         )
-        print(f"✅ Mensagem enviada com sucesso para {numero_destino}. SID: {message.sid}")
+        return resposta['choices'][0]['message']['content'].strip()
     except Exception as e:
-        print(f"❌ Erro ao enviar WhatsApp: {e}")
+        return f"❌ Ocorreu um erro ao consultar o GPT: {e}"
 
 # Endpoint principal
 @app.post("/webhook")
@@ -91,29 +91,14 @@ async def receber_mensagem(request: Request):
     mensagem_usuario = dados['mensagem']
 
     if verifica_pagante(numero):
-        # Usuário pagante - libera full
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero)
-        return {"status": "Mensagem enviada para pagante"}
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
+        return {"resposta": resposta_gpt}
     else:
-        # Usuário gratuito - controla limite
         interacoes = atualiza_gratuitos(numero, nome, email)
         if interacoes <= LIMIT_INTERACOES:
-            resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-            enviar_whatsapp(f"(Versão Gratuita {interacoes}/{LIMIT_INTERACOES})\n\n{resposta_gpt}", numero)
-            return {"status": "Mensagem enviada para gratuito"}
+            resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
         else:
-            msg = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-            enviar_whatsapp(msg, numero)
-            return {"status": "Limite atingido"}
-
-# Consulta à API ChatGPT
-def consulta_chatgpt(nome, mensagem_usuario):
-    prompt_completo = f"{PROMPT_BASE}\nUsuário ({nome}): {mensagem_usuario}\nConselheiro:"
-    resposta = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt_completo,
-        max_tokens=500,
-        temperature=0.7
-    )
-    return resposta.choices[0].text.strip()
+            resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
+        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
+        return {"resposta": resposta}
