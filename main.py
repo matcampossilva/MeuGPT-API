@@ -16,10 +16,10 @@ LIMIT_INTERACOES = 10
 # Variáveis de ambiente
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+# Configuração da API OpenAI
 client_openai = OpenAI(api_key=OPENAI_API_KEY)
 
 # Configuração Google Sheets API
@@ -55,11 +55,12 @@ def atualiza_gratuitos(numero, nome, email):
         sheet.append_row([nome, numero, email, 1])
         return 1
 
-# Envio WhatsApp via Messaging Service
+# Envio WhatsApp usando Messaging Service
 def enviar_whatsapp(mensagem, numero_destino):
+    client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client_twilio.messages.create(
-            messaging_service_sid=MESSAGING_SERVICE_SID,  # Aqui usamos o Messaging Service SID
+            messaging_service_sid=MESSAGING_SERVICE_SID,
             body=mensagem,
             to=f'whatsapp:{numero_destino}'
         )
@@ -94,24 +95,20 @@ Conselheiro:
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
     dados = await request.json()
-    print(f"📩 Mensagem recebida: {dados}")  # Log para debug se necessário
-
-    nome = dados.get('profile', {}).get('name', 'Usuário')
-    numero = dados.get('from', '').replace('whatsapp:', '').replace('+', '')
-    mensagem_usuario = dados.get('body', '')
-
-    print(f"📩 Mensagem recebida de {nome} ({numero}): {mensagem_usuario}")
+    nome = dados['nome']
+    numero = dados['whatsapp']
+    email = dados.get('email', '')
+    mensagem_usuario = dados['mensagem']
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
         return {"resposta": resposta_gpt}
     else:
-        interacoes = atualiza_gratuitos(numero, nome, '')
-        print(f"🔢 Interação nº {interacoes} do usuário gratuito {nome}")
+        interacoes = atualiza_gratuitos(numero, nome, email)
         if interacoes <= LIMIT_INTERACOES:
             resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
         else:
             resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-        enviar_whatsapp(resposta, numero_destino=f"+{numero}")
+        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
         return {"resposta": resposta}
