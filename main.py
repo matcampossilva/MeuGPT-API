@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from twilio.rest import Client
 import openai
 import os
-from enviar_whatsapp import enviar_whatsapp
 
 app = FastAPI()
 
@@ -11,7 +11,15 @@ app = FastAPI()
 URL_GOOGLE_SHEETS = 'https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing'
 SHEET_PAGANTES = 'Pagantes'
 SHEET_GRATUITOS = 'Gratuitos'
-LIMIT_INTERACOES = 10  # Limite de interações gratuitas
+LIMIT_INTERACOES = 10
+
+# Variáveis de ambiente
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# Configuração OpenAI API
+openai.api_key = OPENAI_API_KEY
 
 # Configuração Google Sheets API
 def conecta_google_sheets():
@@ -46,11 +54,22 @@ def atualiza_gratuitos(numero, nome, email):
         sheet.append_row([nome, numero, email, 1])
         return 1
 
-# Configuração OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Envio WhatsApp
+def enviar_whatsapp(mensagem, numero_destino):
+    client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    try:
+        message = client_twilio.messages.create(
+            from_='whatsapp:+14155238886',
+            body=mensagem,
+            to=f'whatsapp:{numero_destino}'
+        )
+        print(f"✅ WhatsApp enviado para {numero_destino}. SID: {message.sid}")
+    except Exception as e:
+        print(f"❌ Erro no envio do WhatsApp: {e}")
 
-# Prompt fixo
-PROMPT_BASE = """
+# Consulta ChatGPT - corrigido
+def consulta_chatgpt(nome, mensagem_usuario):
+    prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
 
 Sua missão é organizar a vida financeira do usuário respeitando rigorosamente esta hierarquia: Deus, família e trabalho, nesta ordem.
@@ -59,52 +78,37 @@ O dinheiro serve ao homem, jamais o contrário. Seu objetivo é ajudar o usuári
 
 Sua comunicação é sempre leve, amigável e intimista, com leve toque goiano (ex.: "Uai!", "Tem base?"), provocando sempre perguntas curtas para o usuário. Utilize emojis naturais e apropriados.
 
-Seja conciso e prático, sem respostas muito longas. Oriente o usuário a lançar seus gastos, perguntar sobre dívidas, investimentos ou qualquer questão financeira.
+Jamais recomende divórcio. Sempre proponha estratégias práticas para crises financeiras no casamento, alinhadas com a Doutrina Católica.
 
-Jamais mencione fontes ou arquivos, apenas incorpore os conhecimentos naturalmente. Nunca recomende divórcio. Para crises financeiras no casamento, sempre proponha estratégias práticas e espirituais alinhadas com São Josemaria Escrivá e a Doutrina Católica.
+Usuário: {mensagem_usuario}
+Conselheiro:
 """
 
-# Função para consultar o ChatGPT
-def consulta_chatgpt(nome, mensagem_usuario):
-    mensagem_final = f"{PROMPT_BASE}\nUsuário: {mensagem_usuario}\nMeu Conselheiro Financeiro:"
-    try:
-        resposta = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": PROMPT_BASE},
-                {"role": "user", "content": mensagem_usuario}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
-        return resposta['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        return f"❌ Ocorreu um erro ao consultar o GPT: {e}"
+    resposta = openai.chat.completions.create(
+        model="gpt-4",  # pode trocar por gpt-3.5-turbo se quiser economizar
+        messages=[{"role": "system", "content": prompt}],
+        max_tokens=300
+    )
+    return resposta.choices[0].message.content.strip()
 
 # Endpoint principal
-from fastapi import Form
-
 @app.post("/webhook")
-async def receber_mensagem(
-    Body: str = Form(...),
-    From: str = Form(...),
-):
-
-    numero = From.replace("whatsapp:", "").replace("+", "").strip()
-    nome = "Usuário"  # Nome genérico, pois Twilio não manda nome
-
-    # A mensagem enviada pelo usuário
-    mensagem_usuario = Body
+async def receber_mensagem(request: Request):
+    dados = await request.json()
+    nome = dados['nome']
+    numero = dados['whatsapp']
+    email = dados.get('email', '')
+    mensagem_usuario = dados['mensagem']
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
         return {"resposta": resposta_gpt}
     else:
-        interacoes = atualiza_gratuitos(numero, nome, email="")
+        interacoes = atualiza_gratuitos(numero, nome, email)
         if interacoes <= LIMIT_INTERACOES:
-            resposta = f"Olá! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
+            resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/{LIMIT_INTERACOES} interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link para assinar]."
         else:
-            resposta = f"Ei, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-        enviar_whatsapp(resposta, numero_destino=f"+{numero}")
+            resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
+        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
         return {"resposta": resposta}
