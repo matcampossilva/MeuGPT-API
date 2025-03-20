@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-from openai import OpenAI
+import openai
 import os
 
 app = FastAPI()
@@ -18,8 +18,8 @@ TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Configuração OpenAI API - VERSÃO NOVA
-client_openai = OpenAI(api_key=OPENAI_API_KEY)
+# Configuração OpenAI API
+openai.api_key = OPENAI_API_KEY
 
 # Configuração Google Sheets API
 def conecta_google_sheets():
@@ -67,7 +67,7 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro no envio do WhatsApp: {e}")
 
-# Consulta ChatGPT - VERSÃO CORRIGIDA
+# Consulta ChatGPT - corrigido
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
@@ -84,8 +84,8 @@ Usuário: {mensagem_usuario}
 Conselheiro:
 """
 
-    resposta = client_openai.chat.completions.create(
-        model="gpt-4",  # Pode mudar para gpt-3.5-turbo se quiser economizar tokens
+    resposta = openai.chat.completions.create(
+        model="gpt-4",  # pode trocar por gpt-3.5-turbo se quiser economizar
         messages=[{"role": "system", "content": prompt}],
         max_tokens=300
     )
