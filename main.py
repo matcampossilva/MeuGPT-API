@@ -78,11 +78,11 @@ Conselheiro:
 # Função para enviar mensagem para usuários gratuitos
 def mensagem_gratuito(nome, interacoes):
     if interacoes <= 7:
-        return f"Olá, {nome}! 👋🏼 Aqui é o Meu Conselheiro Financeiro. Sempre que quiser clareza para alinhar sua vida financeira ao que realmente importa – sua família e seu propósito – é só me chamar!"
+        return f"Olá, {nome}! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nAqui, nosso objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\nPra começarmos bem, me envie seu e-mail por aqui. É rápido e essencial pra seguirmos."
     elif interacoes in [8, 9]:
-        return f"{nome}, seguimos juntos organizando tudo por aqui! 🔑 Lembre-se: você tem mais {10 - interacoes} interações gratuitas. Para ter acesso ilimitado e completo ao Meu Conselheiro Financeiro, é só clicar aqui: [link premium]."
+        return f"{nome}, passando aqui pra avisar: restam só {10 - interacoes} interações no seu acesso gratuito.\nQuer mesmo continuar resolvendo sua vida financeira no improviso… ou prefere estruturar tudo de forma sólida, pensando no longo prazo, sua família e seu propósito?\nLibere seu acesso completo aqui e bora pra prática: [link premium] 🔥"
     else:
-        return f"{nome}, você chegou ao fim das suas interações gratuitas. 🚀 Quer destravar o acesso total ao Meu Conselheiro Financeiro e continuar evoluindo? Clique aqui: [link premium]."
+        return f"{nome}, suas interações gratuitas acabaram.\nMas se quiser seguir firme e realmente colocar ordem na sua vida financeira, com um direcionamento que conecta trabalho, família e propósito, libere já seu acesso completo.\nDecisão fácil de tomar: só clicar aqui → [link premium] 🚀"
 
 # Endpoint principal
 @app.post("/webhook")
@@ -99,9 +99,6 @@ async def receber_mensagem(request: Request):
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
-        if interacoes <= 10:
-            resposta = f"Olá! Você tem mais {10 - interacoes} interações gratuitas restantes. Para acesso completo, clique aqui: [link premium]."
-        else:
-            resposta = f"Suas interações gratuitas acabaram! 🚀 Para acesso completo, clique aqui: [link premium]."
+        resposta = mensagem_gratuito(nome, interacoes)
         enviar_whatsapp(resposta, numero_destino=numero.replace("whatsapp:", ""))
         return {"resposta": resposta}
