@@ -88,17 +88,20 @@ def mensagem_gratuito(nome, interacoes):
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
     dados = await request.form()
-    nome = dados['nome']
-    numero = dados['whatsapp']
-    email = dados.get('email', '')
-    mensagem_usuario = dados['mensagem']
+    numero = dados.get('From')
+    mensagem_usuario = dados.get('Body')
+    nome = "Usuário"  # Você pode perguntar depois
+    email = ""  # Também pode perguntar depois
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
+        enviar_whatsapp(resposta_gpt, numero_destino=numero.replace("whatsapp:", ""))
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
-        resposta = mensagem_gratuito(nome, interacoes)
-        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
+        if interacoes <= 10:
+            resposta = f"Olá! Você tem mais {10 - interacoes} interações gratuitas restantes. Para acesso completo, clique aqui: [link premium]."
+        else:
+            resposta = f"Suas interações gratuitas acabaram! 🚀 Para acesso completo, clique aqui: [link premium]."
+        enviar_whatsapp(resposta, numero_destino=numero.replace("whatsapp:", ""))
         return {"resposta": resposta}
