@@ -14,8 +14,8 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Configuração OpenAI
-client_openai = OpenAI(api_key=OPENAI_API_KEY)
+# Configuração OpenAI (SEM passar api_key diretamente)
+client_openai = OpenAI()
 
 # Configuração Google Sheets
 def conecta_google_sheets():
@@ -78,7 +78,7 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro ao enviar WhatsApp: {e}")
 
-# Consulta GPT (NOVA SINTAXE)
+# Consulta GPT (SEM api_key direto)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
