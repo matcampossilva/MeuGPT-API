@@ -9,7 +9,7 @@ import re
 app = FastAPI()
 
 # Variáveis de ambiente
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_SID = os.getenv('TWILIO_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -67,7 +67,7 @@ def atualiza_gratuitos(numero, nome, email):
 
 # Envio WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
-    client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    client_twilio = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client_twilio.messages.create(
             messaging_service_sid=MESSAGING_SERVICE_SID,
