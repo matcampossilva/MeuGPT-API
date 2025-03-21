@@ -34,7 +34,7 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza gratuitos (agora NÃO duplica número)
+# Atualiza gratuitos (corrigido: sem duplicação!)
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
@@ -60,9 +60,11 @@ def atualiza_gratuitos(numero, nome, email):
             break
 
     if not encontrado:
-        sheet.append_row([nome, numero, email, 1])
-        nome_atual = nome
-        email_atual = email
+        nome_final = nome if nome else ""
+        email_final = email if email else ""
+        sheet.append_row([nome_final, numero, email_final, 1])
+        nome_atual = nome_final
+        email_atual = email_final
 
     return contador_atual, nome_atual, email_atual
 
@@ -102,7 +104,7 @@ def extrair_email(texto):
         return email_match.group(0)
     return ""
 
-# Extrai nome (simples, tudo antes do email)
+# Extrai nome (simples, antes do email)
 def extrair_nome(texto):
     email_match = re.search(r'[\w\.-]+@[\w\.-]+', texto)
     if email_match:
@@ -117,7 +119,7 @@ async def receber_mensagem(request: Request):
     numero = dados.get('From').replace("whatsapp:", "").strip()
     mensagem_usuario = dados.get('Body')
 
-    # Tenta extrair email e nome
+    # Extrair nome e email
     email_extraido = extrair_email(mensagem_usuario)
     nome_extraido = extrair_nome(mensagem_usuario) if email_extraido else ""
 
@@ -126,16 +128,16 @@ async def receber_mensagem(request: Request):
         enviar_whatsapp(resposta_gpt, numero_destino=numero)
         return {"resposta": resposta_gpt}
 
-    # Gratuito: atualiza dados
+    # Gratuito: atualiza sem duplicar
     interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
 
-    # Se ainda não informou tudo, manda mensagem inicial
+    # Se faltar dados, manda msg inicial
     if not nome_salvo or not email_salvo:
         mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
 
-    # Tudo preenchido: segue normal
+    # Dados completos: responde normalmente
     resposta_gpt = consulta_chatgpt(nome_salvo, mensagem_usuario)
     enviar_whatsapp(resposta_gpt, numero_destino=numero)
     return {"resposta": resposta_gpt}
