@@ -73,7 +73,7 @@ Usuário: {mensagem_usuario}
 Conselheiro:
 """
     resposta = client_openai.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4-turbo",
         messages=[{"role": "system", "content": prompt}]
     )
     return resposta.choices[0].message.content.strip()
