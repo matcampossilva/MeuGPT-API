@@ -34,12 +34,13 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza gratuitos (AGORA usando find - sem duplicação)
+# Atualiza gratuitos sem duplicação
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    try:
-        cell = sheet.find(numero)  # Procura exatamente o número
+    cell = sheet.find(numero)
+    
+    if cell:
         row = cell.row
         dados = sheet.row_values(row)
         nome_atual = dados[0]
@@ -53,7 +54,7 @@ def atualiza_gratuitos(numero, nome, email):
             sheet.update_cell(row, 3, email)
             email_atual = email
         return contador_atual, nome_atual, email_atual
-    except gspread.exceptions.CellNotFound:
+    else:
         # Novo registro
         nome_final = nome if nome else ""
         email_final = email if email else ""
@@ -123,7 +124,7 @@ async def receber_mensagem(request: Request):
     # Gratuito: atualiza SEM duplicação
     interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
 
-    # Se não informou tudo, manda msg inicial
+    # Se faltar dados, manda msg inicial
     if not nome_salvo or not email_salvo:
         mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
