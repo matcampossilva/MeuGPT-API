@@ -48,7 +48,7 @@ def atualiza_gratuitos(numero, nome, email):
                 sheet.update_cell(i+2, 3, email)
             novo_valor = int(linha['CONTADOR']) + 1
             sheet.update_cell(i+2, 4, novo_valor)
-            return novo_valor, linha['NOME'], linha['EMAIL']
+            return novo_valor, linha['NOME'] if linha['NOME'] else nome, linha['EMAIL'] if linha['EMAIL'] else email
     # Novo gratuito
     sheet.append_row([nome, numero, email, 1])
     return 1, nome, email
@@ -81,15 +81,6 @@ Conselheiro:
         messages=[{"role": "system", "content": prompt}]
     )
     return resposta.choices[0].message['content'].strip()
-
-# Função para enviar mensagem para usuários gratuitos
-def mensagem_gratuito(nome, interacoes):
-    if interacoes <= 7:
-        return f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nAqui, nosso objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPra continuarmos, me informe seu **nome e e-mail** por aqui. É rapidinho e essencial pra seguirmos."
-    elif interacoes in [8, 9]:
-        return f"{nome}, passando aqui pra avisar: restam só {10 - interacoes} interações no seu acesso gratuito.\nQuer mesmo continuar resolvendo sua vida financeira no improviso… ou prefere estruturar tudo de forma sólida, pensando no longo prazo, sua família e seu propósito?\nLibere seu acesso completo aqui e bora pra prática: [link premium] 🔥"
-    else:
-        return f"{nome}, suas interações gratuitas acabaram.\nMas se quiser seguir firme e realmente colocar ordem na sua vida financeira, com um direcionamento que conecta trabalho, família e propósito, libere já seu acesso completo.\nDecisão fácil de tomar: só clicar aqui → [link premium] 🚀"
 
 # Detecta e extrai email
 def extrair_email(texto):
@@ -133,13 +124,13 @@ async def receber_mensagem(request: Request):
     # Se gratuito
     interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome, email)
 
-    # Se não informou nome ou email, pede novamente
+    # PRIMEIRA MENSAGEM clara e única se ainda não preencheu dados:
     if not nome_salvo or not email_salvo:
-        resposta = "Pra seguirmos, preciso que você me envie seu nome e e-mail. É rapidinho e essencial pra continuar!"
-        enviar_whatsapp(resposta, numero_destino=numero)
-        return {"resposta": resposta}
+        mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nNosso objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
+        enviar_whatsapp(mensagem_inicial, numero_destino=numero)
+        return {"resposta": mensagem_inicial}
 
     # Se já tem dados, segue normal
-    resposta = mensagem_gratuito(nome_salvo if nome_salvo else "Usuário", interacoes)
+    resposta = consulta_chatgpt(nome_salvo, mensagem_usuario)
     enviar_whatsapp(resposta, numero_destino=numero)
     return {"resposta": resposta}
