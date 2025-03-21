@@ -34,39 +34,31 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza gratuitos (corrigido: sem duplicação!)
+# Atualiza gratuitos (AGORA usando find - sem duplicação)
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    lista = sheet.get_all_records()
-    encontrado = False
-    nome_atual = ""
-    email_atual = ""
-    contador_atual = 1
-
-    for i, linha in enumerate(lista):
-        if str(linha['WHATSAPP']) == numero:
-            encontrado = True
-            nome_atual = linha['NOME']
-            email_atual = linha['EMAIL']
-            contador_atual = int(linha['CONTADOR']) + 1
-            sheet.update_cell(i+2, 4, contador_atual)
-            if not nome_atual and nome:
-                sheet.update_cell(i+2, 1, nome)
-                nome_atual = nome
-            if not email_atual and email:
-                sheet.update_cell(i+2, 3, email)
-                email_atual = email
-            break
-
-    if not encontrado:
+    try:
+        cell = sheet.find(numero)  # Procura exatamente o número
+        row = cell.row
+        dados = sheet.row_values(row)
+        nome_atual = dados[0]
+        email_atual = dados[2]
+        contador_atual = int(dados[3]) + 1
+        sheet.update_cell(row, 4, contador_atual)
+        if not nome_atual and nome:
+            sheet.update_cell(row, 1, nome)
+            nome_atual = nome
+        if not email_atual and email:
+            sheet.update_cell(row, 3, email)
+            email_atual = email
+        return contador_atual, nome_atual, email_atual
+    except gspread.exceptions.CellNotFound:
+        # Novo registro
         nome_final = nome if nome else ""
         email_final = email if email else ""
         sheet.append_row([nome_final, numero, email_final, 1])
-        nome_atual = nome_final
-        email_atual = email_final
-
-    return contador_atual, nome_atual, email_atual
+        return 1, nome_final, email_final
 
 # Envio WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
@@ -104,7 +96,7 @@ def extrair_email(texto):
         return email_match.group(0)
     return ""
 
-# Extrai nome (simples, antes do email)
+# Extrai nome (antes do email)
 def extrair_nome(texto):
     email_match = re.search(r'[\w\.-]+@[\w\.-]+', texto)
     if email_match:
@@ -128,16 +120,16 @@ async def receber_mensagem(request: Request):
         enviar_whatsapp(resposta_gpt, numero_destino=numero)
         return {"resposta": resposta_gpt}
 
-    # Gratuito: atualiza sem duplicar
+    # Gratuito: atualiza SEM duplicação
     interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
 
-    # Se faltar dados, manda msg inicial
+    # Se não informou tudo, manda msg inicial
     if not nome_salvo or not email_salvo:
         mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
 
-    # Dados completos: responde normalmente
+    # Tudo certo: responde normal
     resposta_gpt = consulta_chatgpt(nome_salvo, mensagem_usuario)
     enviar_whatsapp(resposta_gpt, numero_destino=numero)
     return {"resposta": resposta_gpt}
