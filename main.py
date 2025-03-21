@@ -75,26 +75,30 @@ Conselheiro:
     )
     return resposta.choices[0].message['content'].strip()
 
+# Função para enviar mensagem para usuários gratuitos
+def mensagem_gratuito(nome, interacoes):
+    if interacoes <= 7:
+        return f"Olá, {nome}! 👋🏼 Aqui é o Meu Conselheiro Financeiro. Sempre que quiser clareza para alinhar sua vida financeira ao que realmente importa – sua família e seu propósito – é só me chamar!"
+    elif interacoes in [8, 9]:
+        return f"{nome}, seguimos juntos organizando tudo por aqui! 🔑 Lembre-se: você tem mais {10 - interacoes} interações gratuitas. Para ter acesso ilimitado e completo ao Meu Conselheiro Financeiro, é só clicar aqui: [link premium]."
+    else:
+        return f"{nome}, você chegou ao fim das suas interações gratuitas. 🚀 Quer destravar o acesso total ao Meu Conselheiro Financeiro e continuar evoluindo? Clique aqui: [link premium]."
+
 # Endpoint principal
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
-    dados = await request.form()
-    numero = dados['From'].replace('whatsapp:', '')
-    mensagem_usuario = dados['Body']
-    nome = 'Usuário'
-    email = ''
-
-    print(f"📥 Mensagem recebida de {numero}: {mensagem_usuario}")
+    dados = await request.json()
+    nome = dados['nome']
+    numero = dados['whatsapp']
+    email = dados.get('email', '')
+    mensagem_usuario = dados['mensagem']
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
-        if interacoes <= 10:
-            resposta = f"Olá! 🌟 Você está na versão gratuita ({interacoes}/10 interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link]."
-        else:
-            resposta = f"Ei, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-        enviar_whatsapp(resposta, numero_destino=f"+{numero}")
+        resposta = mensagem_gratuito(nome, interacoes)
+        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
         return {"resposta": resposta}
