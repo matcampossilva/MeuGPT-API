@@ -34,26 +34,39 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza gratuitos
+# Atualiza gratuitos (agora NÃO duplica número)
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet.get_all_records()
+    encontrado = False
+    nome_atual = ""
+    email_atual = ""
+    contador_atual = 1
+
     for i, linha in enumerate(lista):
         if str(linha['WHATSAPP']) == numero:
-            # Atualizar nome e email, se estiverem vazios
-            if not linha['NOME'] and nome:
+            encontrado = True
+            nome_atual = linha['NOME']
+            email_atual = linha['EMAIL']
+            contador_atual = int(linha['CONTADOR']) + 1
+            sheet.update_cell(i+2, 4, contador_atual)
+            if not nome_atual and nome:
                 sheet.update_cell(i+2, 1, nome)
-            if not linha['EMAIL'] and email:
+                nome_atual = nome
+            if not email_atual and email:
                 sheet.update_cell(i+2, 3, email)
-            novo_valor = int(linha['CONTADOR']) + 1
-            sheet.update_cell(i+2, 4, novo_valor)
-            return novo_valor, linha['NOME'] if linha['NOME'] else nome, linha['EMAIL'] if linha['EMAIL'] else email
-    # Novo gratuito
-    sheet.append_row([nome, numero, email, 1])
-    return 1, nome, email
+                email_atual = email
+            break
 
-# Envio WhatsApp via Messaging Service
+    if not encontrado:
+        sheet.append_row([nome, numero, email, 1])
+        nome_atual = nome
+        email_atual = email
+
+    return contador_atual, nome_atual, email_atual
+
+# Envio WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
     client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
@@ -64,7 +77,7 @@ def enviar_whatsapp(mensagem, numero_destino):
         )
         print(f"✅ WhatsApp enviado para {numero_destino}. SID: {message.sid}")
     except Exception as e:
-        print(f"❌ Erro no envio do WhatsApp: {e}")
+        print(f"❌ Erro ao enviar WhatsApp: {e}")
 
 # Consulta GPT
 def consulta_chatgpt(nome, mensagem_usuario):
@@ -82,12 +95,20 @@ Conselheiro:
     )
     return resposta.choices[0].message['content'].strip()
 
-# Detecta e extrai email
+# Extrai email
 def extrair_email(texto):
     email_match = re.search(r'[\w\.-]+@[\w\.-]+', texto)
     if email_match:
         return email_match.group(0)
     return ""
+
+# Extrai nome (simples, tudo antes do email)
+def extrair_nome(texto):
+    email_match = re.search(r'[\w\.-]+@[\w\.-]+', texto)
+    if email_match:
+        nome = texto[:email_match.start()].strip()
+        return nome
+    return texto.strip()
 
 # Endpoint principal
 @app.post("/webhook")
@@ -96,41 +117,25 @@ async def receber_mensagem(request: Request):
     numero = dados.get('From').replace("whatsapp:", "").strip()
     mensagem_usuario = dados.get('Body')
 
-    client = conecta_google_sheets()
-    sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    lista = sheet.get_all_records()
-
-    nome = ""
-    email = ""
-
-    # Verifica se o número já consta
-    for i, linha in enumerate(lista):
-        if str(linha['WHATSAPP']) == numero:
-            nome = linha['NOME']
-            email = linha['EMAIL']
-            break
-
-    # Tentar extrair email, se ele mandar
+    # Tenta extrair email e nome
     email_extraido = extrair_email(mensagem_usuario)
-    if email_extraido and not email:
-        email = email_extraido
+    nome_extraido = extrair_nome(mensagem_usuario) if email_extraido else ""
 
-    # Se for pagante
     if verifica_pagante(numero):
-        resposta_gpt = consulta_chatgpt(nome if nome else "Usuário", mensagem_usuario)
+        resposta_gpt = consulta_chatgpt(nome_extraido if nome_extraido else "Usuário", mensagem_usuario)
         enviar_whatsapp(resposta_gpt, numero_destino=numero)
         return {"resposta": resposta_gpt}
 
-    # Se gratuito
-    interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome, email)
+    # Gratuito: atualiza dados
+    interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
 
-    # PRIMEIRA MENSAGEM clara e única se ainda não preencheu dados:
+    # Se ainda não informou tudo, manda mensagem inicial
     if not nome_salvo or not email_salvo:
-        mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
+        mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nNosso objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
 
-    # Se já tem dados, segue normal
-    resposta = consulta_chatgpt(nome_salvo, mensagem_usuario)
-    enviar_whatsapp(resposta, numero_destino=numero)
-    return {"resposta": resposta}
+    # Tudo preenchido: segue normal
+    resposta_gpt = consulta_chatgpt(nome_salvo, mensagem_usuario)
+    enviar_whatsapp(resposta_gpt, numero_destino=numero)
+    return {"resposta": resposta_gpt}
