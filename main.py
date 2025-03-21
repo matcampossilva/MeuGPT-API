@@ -78,21 +78,23 @@ Conselheiro:
 # Endpoint principal
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
-    dados = await request.json()
-    nome = dados['nome']
-    numero = dados['whatsapp']
-    email = dados.get('email', '')
-    mensagem_usuario = dados['mensagem']
+    dados = await request.form()
+    numero = dados['From'].replace('whatsapp:', '')
+    mensagem_usuario = dados['Body']
+    nome = 'Usuário'
+    email = ''
+
+    print(f"📥 Mensagem recebida de {numero}: {mensagem_usuario}")
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=f"+55{numero}")
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
         if interacoes <= 10:
-            resposta = f"Olá {nome}! 🌟 Você está na versão gratuita ({interacoes}/10 interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link]."
+            resposta = f"Olá! 🌟 Você está na versão gratuita ({interacoes}/10 interações). Para liberar acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link]."
         else:
-            resposta = f"Ei {nome}, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
-        enviar_whatsapp(resposta, numero_destino=f"+55{numero}")
+            resposta = f"Ei, seu limite gratuito acabou! 🚀 Quer liberar tudo? Acesse aqui: [link premium]."
+        enviar_whatsapp(resposta, numero_destino=f"+{numero}")
         return {"resposta": resposta}
