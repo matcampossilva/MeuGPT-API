@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-import openai
+from openai import OpenAI
 import os
 import re
 
@@ -15,7 +15,7 @@ MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Configuração OpenAI
-openai.api_key = OPENAI_API_KEY
+client_openai = OpenAI(api_key=OPENAI_API_KEY)
 
 # Configuração Google Sheets
 def conecta_google_sheets():
@@ -34,7 +34,12 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza gratuitos sem duplicação e sem repetir mensagem
+# Valida e-mail com regex
+def email_valido(email):
+    padrao = r'^[\w\.-]+@[\w\.-]+\.\w{2,}$'
+    return re.match(padrao, email)
+
+# Atualiza gratuitos sem duplicação
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
@@ -50,13 +55,13 @@ def atualiza_gratuitos(numero, nome, email):
         if not nome_atual and nome:
             sheet.update_cell(row, 1, nome)
             nome_atual = nome
-        if not email_atual and email:
+        if not email_atual and email and email_valido(email):
             sheet.update_cell(row, 3, email)
             email_atual = email
         return contador_atual, nome_atual, email_atual
     else:
         nome_final = nome if nome else ""
-        email_final = email if email else ""
+        email_final = email if email and email_valido(email) else ""
         sheet.append_row([nome_final, numero, email_final, 1])
         return 1, nome_final, email_final
 
@@ -73,7 +78,7 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro ao enviar WhatsApp: {e}")
 
-# Consulta GPT
+# Consulta GPT (NOVA SINTAXE)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
@@ -83,11 +88,11 @@ Sua missão é organizar a vida financeira do usuário respeitando rigorosamente
 Usuário: {mensagem_usuario}
 Conselheiro:
 """
-    resposta = openai.ChatCompletion.create(
+    response = client_openai.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "system", "content": prompt}]
     )
-    return resposta.choices[0].message['content'].strip()
+    return response.choices[0].message.content.strip()
 
 # Extrai email
 def extrair_email(texto):
@@ -104,7 +109,6 @@ def extrair_nome(texto):
     else:
         nome = texto.strip()
 
-    # Limpeza de frases comuns
     nome = re.sub(r"(?i)(meu nome é|nome:|eu sou|sou)\s*", "", nome)
     return nome
 
@@ -117,7 +121,10 @@ async def receber_mensagem(request: Request):
 
     # Extrair nome e email
     email_extraido = extrair_email(mensagem_usuario)
-    nome_extraido = extrair_nome(mensagem_usuario) if email_extraido or mensagem_usuario else ""
+    nome_extraido = extrair_nome(mensagem_usuario) if mensagem_usuario else ""
+
+    # Validar e-mail
+    email_validado = email_extraido if email_valido(email_extraido) else ""
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome_extraido if nome_extraido else "Usuário", mensagem_usuario)
@@ -125,21 +132,27 @@ async def receber_mensagem(request: Request):
         return {"resposta": resposta_gpt}
 
     # Gratuito: atualiza SEM duplicação
-    interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
+    interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_validado)
 
-    # ✅ Mensagem inicial só na primeira vez
+    # Boas-vindas só na primeira vez
     if interacoes == 1 and not nome_salvo and not email_salvo:
         mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
 
-    # Se já tem nome e e-mail, responde normal
+    # Se mandou email errado
+    if email_extraido and not email_valido(email_extraido):
+        mensagem_email_incorreto = "Ops! Parece que seu e-mail está incompleto ou incorreto. Por favor, me envie um e-mail válido para continuarmos!"
+        enviar_whatsapp(mensagem_email_incorreto, numero_destino=numero)
+        return {"resposta": mensagem_email_incorreto}
+
+    # Se já tem nome e e-mail válidos, responde normal
     if nome_salvo and email_salvo:
         resposta_gpt = consulta_chatgpt(nome_salvo, mensagem_usuario)
         enviar_whatsapp(resposta_gpt, numero_destino=numero)
         return {"resposta": resposta_gpt}
 
-    # Se preencheu só uma parte (nome ou e-mail), só confirma e aguarda
+    # Se preencheu só uma parte, aguarda
     mensagem_aguardo = "Perfeito! Agora me envie seu nome e e-mail para começarmos!"
     enviar_whatsapp(mensagem_aguardo, numero_destino=numero)
     return {"resposta": mensagem_aguardo}
