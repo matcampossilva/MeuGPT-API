@@ -126,7 +126,7 @@ async def receber_mensagem(request: Request):
 
     # PRIMEIRA MENSAGEM clara e única se ainda não preencheu dados:
     if not nome_salvo or not email_salvo:
-        mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nNosso objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
+        mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
 
