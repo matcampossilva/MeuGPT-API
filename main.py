@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-from openai import OpenAI
+import openai
 import os
 
 app = FastAPI()
@@ -13,8 +13,8 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Configuração OpenAI - sem proxies
-client_openai = OpenAI(api_key=OPENAI_API_KEY)
+# Configuração OpenAI
+openai.api_key = OPENAI_API_KEY
 
 # Configuração Google Sheets
 def conecta_google_sheets():
@@ -38,16 +38,13 @@ def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet.get_all_records()
-    encontrado = False
     for i, linha in enumerate(lista):
         if str(linha['WHATSAPP']) == numero:
             novo_valor = int(linha['CONTADOR']) + 1
             sheet.update_cell(i+2, 4, novo_valor)
-            encontrado = True
             return novo_valor
-    if not encontrado:
-        sheet.append_row([nome, numero, email, 1])
-        return 1
+    sheet.append_row([nome, numero, email, 1])
+    return 1
 
 # Envio WhatsApp via Messaging Service
 def enviar_whatsapp(mensagem, numero_destino):
@@ -72,11 +69,11 @@ Sua missão é organizar a vida financeira do usuário respeitando rigorosamente
 Usuário: {mensagem_usuario}
 Conselheiro:
 """
-    resposta = client_openai.chat.completions.create(
-        model="gpt-4-turbo",
+    resposta = openai.ChatCompletion.create(
+        model="gpt-4",
         messages=[{"role": "system", "content": prompt}]
     )
-    return resposta.choices[0].message.content.strip()
+    return resposta.choices[0].message['content'].strip()
 
 # Endpoint principal
 @app.post("/webhook")
