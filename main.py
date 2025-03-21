@@ -34,7 +34,7 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza gratuitos sem duplicação
+# Atualiza gratuitos sem duplicação e sem repetir mensagem
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
@@ -55,7 +55,6 @@ def atualiza_gratuitos(numero, nome, email):
             email_atual = email
         return contador_atual, nome_atual, email_atual
     else:
-        # Novo registro
         nome_final = nome if nome else ""
         email_final = email if email else ""
         sheet.append_row([nome_final, numero, email_final, 1])
@@ -124,13 +123,19 @@ async def receber_mensagem(request: Request):
     # Gratuito: atualiza SEM duplicação
     interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
 
-    # Se faltar dados, manda msg inicial
-    if not nome_salvo or not email_salvo:
+    # ✅ Envia mensagem de boas-vindas só se for a primeira vez (contador 1 e campos vazios)
+    if interacoes == 1 and not nome_extraido and not email_extraido:
         mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
 
-    # Tudo certo: responde normal
-    resposta_gpt = consulta_chatgpt(nome_salvo, mensagem_usuario)
-    enviar_whatsapp(resposta_gpt, numero_destino=numero)
-    return {"resposta": resposta_gpt}
+    # Se já tem nome e e-mail, responde normal
+    if nome_salvo and email_salvo:
+        resposta_gpt = consulta_chatgpt(nome_salvo, mensagem_usuario)
+        enviar_whatsapp(resposta_gpt, numero_destino=numero)
+        return {"resposta": resposta_gpt}
+
+    # Se preencheu só uma parte (nome ou e-mail), só agradece e espera
+    mensagem_aguardo = "Perfeito! Agora me envie seu nome e e-mail para começarmos!"
+    enviar_whatsapp(mensagem_aguardo, numero_destino=numero)
+    return {"resposta": mensagem_aguardo}
