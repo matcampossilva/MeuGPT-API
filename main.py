@@ -96,13 +96,17 @@ def extrair_email(texto):
         return email_match.group(0)
     return ""
 
-# Extrai nome (antes do email)
+# Extrai nome com limpeza
 def extrair_nome(texto):
     email_match = re.search(r'[\w\.-]+@[\w\.-]+', texto)
     if email_match:
         nome = texto[:email_match.start()].strip()
-        return nome
-    return texto.strip()
+    else:
+        nome = texto.strip()
+
+    # Limpeza de frases comuns
+    nome = re.sub(r"(?i)(meu nome é|nome:|eu sou|sou)\s*", "", nome)
+    return nome
 
 # Endpoint principal
 @app.post("/webhook")
@@ -113,7 +117,7 @@ async def receber_mensagem(request: Request):
 
     # Extrair nome e email
     email_extraido = extrair_email(mensagem_usuario)
-    nome_extraido = extrair_nome(mensagem_usuario) if email_extraido else ""
+    nome_extraido = extrair_nome(mensagem_usuario) if email_extraido or mensagem_usuario else ""
 
     if verifica_pagante(numero):
         resposta_gpt = consulta_chatgpt(nome_extraido if nome_extraido else "Usuário", mensagem_usuario)
@@ -123,8 +127,8 @@ async def receber_mensagem(request: Request):
     # Gratuito: atualiza SEM duplicação
     interacoes, nome_salvo, email_salvo = atualiza_gratuitos(numero, nome_extraido, email_extraido)
 
-    # ✅ Envia mensagem de boas-vindas só se for a primeira vez (contador 1 e campos vazios)
-    if interacoes == 1 and not nome_extraido and not email_extraido:
+    # ✅ Mensagem inicial só na primeira vez
+    if interacoes == 1 and not nome_salvo and not email_salvo:
         mensagem_inicial = f"Olá! Seja bem-vindo(a) ao Meu Conselheiro Financeiro. 👋🏼\nMeu objetivo é ajudar você a colocar sua vida financeira no eixo — sempre respeitando o que é mais importante: sua família e seu propósito.\n\nPara começarmos, me envie seu **nome e seu e-mail** por aqui. É rápido e essencial pra continuarmos."
         enviar_whatsapp(mensagem_inicial, numero_destino=numero)
         return {"resposta": mensagem_inicial}
@@ -135,7 +139,7 @@ async def receber_mensagem(request: Request):
         enviar_whatsapp(resposta_gpt, numero_destino=numero)
         return {"resposta": resposta_gpt}
 
-    # Se preencheu só uma parte (nome ou e-mail), só agradece e espera
+    # Se preencheu só uma parte (nome ou e-mail), só confirma e aguarda
     mensagem_aguardo = "Perfeito! Agora me envie seu nome e e-mail para começarmos!"
     enviar_whatsapp(mensagem_aguardo, numero_destino=numero)
     return {"resposta": mensagem_aguardo}
