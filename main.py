@@ -87,7 +87,7 @@ def mensagem_gratuito(nome, interacoes):
 # Endpoint principal
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
-    dados = await request.json()
+    dados = await request.form()
     nome = dados['nome']
     numero = dados['whatsapp']
     email = dados.get('email', '')
