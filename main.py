@@ -16,14 +16,14 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # Configuração OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Configuração Google Sheets
+# Conectar ao Google Sheets
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/meugpt-api-sheets-92a9d439900d.json', scope)
     client = gspread.authorize(creds)
     return client
 
-# Verifica se é pagante
+# Verifica pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Pagantes')
@@ -33,7 +33,7 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza interação dos gratuitos
+# Atualiza gratuitos
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
@@ -46,7 +46,7 @@ def atualiza_gratuitos(numero, nome, email):
     sheet.append_row([nome, numero, email, 1])
     return 1
 
-# Envia mensagem no WhatsApp via Twilio Messaging Service
+# Envia WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
     client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
@@ -59,12 +59,12 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro no envio do WhatsApp: {e}")
 
-# Consulta GPT com prompt
-def consulta_chatgpt(mensagem_usuario):
+# Consulta ChatGPT
+def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""
 Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®.
 
-Sua missão é ajudar o usuário a ordenar sua vida financeira, articulando com sua vida familiar, profissional e espiritual. O dinheiro deve servir à família e ao propósito, não o contrário.
+Sua missão é organizar a vida financeira do usuário respeitando rigorosamente esta hierarquia: Deus, família e trabalho, nesta ordem.
 
 Usuário: {mensagem_usuario}
 Conselheiro:
@@ -79,29 +79,31 @@ Conselheiro:
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
     dados = await request.form()
-    nome = dados['nome']
-    numero = dados['whatsapp']
-    email = dados.get('email', '')
-    mensagem_usuario = dados['mensagem']
+    print(f"📥 Dados recebidos: {dados}")
 
-    print(f"📥 Mensagem recebida de {numero}: {mensagem_usuario}")
+    numero = dados.get('From', '').replace('whatsapp:', '').replace('+', '')
+    mensagem_usuario = dados.get('Body', '').strip()
+
+    # Verificar se já temos nome e email cadastrados (pode vir de outra lógica futura)
+    nome = 'Usuário'
+    email = ''
+
+    if not mensagem_usuario:
+        enviar_whatsapp("Bem-vindo(a)! Para começarmos, me informe seu nome e e-mail.", numero)
+        return {"status": "aguardando dados"}
 
     if verifica_pagante(numero):
-        resposta_gpt = consulta_chatgpt(mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero_destino=numero)
+        resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
+        enviar_whatsapp(resposta_gpt, numero_destino=f"+{numero}")
         return {"resposta": resposta_gpt}
     else:
         interacoes = atualiza_gratuitos(numero, nome, email)
-        if interacoes < 10:
-            resposta = (
-                f"Olá! 👋 Essa é uma versão gratuita com limite de interações.\n"
-                f"Você ainda pode usar mais {10 - interacoes} vez(es). "
-                f"Para ter acesso completo ao Meu Conselheiro Financeiro, clique aqui: [link premium]."
-            )
+        if interacoes <= 7:
+            resposta = f"Conselho enviado! 👊🏼 Caso queira uma visão completa para organizar sua vida financeira e patrimonial, acesse aqui: [link premium]"
+        elif interacoes <= 10:
+            restante = 10 - interacoes
+            resposta = f"🚀 Você tem mais {restante} interações gratuitas. Quer liberar acesso completo ao Meu Conselheiro Financeiro? Clique aqui: [link premium]"
         else:
-            resposta = (
-                f"Seu limite gratuito acabou. 🚀 Para desbloquear todo o potencial do Meu Conselheiro Financeiro, "
-                f"acesse agora: [link premium]."
-            )
-        enviar_whatsapp(resposta, numero_destino=numero)
+            resposta = "⏳ Seu limite gratuito acabou! Para acesso completo, libere aqui: [link premium]"
+        enviar_whatsapp(resposta, numero_destino=f"+{numero}")
         return {"resposta": resposta}
