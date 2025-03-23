@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-from openai import OpenAI
+import openai
 import os
 import re
 
@@ -14,8 +14,7 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Novo cliente OpenAI (correção definitiva)
-cliente_openai = OpenAI(api_key=OPENAI_API_KEY, proxies=None)
+openai.api_key = OPENAI_API_KEY  # forma definitiva, estável e correta.
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -24,7 +23,7 @@ def conecta_google_sheets():
     client = gspread.authorize(creds)
     return client
 
-# Verifica se usuário é pagante
+# Verifica pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Pagantes')
@@ -47,7 +46,7 @@ def atualiza_gratuitos(numero, nome, email):
     sheet.append_row([nome, numero, email, 1])
     return 1, nome
 
-# Envio WhatsApp
+# Envia WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
     client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
@@ -60,12 +59,12 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados via GPT
+# Extrair dados com GPT
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = cliente_openai.chat.completions.create(
+    resposta = openai.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "system", "content": prompt}]
     )
@@ -76,12 +75,12 @@ def extrair_dados_usuario(mensagem):
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT ajustada
+# Consulta GPT
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
-    resposta = cliente_openai.chat.completions.create(
+    resposta = openai.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "system", "content": prompt}]
     )
@@ -125,7 +124,7 @@ async def receber_mensagem(request: Request):
         aviso = f"\n\n⚠️ Atenção: Você tem apenas mais {restante} interações gratuitas. Não deixe para depois a organização definitiva das suas finanças! Libere agora seu acesso Premium e tenha acompanhamento ilimitado, personalizado e alinhado ao que realmente importa para você. 👉🏼 [link premium]"
         enviar_whatsapp(resposta_gpt + aviso, numero)
     else:
-        aviso_final = f"⏳ {nome}, suas interações gratuitas chegaram ao fim, mas nossa jornada pode continuar agora mesmo! Chegou o momento de dar um passo definitivo rumo à organização financeira inteligente e alinhada aos seus valores mais importantes. Libere seu acesso Premium e vamos juntos transformar sua vida financeira hoje mesmo. 🚀 👉🏼 [link premium]"
+        aviso_final = f"⏳ {nome}, suas interações gratuitas chegaram ao fim! Libere seu acesso Premium agora e continue a jornada comigo: 🚀👉🏼 [link premium]"
         enviar_whatsapp(aviso_final, numero)
 
     return {"status": "gratuito"}
