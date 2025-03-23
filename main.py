@@ -15,7 +15,7 @@ MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Novo cliente OpenAI (correção definitiva)
-cliente_openai = OpenAI(api_key=OPENAI_API_KEY)
+cliente_openai = OpenAI(api_key=OPENAI_API_KEY, proxies=None)
 
 # Conexão Google Sheets
 def conecta_google_sheets():
