@@ -14,7 +14,7 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-openai.api_key = OPENAI_API_KEY  # forma definitiva, estável e correta.
+openai.api_key = OPENAI_API_KEY  # Correto e estável
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -64,8 +64,8 @@ def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = openai.chat.completions.create(
-        model="gpt-4",
+    resposta = openai.ChatCompletion.create(  # corrigido aqui
+        model="gpt-4-turbo",                   # corrigido aqui
         messages=[{"role": "system", "content": prompt}]
     )
     dados = resposta.choices[0].message.content
@@ -80,8 +80,8 @@ def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
-    resposta = openai.chat.completions.create(
-        model="gpt-4",
+    resposta = openai.ChatCompletion.create(  # corrigido aqui
+        model="gpt-4-turbo",                   # corrigido aqui
         messages=[{"role": "system", "content": prompt}]
     )
     return resposta.choices[0].message.content.strip()
