@@ -59,12 +59,12 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados com GPT (corrigido definitivo)
+# Extrair dados com GPT (VERSÃO ESTÁVEL)
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = openai.chat.completions.create(
+    resposta = openai.ChatCompletion.create(
         model="gpt-4-turbo",
         messages=[{"role": "system", "content": prompt}]
     )
@@ -75,12 +75,12 @@ def extrair_dados_usuario(mensagem):
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT (corrigido definitivo)
+# Consulta GPT (VERSÃO ESTÁVEL)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
-    resposta = openai.chat.completions.create(
+    resposta = openai.ChatCompletion.create(
         model="gpt-4-turbo",
         messages=[{"role": "system", "content": prompt}]
     )
