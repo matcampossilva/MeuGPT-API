@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client
-import openai
+from openai import OpenAI
 import os
 import re
 
@@ -14,7 +14,8 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-openai.api_key = OPENAI_API_KEY  # Correto e estável
+# OpenAI Client atualizado
+client_openai = OpenAI(api_key=OPENAI_API_KEY)
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -59,12 +60,12 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados com GPT (com gpt-4o)
+# Extrair dados com GPT
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = openai.ChatCompletion.create(
+    resposta = client_openai.chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "system", "content": prompt}]
     )
@@ -75,12 +76,12 @@ def extrair_dados_usuario(mensagem):
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT (com gpt-4o)
+# Consulta GPT principal
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
-    resposta = openai.ChatCompletion.create(
+    resposta = client_openai.chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "system", "content": prompt}]
     )
