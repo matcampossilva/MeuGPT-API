@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client as TwilioClient
-from openai import OpenAI
+import openai
 import os
 import re
 
@@ -14,7 +14,7 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-client_openai = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY  # ← uso clássico sem classe OpenAI()
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -59,14 +59,14 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados com GPT
+# Extrair dados com GPT (modo clássico)
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
 
-    resposta = client_openai.chat.completions.create(
-        model="gpt-4o",
+    resposta = openai.ChatCompletion.create(
+        model="gpt-4",
         messages=[{"role": "system", "content": prompt}]
     )
     dados = resposta.choices[0].message.content
@@ -76,14 +76,14 @@ def extrair_dados_usuario(mensagem):
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT
+# Consulta GPT (modo clássico)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
 
-    resposta = client_openai.chat.completions.create(
-        model="gpt-4o",
+    resposta = openai.ChatCompletion.create(
+        model="gpt-4",
         messages=[{"role": "system", "content": prompt}]
     )
     return resposta.choices[0].message.content.strip()
@@ -91,10 +91,7 @@ Conselheiro:"""
 # Endpoint principal
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
-    print("🟡 Mensagem recebida no webhook!")
     dados = await request.form()
-    print(f"🔵 Dados recebidos: {dados}")
-
     numero = dados.get('From', '').replace('whatsapp:', '')
     if not numero.startswith('+'):
         numero = '+' + numero
