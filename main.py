@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from twilio.rest import Client
-import openai
+from twilio.rest import Client as TwilioClient
+from openai import OpenAI
 import os
 import re
 
@@ -14,7 +14,7 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-openai.api_key = OPENAI_API_KEY  # <- Forma clássica e sem erro
+client_openai = OpenAI(api_key=OPENAI_API_KEY)
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -48,7 +48,7 @@ def atualiza_gratuitos(numero, nome, email):
 
 # Envia WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
-    client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    client_twilio = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         client_twilio.messages.create(
             messaging_service_sid=MESSAGING_SERVICE_SID,
@@ -59,34 +59,34 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados com GPT (modo clássico)
+# Extrair dados com GPT (modo novo)
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    
-    resposta = openai.ChatCompletion.create(
-        model="gpt-4o",  # Use "gpt-4o" ou "gpt-4" conforme já testado e validado no curl
+
+    resposta = client_openai.chat.completions.create(
+        model="gpt-4o",
         messages=[{"role": "system", "content": prompt}]
     )
-    dados = resposta['choices'][0]['message']['content']
+    dados = resposta.choices[0].message.content
     nome = re.search(r'Nome: (.*?);', dados)
     email = re.search(r'Email: (.+)', dados)
     nome = nome.group(1).strip() if nome else 'Não informado'
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT (modo clássico)
+# Consulta GPT (modo novo)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
-    
-    resposta = openai.ChatCompletion.create(
+
+    resposta = client_openai.chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "system", "content": prompt}]
     )
-    return resposta['choices'][0]['message']['content'].strip()
+    return resposta.choices[0].message.content.strip()
 
 # Endpoint principal
 @app.post("/webhook")
