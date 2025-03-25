@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client as TwilioClient
-from openai import OpenAI
+import openai
 import os
 import re
 
@@ -14,7 +14,7 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-client_openai = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY  # ✅ Forma clássica e segura
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -59,34 +59,34 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados com GPT (modo novo)
+# Extrair dados com GPT (modo clássico)
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
 
-    resposta = client_openai.chat.completions.create(
+    resposta = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[{"role": "system", "content": prompt}]
     )
-    dados = resposta.choices[0].message.content
+    dados = resposta['choices'][0]['message']['content']
     nome = re.search(r'Nome: (.*?);', dados)
     email = re.search(r'Email: (.+)', dados)
     nome = nome.group(1).strip() if nome else 'Não informado'
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT (modo novo)
+# Consulta GPT (modo clássico)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
 
-    resposta = client_openai.chat.completions.create(
+    resposta = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[{"role": "system", "content": prompt}]
     )
-    return resposta.choices[0].message.content.strip()
+    return resposta['choices'][0]['message']['content'].strip()
 
 # Endpoint principal
 @app.post("/webhook")
