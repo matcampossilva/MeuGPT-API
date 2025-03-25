@@ -19,7 +19,7 @@ client_openai = OpenAI(api_key=OPENAI_API_KEY)
 # Conexão Google Sheets
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/meugpt-api-sheets-92a9d439900d.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('GOOGLE_SHEETS_JSON', scope)
     client = gspread.authorize(creds)
     return client
 
