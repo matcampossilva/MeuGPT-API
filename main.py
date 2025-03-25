@@ -12,20 +12,18 @@ app = FastAPI()
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Alteração: usar OPENAI_SECRET_KEY para debugar o carregamento da API key
-OPENAI_API_KEY = os.getenv('OPENAI_SECRET_KEY')
-print("DEBUG: OPENAI_SECRET_KEY =", OPENAI_API_KEY)
-openai.api_key = OPENAI_API_KEY
+openai.api_key = OPENAI_API_KEY  # <- Forma clássica e sem erro
 
-# Conexão com o Google Sheets
+# Conexão Google Sheets
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/meugpt-api-sheets-92a9d439900d.json', scope)
     client = gspread.authorize(creds)
     return client
 
-# Verifica se o número é de um usuário pagante
+# Verifica pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Pagantes')
@@ -35,7 +33,7 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza ou insere usuário na planilha de gratuitos
+# Atualiza ou insere gratuitos
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
@@ -43,12 +41,12 @@ def atualiza_gratuitos(numero, nome, email):
     for i, linha in enumerate(lista):
         if linha['WHATSAPP'] == numero:
             novo_valor = int(linha['CONTADOR']) + 1
-            sheet.update_cell(i + 2, 4, novo_valor)
+            sheet.update_cell(i+2, 4, novo_valor)
             return novo_valor, linha['NOME']
     sheet.append_row([nome, numero, email, 1])
     return 1, nome
 
-# Envia mensagem via WhatsApp
+# Envia WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
     client_twilio = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
@@ -61,14 +59,14 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrai nome e e-mail da mensagem usando GPT
+# Extrair dados com GPT (modo clássico)
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
-Responda no formato: Nome: nome do usuário; Email: email do usuário.
-Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
+    Responda no formato: Nome: nome do usuário; Email: email do usuário.
+    Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
     
     resposta = openai.ChatCompletion.create(
-        model="gpt-4o",  # Use "gpt-4o" ou "gpt-4" conforme testado no curl
+        model="gpt-4o",  # Use "gpt-4o" ou "gpt-4" conforme já testado e validado no curl
         messages=[{"role": "system", "content": prompt}]
     )
     dados = resposta['choices'][0]['message']['content']
@@ -78,7 +76,7 @@ Caso não encontre algum deles, responda: Nome: Não informado; Email: Não info
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta o GPT para gerar a resposta do conselheiro financeiro
+# Consulta GPT (modo clássico)
 def consulta_chatgpt(nome, mensagem_usuario):
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
@@ -90,7 +88,7 @@ Conselheiro:"""
     )
     return resposta['choices'][0]['message']['content'].strip()
 
-# Endpoint principal para receber mensagens
+# Endpoint principal
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
     dados = await request.form()
