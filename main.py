@@ -14,6 +14,10 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
+# Carrega o prompt do MeuGPT do arquivo externo
+with open("prompt.txt", "r", encoding="utf-8") as f:
+    PROMPT_BASE = f.read()
+
 # Conexão Google Sheets
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -36,18 +40,11 @@ def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet.get_all_records()
-
     for i, linha in enumerate(lista):
         if linha['WHATSAPP'] == numero:
             novo_valor = int(linha['CONTADOR']) + 1
-            # Atualiza nome e e-mail apenas se ainda estiverem vazios
-            if not linha['NOME'] or linha['NOME'] == 'Usuário':
-                sheet.update_cell(i+2, 1, nome)
-            if not linha['E-MAIL']:
-                sheet.update_cell(i+2, 3, email)
             sheet.update_cell(i+2, 4, novo_valor)
-            return novo_valor, nome if nome != 'Não informado' else linha['NOME']
-
+            return novo_valor, linha['NOME']
     sheet.append_row([nome, numero, email, 1])
     return 1, nome
 
@@ -72,12 +69,14 @@ def extrair_dados_usuario(mensagem):
         "Content-Type": "application/json"
     }
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
-    Responda no formato: Nome: nome do usuário; Email: email do usuário.
-    Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
+Responda no formato: Nome: nome do usuário; Email: email do usuário.
+Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
 
     body = {
         "model": "gpt-4",
-        "messages": [{"role": "system", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": prompt}
+        ],
         "temperature": 0.2
     }
 
@@ -97,20 +96,20 @@ def extrair_dados_usuario(mensagem):
         print("❌ Erro ao processar resposta da OpenAI:", e)
         return 'Não informado', 'Não informado'
 
-# Consulta GPT com tratamento de erro
+# Consulta GPT com prompt oficial do MeuGPT
 def consulta_chatgpt(nome, mensagem_usuario):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
-    prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
-Usuário ({nome}): {mensagem_usuario}
-Conselheiro:"""
 
     body = {
         "model": "gpt-4",
-        "messages": [{"role": "system", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": PROMPT_BASE},
+            {"role": "user", "content": f"{mensagem_usuario}"}
+        ],
         "temperature": 0.7
     }
 
@@ -131,7 +130,7 @@ async def receber_mensagem(request: Request):
     dados = await request.form()
     numero = dados.get('From', '').replace('whatsapp:', '')
     if not numero.startswith('+'):
-        numero = '+55' + numero.lstrip('0')
+        numero = '+' + numero
 
     mensagem_usuario = dados.get('Body', '').strip()
 
@@ -142,8 +141,7 @@ async def receber_mensagem(request: Request):
 
     client = conecta_google_sheets()
     sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    lista = sheet_gratuitos.get_all_records()
-    usuario_existente = next((linha for linha in lista if linha['WHATSAPP'] == numero), None)
+    usuario_existente = sheet_gratuitos.find(numero)
 
     if not usuario_existente:
         nome, email = extrair_dados_usuario(mensagem_usuario)
@@ -154,7 +152,7 @@ async def receber_mensagem(request: Request):
         enviar_whatsapp(f"Seja muito bem-vindo(a), {nome}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
         return {"status": "boas-vindas"}
 
-    interacoes, nome = atualiza_gratuitos(numero, usuario_existente['NOME'], usuario_existente['E-MAIL'])
+    interacoes, nome = atualiza_gratuitos(numero, 'Usuário', '')
     resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
 
     if interacoes <= 7:
