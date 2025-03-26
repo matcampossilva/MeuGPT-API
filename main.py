@@ -36,11 +36,18 @@ def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet.get_all_records()
+
     for i, linha in enumerate(lista):
         if linha['WHATSAPP'] == numero:
             novo_valor = int(linha['CONTADOR']) + 1
+            # Atualiza nome e e-mail apenas se ainda estiverem vazios
+            if not linha['NOME'] or linha['NOME'] == 'Usuário':
+                sheet.update_cell(i+2, 1, nome)
+            if not linha['E-MAIL']:
+                sheet.update_cell(i+2, 3, email)
             sheet.update_cell(i+2, 4, novo_valor)
-            return novo_valor, linha['NOME']
+            return novo_valor, nome if nome != 'Não informado' else linha['NOME']
+
     sheet.append_row([nome, numero, email, 1])
     return 1, nome
 
@@ -70,9 +77,7 @@ def extrair_dados_usuario(mensagem):
 
     body = {
         "model": "gpt-4",
-        "messages": [
-            {"role": "system", "content": prompt}
-        ],
+        "messages": [{"role": "system", "content": prompt}],
         "temperature": 0.2
     }
 
@@ -105,9 +110,7 @@ Conselheiro:"""
 
     body = {
         "model": "gpt-4",
-        "messages": [
-            {"role": "system", "content": prompt}
-        ],
+        "messages": [{"role": "system", "content": prompt}],
         "temperature": 0.7
     }
 
@@ -128,7 +131,7 @@ async def receber_mensagem(request: Request):
     dados = await request.form()
     numero = dados.get('From', '').replace('whatsapp:', '')
     if not numero.startswith('+'):
-        numero = '+' + numero
+        numero = '+55' + numero.lstrip('0')
 
     mensagem_usuario = dados.get('Body', '').strip()
 
@@ -139,7 +142,8 @@ async def receber_mensagem(request: Request):
 
     client = conecta_google_sheets()
     sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    usuario_existente = sheet_gratuitos.find(numero)
+    lista = sheet_gratuitos.get_all_records()
+    usuario_existente = next((linha for linha in lista if linha['WHATSAPP'] == numero), None)
 
     if not usuario_existente:
         nome, email = extrair_dados_usuario(mensagem_usuario)
@@ -150,7 +154,7 @@ async def receber_mensagem(request: Request):
         enviar_whatsapp(f"Seja muito bem-vindo(a), {nome}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
         return {"status": "boas-vindas"}
 
-    interacoes, nome = atualiza_gratuitos(numero, 'Usuário', '')
+    interacoes, nome = atualiza_gratuitos(numero, usuario_existente['NOME'], usuario_existente['E-MAIL'])
     resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
 
     if interacoes <= 7:
