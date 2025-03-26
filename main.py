@@ -57,7 +57,7 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair nome e email com chamada direta à API OpenAI
+# Extrair nome e e-mail com tratamento de erro
 def extrair_dados_usuario(mensagem):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
@@ -77,15 +77,22 @@ def extrair_dados_usuario(mensagem):
     }
 
     response = requests.post(url, headers=headers, json=body)
-    dados = response.json()["choices"][0]["message"]["content"]
+    try:
+        resultado = response.json()
+        if "choices" not in resultado:
+            print("❌ Erro na resposta da OpenAI:", resultado)
+            return 'Não informado', 'Não informado'
+        dados = resultado["choices"][0]["message"]["content"]
+        nome = re.search(r'Nome: (.*?);', dados)
+        email = re.search(r'Email: (.+)', dados)
+        nome = nome.group(1).strip() if nome else 'Não informado'
+        email = email.group(1).strip() if email else 'Não informado'
+        return nome, email
+    except Exception as e:
+        print("❌ Erro ao processar resposta da OpenAI:", e)
+        return 'Não informado', 'Não informado'
 
-    nome = re.search(r'Nome: (.*?);', dados)
-    email = re.search(r'Email: (.+)', dados)
-    nome = nome.group(1).strip() if nome else 'Não informado'
-    email = email.group(1).strip() if email else 'Não informado'
-    return nome, email
-
-# Consulta GPT com chamada direta à API OpenAI
+# Consulta GPT com tratamento de erro
 def consulta_chatgpt(nome, mensagem_usuario):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
@@ -105,7 +112,15 @@ Conselheiro:"""
     }
 
     response = requests.post(url, headers=headers, json=body)
-    return response.json()["choices"][0]["message"]["content"].strip()
+    try:
+        resultado = response.json()
+        if "choices" not in resultado:
+            print("❌ Erro na resposta da OpenAI:", resultado)
+            return "Houve um erro ao processar sua resposta. Tente novamente em instantes."
+        return resultado["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print("❌ Erro ao processar resposta da OpenAI:", e)
+        return "Erro inesperado ao gerar resposta. Tente novamente."
 
 # Endpoint principal
 @app.post("/webhook")
