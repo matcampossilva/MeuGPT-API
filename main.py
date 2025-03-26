@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from twilio.rest import Client as TwilioClient
-import openai
+import requests
 import os
 import re
 
@@ -13,8 +13,6 @@ TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-openai.api_key = OPENAI_API_KEY  # ← uso clássico sem classe OpenAI()
 
 # Conexão Google Sheets
 def conecta_google_sheets():
@@ -59,34 +57,55 @@ def enviar_whatsapp(mensagem, numero_destino):
     except Exception as e:
         print(f"❌ Erro WhatsApp: {e}")
 
-# Extrair dados com GPT (modo clássico)
+# Extrair nome e email com chamada direta à API OpenAI
 def extrair_dados_usuario(mensagem):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
 
-    resposta = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "system", "content": prompt}]
-    )
-    dados = resposta.choices[0].message.content
+    body = {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": prompt}
+        ],
+        "temperature": 0.2
+    }
+
+    response = requests.post(url, headers=headers, json=body)
+    dados = response.json()["choices"][0]["message"]["content"]
+
     nome = re.search(r'Nome: (.*?);', dados)
     email = re.search(r'Email: (.+)', dados)
     nome = nome.group(1).strip() if nome else 'Não informado'
     email = email.group(1).strip() if email else 'Não informado'
     return nome, email
 
-# Consulta GPT (modo clássico)
+# Consulta GPT com chamada direta à API OpenAI
 def consulta_chatgpt(nome, mensagem_usuario):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
     prompt = f"""Você é o Meu Conselheiro Financeiro pessoal, criado por Matheus Campos, CFP®. Sua missão é organizar a vida financeira respeitando Deus, família e trabalho.
 Usuário ({nome}): {mensagem_usuario}
 Conselheiro:"""
 
-    resposta = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "system", "content": prompt}]
-    )
-    return resposta.choices[0].message.content.strip()
+    body = {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": prompt}
+        ],
+        "temperature": 0.7
+    }
+
+    response = requests.post(url, headers=headers, json=body)
+    return response.json()["choices"][0]["message"]["content"].strip()
 
 # Endpoint principal
 @app.post("/webhook")
