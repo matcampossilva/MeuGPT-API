@@ -30,7 +30,7 @@ def verifica_pagante(numero):
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Pagantes')
     lista = sheet.get_all_records()
     for linha in lista:
-        if linha['WHATSAPP'] == numero and linha['STATUS'].upper() == 'ATIVO':
+        if linha['WHATSAPP'].strip() == numero and linha['STATUS'].strip().upper() == 'ATIVO':
             return True
     return False
 
@@ -40,7 +40,7 @@ def atualiza_gratuitos(numero, nome, email):
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet.get_all_records()
     for i, linha in enumerate(lista):
-        if linha['WHATSAPP'] == numero:
+        if str(linha['WHATSAPP']).strip() == numero:
             novo_valor = int(linha['CONTADOR']) + 1
             sheet.update_cell(i+2, 4, novo_valor)
             return novo_valor, linha['NOME']
@@ -129,13 +129,12 @@ async def receber_mensagem(request: Request):
 
     client = conecta_google_sheets()
     sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    try:
-        usuario_existente = sheet_gratuitos.find(numero)
-    except:
-        usuario_existente = None
+    lista = sheet_gratuitos.get_all_records()
+    usuario_existente = any(str(linha['WHATSAPP']).strip() == numero for linha in lista)
 
     if not usuario_existente:
         nome, email = extrair_dados_usuario(mensagem_usuario)
+        print(f"[EXTRAÇÃO] Nome: {nome} | Email: {email}")
         if nome == 'Não informado' or email == 'Não informado':
             enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
             return {"status": "dados pendentes"}
