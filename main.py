@@ -56,7 +56,7 @@ def enviar_whatsapp(mensagem, numero_destino):
         to=f'whatsapp:{numero_destino}'
     )
 
-# Leitura do conteúdo dos arquivos .txt
+# Leitura dos arquivos .txt
 def carregar_arquivos_conhecimento():
     textos = []
     if os.path.exists(CAMINHO_CONHECIMENTO):
@@ -67,21 +67,23 @@ def carregar_arquivos_conhecimento():
                     textos.append(arquivo.read())
     return "\n\n".join(textos)
 
-# Leitura do prompt base
+# Prompt base
 def carregar_prompt():
     if os.path.exists(CAMINHO_PROMPT):
         with open(CAMINHO_PROMPT, 'r', encoding='utf-8') as file:
             return file.read()
     return ""
 
-# Extração local de nome e e-mail (sem OpenAI)
-def extrair_dados_usuario_local(mensagem):
-    email_match = re.search(r'[\w\.-]+@[\w\.-]+', mensagem)
-    nome_match = re.search(r"(?i)(?:meu nome é|meu nome:|nome:)\s*(.*?)(?:\n|$)", mensagem)
-    nome = nome_match.group(1).strip() if nome_match else "Não informado"
-    email = email_match.group(0).strip() if email_match else "Não informado"
-    print(f"[EXTRAÇÃO LOCAL] Nome: {nome} | Email: {email}")
-    return nome, email
+# Extrair nome e e-mail
+def extrair_dados_usuario(mensagem):
+    padrao_email = r'[\w\.-]+@[\w\.-]+\.\w+'
+    padrao_nome = r'(?i)meu nome\s*[:\-]?\s*(.*?)\s*(?:email|e-mail|$)'
+    email = re.search(padrao_email, mensagem)
+    nome = re.search(padrao_nome, mensagem)
+    nome_extraido = nome.group(1).strip() if nome else 'Não informado'
+    email_extraido = email.group(0).strip() if email else 'Não informado'
+    print(f"[EXTRAÇÃO LOCAL] Nome: {nome_extraido} | Email: {email_extraido}")
+    return nome_extraido, email_extraido
 
 # Consulta GPT
 def enviar_openai(mensagem_completa):
@@ -123,21 +125,23 @@ async def receber_mensagem(request: Request):
         enviar_whatsapp(resposta, numero)
         return {"status": "premium"}
 
+    # Verifica se já existe cadastro
     client = conecta_google_sheets()
-    sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    lista = sheet_gratuitos.get_all_records()
-    usuario_existente = next((linha for linha in lista if str(linha['WHATSAPP']).strip() == numero), None)
+    sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
+    lista = sheet.get_all_records()
+    usuario = next((linha for linha in lista if str(linha['WHATSAPP']).strip() == numero), None)
 
-    if not usuario_existente:
-        nome, email = extrair_dados_usuario_local(mensagem_usuario)
+    if not usuario:
+        nome, email = extrair_dados_usuario(mensagem_usuario)
         if nome == 'Não informado' or email == 'Não informado':
             enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
-            return {"status": "dados pendentes"}
+            return {"status": "aguardando_dados"}
         interacoes, nome = atualiza_gratuitos(numero, nome, email)
         enviar_whatsapp(f"Seja muito bem-vindo(a), {nome}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
         return {"status": "boas-vindas"}
 
-    interacoes, nome = atualiza_gratuitos(numero, 'Usuário', '')
+    # Usuário já registrado
+    interacoes, nome = atualiza_gratuitos(numero, usuario['NOME'], usuario['E-MAIL'])
     resposta = enviar_openai(mensagem_usuario)
 
     if interacoes <= 7:
