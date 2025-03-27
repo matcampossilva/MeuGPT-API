@@ -56,15 +56,14 @@ def enviar_whatsapp(mensagem, numero_destino):
         to=f'whatsapp:{numero_destino}'
     )
 
-# Leitura dos arquivos de conhecimento
+# Leitura do conteúdo dos arquivos .txt (somente os 2 essenciais)
 def carregar_arquivos_conhecimento():
     textos = []
-    if os.path.exists(CAMINHO_CONHECIMENTO):
-        for nome_arquivo in os.listdir(CAMINHO_CONHECIMENTO):
-            if nome_arquivo.endswith('.txt'):
-                caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
-                with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
-                    textos.append(arquivo.read())
+    for nome_arquivo in ["reflexoes.txt", "respostas_caixinhas.txt"]:
+        caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
+        if os.path.exists(caminho_completo):
+            with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
+                textos.append(arquivo.read())
     return "\n\n".join(textos)
 
 # Leitura do prompt base
@@ -74,12 +73,12 @@ def carregar_prompt():
             return file.read()
     return ""
 
-# Extrai nome e e-mail da mensagem do usuário
+# Extrair nome e e-mail (agora com input mais leve)
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = enviar_openai(prompt)
+    resposta = enviar_openai(prompt, uso_leve=True)
     nome = re.search(r'Nome: (.*?);', resposta)
     email = re.search(r'Email: (.+)', resposta)
     return (
@@ -87,24 +86,34 @@ def extrair_dados_usuario(mensagem):
         email.group(1).strip() if email else 'Não informado'
     )
 
-# Consulta GPT
-def enviar_openai(mensagem_completa):
+# Consulta GPT — modo completo ou leve
+def enviar_openai(mensagem_completa, uso_leve=False):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
-    base_prompt = carregar_prompt()
-    conhecimento_extra = carregar_arquivos_conhecimento()
 
-    body = {
-        "model": "gpt-4",
-        "messages": [
-            {"role": "system", "content": base_prompt + "\n\n" + conhecimento_extra},
-            {"role": "user", "content": mensagem_completa}
-        ],
-        "temperature": 0.7
-    }
+    # Se for extração simples, não precisa carregar tudo
+    if uso_leve:
+        body = {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "user", "content": mensagem_completa}
+            ],
+            "temperature": 0
+        }
+    else:
+        base_prompt = carregar_prompt()
+        conhecimento_extra = carregar_arquivos_conhecimento()
+        body = {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "system", "content": base_prompt + "\n\n" + conhecimento_extra},
+                {"role": "user", "content": mensagem_completa}
+            ],
+            "temperature": 0.7
+        }
 
     response = requests.post(url, headers=headers, json=body)
     resultado = response.json()
@@ -128,25 +137,21 @@ async def receber_mensagem(request: Request):
         return {"status": "premium"}
 
     client = conecta_google_sheets()
-    sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    lista = sheet.get_all_records()
+    sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
+    lista = sheet_gratuitos.get_all_records()
+    usuario_existente = any(str(linha['WHATSAPP']).strip() == numero for linha in lista)
 
-    usuario = next((linha for linha in lista if str(linha['WHATSAPP']).strip() == numero), None)
-    nome = usuario['NOME'].strip() if usuario else ''
-    email = usuario['E-MAIL'].strip() if usuario else ''
+    if not usuario_existente:
+        nome, email = extrair_dados_usuario(mensagem_usuario)
+        print(f"[EXTRAÇÃO] Nome: {nome} | Email: {email}")
+        if nome == 'Não informado' or email == 'Não informado':
+            enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
+            return {"status": "dados pendentes"}
+        interacoes, nome = atualiza_gratuitos(numero, nome, email)
+        enviar_whatsapp(f"Seja muito bem-vindo(a), {nome}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
+        return {"status": "boas-vindas"}
 
-    if not usuario or not nome or not email:
-        if not nome or not email:
-            nome_extraido, email_extraido = extrair_dados_usuario(mensagem_usuario)
-            print(f"[EXTRAÇÃO] Nome: {nome_extraido} | Email: {email_extraido}")
-            if nome_extraido == 'Não informado' or email_extraido == 'Não informado':
-                enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
-                return {"status": "dados pendentes"}
-            interacoes, nome_final = atualiza_gratuitos(numero, nome_extraido, email_extraido)
-            enviar_whatsapp(f"Seja muito bem-vindo(a), {nome_final}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
-            return {"status": "boas-vindas"}
-
-    interacoes, nome = atualiza_gratuitos(numero, nome, email)
+    interacoes, nome = atualiza_gratuitos(numero, 'Usuário', '')
     resposta = enviar_openai(mensagem_usuario)
 
     if interacoes <= 7:
