@@ -14,18 +14,17 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Carrega o prompt do MeuGPT do arquivo externo
-with open("prompt.txt", "r", encoding="utf-8") as f:
-    PROMPT_BASE = f.read()
+# Caminhos
+CAMINHO_CONHECIMENTO = "./conhecimento"
+CAMINHO_PROMPT = "prompt.txt"
 
-# Conexão Google Sheets
+# Conectar ao Google Sheets
 def conecta_google_sheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/GOOGLE_SHEETS_JSON', scope)
-    client = gspread.authorize(creds)
-    return client
+    return gspread.authorize(creds)
 
-# Verifica pagante
+# Verifica se o número é de um usuário pagante
 def verifica_pagante(numero):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Pagantes')
@@ -35,7 +34,7 @@ def verifica_pagante(numero):
             return True
     return False
 
-# Atualiza ou insere gratuitos
+# Atualiza ou insere gratuito
 def atualiza_gratuitos(numero, nome, email):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
@@ -48,81 +47,71 @@ def atualiza_gratuitos(numero, nome, email):
     sheet.append_row([nome, numero, email, 1])
     return 1, nome
 
-# Envia WhatsApp
+# Envia mensagem WhatsApp
 def enviar_whatsapp(mensagem, numero_destino):
     client_twilio = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    try:
-        client_twilio.messages.create(
-            messaging_service_sid=MESSAGING_SERVICE_SID,
-            body=mensagem,
-            to=f'whatsapp:{numero_destino}'
-        )
-        print(f"✅ WhatsApp enviado para {numero_destino}")
-    except Exception as e:
-        print(f"❌ Erro WhatsApp: {e}")
+    client_twilio.messages.create(
+        messaging_service_sid=MESSAGING_SERVICE_SID,
+        body=mensagem,
+        to=f'whatsapp:{numero_destino}'
+    )
 
-# Extrair nome e e-mail com tratamento de erro
+# Leitura do conteúdo dos arquivos .txt
+def carregar_arquivos_conhecimento():
+    textos = []
+    if os.path.exists(CAMINHO_CONHECIMENTO):
+        for nome_arquivo in os.listdir(CAMINHO_CONHECIMENTO):
+            if nome_arquivo.endswith('.txt'):
+                caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
+                with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
+                    textos.append(arquivo.read())
+    return "\n\n".join(textos)
+
+# Leitura do prompt base
+def carregar_prompt():
+    if os.path.exists(CAMINHO_PROMPT):
+        with open(CAMINHO_PROMPT, 'r', encoding='utf-8') as file:
+            return file.read()
+    return ""
+
+# Extrair nome e e-mail
 def extrair_dados_usuario(mensagem):
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
-Responda no formato: Nome: nome do usuário; Email: email do usuário.
-Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
+    Responda no formato: Nome: nome do usuário; Email: email do usuário.
+    Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
+    resposta = enviar_openai(prompt)
+    nome = re.search(r'Nome: (.*?);', resposta)
+    email = re.search(r'Email: (.+)', resposta)
+    return (
+        nome.group(1).strip() if nome else 'Não informado',
+        email.group(1).strip() if email else 'Não informado'
+    )
 
-    body = {
-        "model": "gpt-4",
-        "messages": [
-            {"role": "system", "content": prompt}
-        ],
-        "temperature": 0.2
-    }
-
-    response = requests.post(url, headers=headers, json=body)
-    try:
-        resultado = response.json()
-        if "choices" not in resultado:
-            print("❌ Erro na resposta da OpenAI:", resultado)
-            return 'Não informado', 'Não informado'
-        dados = resultado["choices"][0]["message"]["content"]
-        nome = re.search(r'Nome: (.*?);', dados)
-        email = re.search(r'Email: (.+)', dados)
-        nome = nome.group(1).strip() if nome else 'Não informado'
-        email = email.group(1).strip() if email else 'Não informado'
-        return nome, email
-    except Exception as e:
-        print("❌ Erro ao processar resposta da OpenAI:", e)
-        return 'Não informado', 'Não informado'
-
-# Consulta GPT com prompt oficial do MeuGPT
-def consulta_chatgpt(nome, mensagem_usuario):
+# Consulta GPT
+def enviar_openai(mensagem_completa):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
+    base_prompt = carregar_prompt()
+    conhecimento_extra = carregar_arquivos_conhecimento()
 
     body = {
         "model": "gpt-4",
         "messages": [
-            {"role": "system", "content": PROMPT_BASE},
-            {"role": "user", "content": f"{mensagem_usuario}"}
+            {"role": "system", "content": base_prompt + "\n\n" + conhecimento_extra},
+            {"role": "user", "content": mensagem_completa}
         ],
         "temperature": 0.7
     }
 
     response = requests.post(url, headers=headers, json=body)
-    try:
-        resultado = response.json()
-        if "choices" not in resultado:
-            print("❌ Erro na resposta da OpenAI:", resultado)
-            return "Houve um erro ao processar sua resposta. Tente novamente em instantes."
+    resultado = response.json()
+    if "choices" in resultado:
         return resultado["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print("❌ Erro ao processar resposta da OpenAI:", e)
-        return "Erro inesperado ao gerar resposta. Tente novamente."
+    print("Erro OpenAI:", resultado)
+    return "Houve um erro ao processar sua resposta. Tente novamente."
 
 # Endpoint principal
 @app.post("/webhook")
@@ -131,17 +120,19 @@ async def receber_mensagem(request: Request):
     numero = dados.get('From', '').replace('whatsapp:', '')
     if not numero.startswith('+'):
         numero = '+' + numero
-
     mensagem_usuario = dados.get('Body', '').strip()
 
     if verifica_pagante(numero):
-        resposta_gpt = consulta_chatgpt('Usuário Premium', mensagem_usuario)
-        enviar_whatsapp(resposta_gpt, numero)
+        resposta = enviar_openai(mensagem_usuario)
+        enviar_whatsapp(resposta, numero)
         return {"status": "premium"}
 
     client = conecta_google_sheets()
     sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    usuario_existente = sheet_gratuitos.find(numero)
+    try:
+        usuario_existente = sheet_gratuitos.find(numero)
+    except:
+        usuario_existente = None
 
     if not usuario_existente:
         nome, email = extrair_dados_usuario(mensagem_usuario)
@@ -153,14 +144,14 @@ async def receber_mensagem(request: Request):
         return {"status": "boas-vindas"}
 
     interacoes, nome = atualiza_gratuitos(numero, 'Usuário', '')
-    resposta_gpt = consulta_chatgpt(nome, mensagem_usuario)
+    resposta = enviar_openai(mensagem_usuario)
 
     if interacoes <= 7:
-        enviar_whatsapp(resposta_gpt, numero)
+        enviar_whatsapp(resposta, numero)
     elif interacoes <= 10:
         restante = 10 - interacoes
         aviso = f"\n\n⚠️ Atenção: Você tem apenas mais {restante} interações gratuitas. Não deixe para depois a organização definitiva das suas finanças! Libere agora seu acesso Premium e tenha acompanhamento ilimitado, personalizado e alinhado ao que realmente importa para você. 👉🏼 [link premium]"
-        enviar_whatsapp(resposta_gpt + aviso, numero)
+        enviar_whatsapp(resposta + aviso, numero)
     else:
         aviso_final = f"⏳ {nome}, suas interações gratuitas chegaram ao fim! Libere seu acesso Premium agora e continue a jornada comigo: 🚀👉🏼 [link premium]"
         enviar_whatsapp(aviso_final, numero)
