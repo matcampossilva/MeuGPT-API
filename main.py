@@ -56,35 +56,15 @@ def enviar_whatsapp(mensagem, numero_destino):
         to=f'whatsapp:{numero_destino}'
     )
 
-# Leitura seletiva dos arquivos .txt com base na mensagem
-def carregar_arquivos_relevantes(pergunta):
+# Leitura dos arquivos de conhecimento
+def carregar_arquivos_conhecimento():
     textos = []
-    palavras_chave = {
-        "casamento": "reflexoes.txt",
-        "divórcio": "reflexoes.txt",
-        "filhos": "respostas_caixinhas.txt",
-        "educação": "respostas_caixinhas.txt",
-        "herança": "lista_high_ticket.txt",
-        "investimento": "lista_high_ticket.txt",
-        "objetivo": "lista_low_ticket.txt",
-        "matheus": "mini_cv.txt"
-    }
-
-    arquivos_relevantes = set()
-    for palavra, arquivo in palavras_chave.items():
-        if palavra in pergunta.lower():
-            arquivos_relevantes.add(arquivo)
-
-    # Se nada bater, usa só os essenciais
-    if not arquivos_relevantes:
-        arquivos_relevantes = {"mini_cv.txt", "lista_low_ticket.txt"}
-
-    for nome_arquivo in arquivos_relevantes:
-        caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
-        if os.path.exists(caminho_completo):
-            with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
-                textos.append(arquivo.read())
-
+    if os.path.exists(CAMINHO_CONHECIMENTO):
+        for nome_arquivo in os.listdir(CAMINHO_CONHECIMENTO):
+            if nome_arquivo.endswith('.txt'):
+                caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
+                with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
+                    textos.append(arquivo.read())
     return "\n\n".join(textos)
 
 # Leitura do prompt base
@@ -94,12 +74,12 @@ def carregar_prompt():
             return file.read()
     return ""
 
-# Extrair nome e e-mail
+# Extrai nome e e-mail da mensagem do usuário
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
     Responda no formato: Nome: nome do usuário; Email: email do usuário.
     Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = enviar_openai(prompt, forcar_modo_limpo=True)
+    resposta = enviar_openai(prompt)
     nome = re.search(r'Nome: (.*?);', resposta)
     email = re.search(r'Email: (.+)', resposta)
     return (
@@ -108,14 +88,14 @@ def extrair_dados_usuario(mensagem):
     )
 
 # Consulta GPT
-def enviar_openai(mensagem_completa, forcar_modo_limpo=False):
+def enviar_openai(mensagem_completa):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
     base_prompt = carregar_prompt()
-    conhecimento_extra = "" if forcar_modo_limpo else carregar_arquivos_relevantes(mensagem_completa)
+    conhecimento_extra = carregar_arquivos_conhecimento()
 
     body = {
         "model": "gpt-4",
@@ -128,7 +108,6 @@ def enviar_openai(mensagem_completa, forcar_modo_limpo=False):
 
     response = requests.post(url, headers=headers, json=body)
     resultado = response.json()
-
     if "choices" in resultado:
         return resultado["choices"][0]["message"]["content"].strip()
     print("[ERRO GPT] Resultado bruto:", resultado)
@@ -151,29 +130,33 @@ async def receber_mensagem(request: Request):
     client = conecta_google_sheets()
     sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet.get_all_records()
+
     usuario = next((linha for linha in lista if str(linha['WHATSAPP']).strip() == numero), None)
+    nome = usuario['NOME'].strip() if usuario else ''
+    email = usuario['E-MAIL'].strip() if usuario else ''
 
-    if not usuario:
-        nome, email = extrair_dados_usuario(mensagem_usuario)
-        print(f"[EXTRAÇÃO] Nome: {nome} | Email: {email}")
-        if nome == 'Não informado' or email == 'Não informado':
-            enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
-            return {"status": "dados pendentes"}
-        interacoes, nome = atualiza_gratuitos(numero, nome, email)
-        enviar_whatsapp(f"Seja muito bem-vindo(a), {nome}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
-        return {"status": "boas-vindas"}
+    if not usuario or not nome or not email:
+        if not nome or not email:
+            nome_extraido, email_extraido = extrair_dados_usuario(mensagem_usuario)
+            print(f"[EXTRAÇÃO] Nome: {nome_extraido} | Email: {email_extraido}")
+            if nome_extraido == 'Não informado' or email_extraido == 'Não informado':
+                enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
+                return {"status": "dados pendentes"}
+            interacoes, nome_final = atualiza_gratuitos(numero, nome_extraido, email_extraido)
+            enviar_whatsapp(f"Seja muito bem-vindo(a), {nome_final}! 🎯 Estou aqui para te ajudar a organizar sua vida financeira colocando Deus, sua família e seu trabalho em primeiro lugar. Vamos juntos? Me conta: qual é o seu principal objetivo financeiro neste momento?", numero)
+            return {"status": "boas-vindas"}
 
-    interacoes, nome = atualiza_gratuitos(numero, usuario['NOME'], usuario['E-MAIL'])
+    interacoes, nome = atualiza_gratuitos(numero, nome, email)
     resposta = enviar_openai(mensagem_usuario)
 
     if interacoes <= 7:
         enviar_whatsapp(resposta, numero)
     elif interacoes <= 10:
         restante = 10 - interacoes
-        aviso = f"\n\n⚠️ Atenção: Você tem apenas mais {restante} interações gratuitas. Libere agora seu acesso Premium e tenha acompanhamento completo: 👉🏼 [link premium]"
+        aviso = f"\n\n⚠️ Atenção: Você tem apenas mais {restante} interações gratuitas. Não deixe para depois a organização definitiva das suas finanças! Libere agora seu acesso Premium e tenha acompanhamento ilimitado, personalizado e alinhado ao que realmente importa para você. 👉🏼 [link premium]"
         enviar_whatsapp(resposta + aviso, numero)
     else:
-        aviso_final = f"⏳ {nome}, suas interações gratuitas chegaram ao fim! Continue com acesso Premium agora mesmo: 🚀👉🏼 [link premium]"
+        aviso_final = f"⏳ {nome}, suas interações gratuitas chegaram ao fim! Libere seu acesso Premium agora e continue a jornada comigo: 🚀👉🏼 [link premium]"
         enviar_whatsapp(aviso_final, numero)
 
     return {"status": "gratuito"}
