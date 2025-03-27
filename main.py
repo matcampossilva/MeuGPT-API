@@ -15,8 +15,8 @@ MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Caminhos
-CAMINHO_CONHECIMENTO = os.path.join(os.path.dirname(__file__), "conhecimento")
-CAMINHO_PROMPT = os.path.join(os.path.dirname(__file__), "prompt.txt")
+CAMINHO_CONHECIMENTO = "./conhecimento"
+CAMINHO_PROMPT = "prompt.txt"
 
 # Conectar ao Google Sheets
 def conecta_google_sheets():
@@ -56,18 +56,15 @@ def enviar_whatsapp(mensagem, numero_destino):
         to=f'whatsapp:{numero_destino}'
     )
 
-# Leitura do conteúdo dos arquivos .txt da pasta conhecimento
+# Leitura do conteúdo dos arquivos .txt
 def carregar_arquivos_conhecimento():
     textos = []
     if os.path.exists(CAMINHO_CONHECIMENTO):
         for nome_arquivo in os.listdir(CAMINHO_CONHECIMENTO):
             if nome_arquivo.endswith('.txt'):
                 caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
-                try:
-                    with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
-                        textos.append(arquivo.read())
-                except Exception as e:
-                    print(f"[ERRO] Falha ao ler {nome_arquivo}: {e}")
+                with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
+                    textos.append(arquivo.read())
     return "\n\n".join(textos)
 
 # Leitura do prompt base
@@ -80,8 +77,8 @@ def carregar_prompt():
 # Extrair nome e e-mail
 def extrair_dados_usuario(mensagem):
     prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
-Responda no formato: Nome: nome do usuário; Email: email do usuário.
-Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
+    Responda no formato: Nome: nome do usuário; Email: email do usuário.
+    Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
     resposta = enviar_openai(prompt)
     nome = re.search(r'Nome: (.*?);', resposta)
     email = re.search(r'Email: (.+)', resposta)
@@ -101,7 +98,7 @@ def enviar_openai(mensagem_completa):
     conhecimento_extra = carregar_arquivos_conhecimento()
 
     body = {
-        "model": "gpt-4",
+        "model": "gpt-4-turbo",
         "messages": [
             {"role": "system", "content": base_prompt + "\n\n" + conhecimento_extra},
             {"role": "user", "content": mensagem_completa}
