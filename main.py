@@ -56,14 +56,15 @@ def enviar_whatsapp(mensagem, numero_destino):
         to=f'whatsapp:{numero_destino}'
     )
 
-# Leitura do conteúdo dos arquivos .txt (somente os 2 essenciais)
+# Leitura do conteúdo dos arquivos .txt
 def carregar_arquivos_conhecimento():
     textos = []
-    for nome_arquivo in ["reflexoes.txt", "respostas_caixinhas.txt"]:
-        caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
-        if os.path.exists(caminho_completo):
-            with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
-                textos.append(arquivo.read())
+    if os.path.exists(CAMINHO_CONHECIMENTO):
+        for nome_arquivo in os.listdir(CAMINHO_CONHECIMENTO):
+            if nome_arquivo.endswith('.txt'):
+                caminho_completo = os.path.join(CAMINHO_CONHECIMENTO, nome_arquivo)
+                with open(caminho_completo, 'r', encoding='utf-8') as arquivo:
+                    textos.append(arquivo.read())
     return "\n\n".join(textos)
 
 # Leitura do prompt base
@@ -73,47 +74,33 @@ def carregar_prompt():
             return file.read()
     return ""
 
-# Extrair nome e e-mail (agora com input mais leve)
+# Extração local de nome e e-mail
 def extrair_dados_usuario(mensagem):
-    prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
-    Responda no formato: Nome: nome do usuário; Email: email do usuário.
-    Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-    resposta = enviar_openai(prompt, uso_leve=True)
-    nome = re.search(r'Nome: (.*?);', resposta)
-    email = re.search(r'Email: (.+)', resposta)
-    return (
-        nome.group(1).strip() if nome else 'Não informado',
-        email.group(1).strip() if email else 'Não informado'
-    )
+    nome_match = re.search(r'nome[\s:]*([\w\s]+)', mensagem, re.IGNORECASE)
+    email_match = re.search(r'[\w\.-]+@[\w\.-]+', mensagem)
+    nome = nome_match.group(1).strip() if nome_match else 'Não informado'
+    email = email_match.group(0).strip() if email_match else 'Não informado'
+    print(f"[EXTRAÇÃO LOCAL] Nome: {nome} | Email: {email}")
+    return nome, email
 
-# Consulta GPT — modo completo ou leve
-def enviar_openai(mensagem_completa, uso_leve=False):
+# Consulta GPT
+def enviar_openai(mensagem_completa):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
+    base_prompt = carregar_prompt()
+    conhecimento_extra = carregar_arquivos_conhecimento()
 
-    # Se for extração simples, não precisa carregar tudo
-    if uso_leve:
-        body = {
-            "model": "gpt-4",
-            "messages": [
-                {"role": "user", "content": mensagem_completa}
-            ],
-            "temperature": 0
-        }
-    else:
-        base_prompt = carregar_prompt()
-        conhecimento_extra = carregar_arquivos_conhecimento()
-        body = {
-            "model": "gpt-4",
-            "messages": [
-                {"role": "system", "content": base_prompt + "\n\n" + conhecimento_extra},
-                {"role": "user", "content": mensagem_completa}
-            ],
-            "temperature": 0.7
-        }
+    body = {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": base_prompt + "\n\n" + conhecimento_extra},
+            {"role": "user", "content": mensagem_completa}
+        ],
+        "temperature": 0.7
+    }
 
     response = requests.post(url, headers=headers, json=body)
     resultado = response.json()
@@ -143,7 +130,6 @@ async def receber_mensagem(request: Request):
 
     if not usuario_existente:
         nome, email = extrair_dados_usuario(mensagem_usuario)
-        print(f"[EXTRAÇÃO] Nome: {nome} | Email: {email}")
         if nome == 'Não informado' or email == 'Não informado':
             enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
             return {"status": "dados pendentes"}
