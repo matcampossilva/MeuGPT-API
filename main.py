@@ -74,12 +74,12 @@ def carregar_prompt():
             return file.read()
     return ""
 
-# Extração local de nome e e-mail
-def extrair_dados_usuario(mensagem):
-    nome_match = re.search(r'nome[\s:]*([\w\s]+)', mensagem, re.IGNORECASE)
+# Extração local de nome e e-mail (sem OpenAI)
+def extrair_dados_usuario_local(mensagem):
     email_match = re.search(r'[\w\.-]+@[\w\.-]+', mensagem)
-    nome = nome_match.group(1).strip() if nome_match else 'Não informado'
-    email = email_match.group(0).strip() if email_match else 'Não informado'
+    nome_match = re.search(r"(?i)(?:meu nome é|meu nome:|nome:)\s*(.*?)(?:\n|$)", mensagem)
+    nome = nome_match.group(1).strip() if nome_match else "Não informado"
+    email = email_match.group(0).strip() if email_match else "Não informado"
     print(f"[EXTRAÇÃO LOCAL] Nome: {nome} | Email: {email}")
     return nome, email
 
@@ -126,10 +126,10 @@ async def receber_mensagem(request: Request):
     client = conecta_google_sheets()
     sheet_gratuitos = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
     lista = sheet_gratuitos.get_all_records()
-    usuario_existente = any(str(linha['WHATSAPP']).strip() == numero for linha in lista)
+    usuario_existente = next((linha for linha in lista if str(linha['WHATSAPP']).strip() == numero), None)
 
     if not usuario_existente:
-        nome, email = extrair_dados_usuario(mensagem_usuario)
+        nome, email = extrair_dados_usuario_local(mensagem_usuario)
         if nome == 'Não informado' or email == 'Não informado':
             enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
             return {"status": "dados pendentes"}
