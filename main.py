@@ -10,7 +10,7 @@ from configuracoes import (
     registrar_usuario,
     obter_status_usuario,
 )
-from enviar_whatsapp import enviar_mensagem_whatsapp
+from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp  # 👈🏽 Ajustado aqui
 from enviar_email import enviar_email
 
 app = FastAPI()
