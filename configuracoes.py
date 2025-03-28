@@ -1,11 +1,12 @@
 import os
-import requests
 from dotenv import load_dotenv
+import requests
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# Carrega variáveis de ambiente
 load_dotenv()
 
-# Variáveis de configuração
+# Variáveis de ambiente
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
@@ -13,50 +14,71 @@ MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 EMAIL_REMETENTE = os.getenv('EMAIL_REMETENTE')
 SENHA_REMETENTE = os.getenv('SENHA_REMETENTE')
 
-# 🔹 1. Verifica se o usuário já está registrado na planilha
-def verificar_usuario(numero, aba):
+GOOGLE_SHEETS_URL = os.getenv("GOOGLE_SHEETS_URL")
+
+# Variáveis para Google Sheets
+SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+CREDS_FILE = "meugpt-api-sheets-92a9d439900d.json"
+SPREADSHEET_NAME = "Controle de Usuários"
+PAGANTES_SHEET = "Pagantes"
+GRATUITOS_SHEET = "Gratuitos"
+
+# Carrega planilha
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE)
+client = gspread.authorize(creds)
+spreadsheet = client.open(SPREADSHEET_NAME)
+
+def obter_status_usuario(whatsapp):
     try:
-        url = f"https://script.google.com/macros/s/AKfycbyyChxdjQiNv8jmJEI--6vamvK6VSqWAZ0bh2gl0ky-vjsus0fYxjdQtHFj8vbHlSjP/exec"
-        response = requests.get(f"{url}?numero={numero}&aba={aba}")
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "encontrado":
-                return data
+        sheet_pagantes = spreadsheet.worksheet(PAGANTES_SHEET)
+        sheet_gratuitos = spreadsheet.worksheet(GRATUITOS_SHEET)
+
+        pagantes = sheet_pagantes.col_values(1)
+        gratuitos = sheet_gratuitos.col_values(1)
+
+        if whatsapp in pagantes:
+            return "PAGANTE"
+        elif whatsapp in gratuitos:
+            return "GRATUITO"
+        else:
+            return "NOVO"
+    except Exception as e:
+        print(f"Erro ao obter status do usuário: {e}")
+        return "ERRO"
+
+def verificar_usuario(whatsapp):
+    try:
+        sheet_pagantes = spreadsheet.worksheet(PAGANTES_SHEET)
+        pagantes = sheet_pagantes.col_values(1)
+        return whatsapp in pagantes
     except Exception as e:
         print(f"Erro ao verificar usuário: {e}")
-    return None
+        return False
 
-# 🔹 2. Registra novo usuário na planilha
-def registrar_usuario(nome, email, numero, aba):
+def atualizar_interacoes(whatsapp):
     try:
-        url = f"https://script.google.com/macros/s/AKfycbyyChxdjQiNv8jmJEI--6vamvK6VSqWAZ0bh2gl0ky-vjsus0fYxjdQtHFj8vbHlSjP/exec"
-        payload = {
-            "nome": nome,
-            "email": email,
-            "numero": numero,
-            "aba": aba
-        }
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            print(f"✅ Novo usuário registrado com sucesso ({aba})")
-        else:
-            print(f"⚠️ Erro ao registrar usuário: {response.status_code}")
-    except Exception as e:
-        print(f"Erro na requisição de registro: {e}")
+        sheet = spreadsheet.worksheet(GRATUITOS_SHEET)
+        data = sheet.get_all_records()
 
-# 🔹 3. Atualiza contagem de interações
-def atualizar_interacoes(numero, nova_contagem, aba):
-    try:
-        url = f"https://script.google.com/macros/s/AKfycbyyChxdjQiNv8jmJEI--6vamvK6VSqWAZ0bh2gl0ky-vjsus0fYxjdQtHFj8vbHlSjP/exec"
-        payload = {
-            "numero": numero,
-            "interacoes": nova_contagem,
-            "aba": aba
-        }
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            print(f"✅ Interações atualizadas: {numero} -> {nova_contagem}")
-        else:
-            print(f"⚠️ Erro ao atualizar interações: {response.status_code}")
+        for idx, row in enumerate(data, start=2):
+            if str(row["WhatsApp"]) == whatsapp:
+                interacoes = int(row["Interações"])
+                sheet.update_cell(idx, 3, interacoes + 1)
+                return interacoes + 1
     except Exception as e:
         print(f"Erro ao atualizar interações: {e}")
+    return 0
+
+def registrar_usuario(nome, whatsapp, email):
+    try:
+        sheet = spreadsheet.worksheet(GRATUITOS_SHEET)
+        data = sheet.get_all_records()
+        telefones_existentes = [str(row["WhatsApp"]) for row in data]
+
+        if whatsapp not in telefones_existentes:
+            sheet.append_row([nome, whatsapp, 0, email])
+            print(f"✅ Novo usuário registrado: {nome} - {whatsapp}")
+        else:
+            print(f"ℹ️ Usuário já existente: {whatsapp}")
+    except Exception as e:
+        print(f"Erro ao registrar usuário: {e}")
