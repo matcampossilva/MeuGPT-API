@@ -1,133 +1,129 @@
 import os
 import openai
-import faiss
-import pickle
-import numpy as np
-from fastapi import FastAPI, Request
-from dotenv import load_dotenv
-from twilio.twiml.messaging_response import MessagingResponse
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
 import pytz
+import datetime
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from configuracoes import (
+    verificar_usuario,
+    atualizar_interacoes,
+    registrar_usuario,
+    obter_status_usuario,
+)
+from enviar_whatsapp import enviar_mensagem_whatsapp
+from enviar_email import enviar_email
 
-# === CONFIG ===
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-SPREADSHEET_KEY = os.getenv("SPREADSHEET_KEY")
-WHATSAPP_LIMIT = 10
-TIMEZONE = pytz.timezone("America/Sao_Paulo")
-
-INDEX_PATH = "vector_index/faiss.index"
-CHUNKS_PATH = "vector_index/chunks.pkl"
-
-# === FAISS + Vetorização ===
-index = faiss.read_index(INDEX_PATH)
-with open(CHUNKS_PATH, "rb") as f:
-    texts = pickle.load(f)
-
-def search_context(query, k=5):
-    response = openai.Embedding.create(
-        input=query,
-        model="text-embedding-3-small"
-    )
-    embedding = np.array(response["data"][0]["embedding"]).astype("float32")
-    distances, indices = index.search(np.array([embedding]), k)
-    results = [texts[i] for i in indices[0] if i < len(texts)]
-    return "\n---\n".join(results)
-
-# === Sheets ===
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("meugpt-api-sheets-92a9d439900d.json", scope)
-client = gspread.authorize(creds)
-
-pagantes = client.open_by_key(SPREADSHEET_KEY).worksheet("Pagantes")
-gratuitos = client.open_by_key(SPREADSHEET_KEY).worksheet("Gratuitos")
-
-# === FastAPI ===
 app = FastAPI()
 
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Mensagens padronizadas com tom comercial e adaptável
+mensagem_boas_vindas = (
+    "Antes da gente começar, me conta uma coisa: qual o seu nome e e-mail? 👇\n\n"
+    "Preciso disso pra te liberar o acesso gratuito aqui no Meu Conselheiro Financeiro. A partir daqui, esquece robozinho engessado. "
+    "Você vai ter uma conversa que mistura dinheiro, propósito e vida real. Sem enrolação. 💼🔥"
+)
+
+mensagem_aviso_limite = (
+    "Faltam só {interacoes_restantes} interações gratuitas... e eu ainda tenho muito pra te mostrar. 🤏⏳\n\n"
+    "Se você quiser seguir nessa jornada com liberdade total, clique aqui pra destravar tudo:\n\n"
+    "[INSIRA O LINK DO PLANO PREMIUM AQUI]\n\n"
+    "A escolha é sua. Mas se fosse comigo… eu já estaria lá dentro. 😎"
+)
+
+mensagem_limite_atingido = (
+    "Seu acesso gratuito terminou. Mas ó… isso aqui é só o começo. 💥\n\n"
+    "Quer continuar recebendo respostas personalizadas, alinhadas com sua vida financeira, familiar e espiritual? Então vem comigo:\n\n"
+    "[INSIRA O LINK DO PLANO PREMIUM AQUI]\n\n"
+    "Liberdade não se improvisa. Ela se constrói. Vamos nessa?"
+)
+
+class Mensagem(BaseModel):
+    nome: str
+    email: str
+    whatsapp: str
+    texto: str
+
 @app.post("/webhook")
-async def whatsapp_webhook(request: Request):
+async def receber_mensagem(request: Request):
     form = await request.form()
-    user_message = form.get("Body", "").strip()
-    sender = form.get("From", "")
-    number = sender.replace("whatsapp:", "")
+    mensagem = Mensagem(
+        nome=form.get("nome", ""),
+        email=form.get("email", ""),
+        whatsapp=form.get("whatsapp", ""),
+        texto=form.get("texto", ""),
+    )
 
-    nome, email = None, None
+    numero = mensagem.whatsapp
+    texto = mensagem.texto.strip()
+    nome = mensagem.nome
+    email = mensagem.email
 
-    user_row = find_user(pagantes, number)
-    planilha = pagantes
-    is_pagante = True
+    if not numero.startswith("+"):
+        numero = f"+{numero}"
 
-    if user_row is None:
-        user_row = find_user(gratuitos, number)
-        planilha = gratuitos
-        is_pagante = False
+    status, interacoes_restantes = obter_status_usuario(numero)
 
-    if user_row is None:
-        now = datetime.now(TIMEZONE).strftime("%d/%m/%Y %H:%M:%S")
-        gratuitos.append_row([now, number, "", "", 1])
-        return responder("Olá! Antes de continuar, por favor, me diga seu *nome completo* e *e-mail*. Esses dados são obrigatórios para prosseguir. 😊")
+    if status == "bloqueado":
+        enviar_mensagem_whatsapp(numero, mensagem_limite_atingido)
+        return {"status": "bloqueado"}
 
-    row_values = planilha.row_values(user_row)
-    nome = row_values[2] if len(row_values) >= 3 else None
-    email = row_values[3] if len(row_values) >= 4 else None
-    interacoes = int(row_values[4]) if len(row_values) >= 5 else 0
-
-    if not nome or not email:
-        if "@" in user_message:
-            email = user_message
+    if not verificar_usuario(numero):
+        if nome and email:
+            registrar_usuario(nome, numero, email)
+            saudacao = gerar_resposta("Dê boas-vindas ao usuário com tom motivador e elegante.")
+            enviar_mensagem_whatsapp(numero, saudacao)
         else:
-            nome = user_message
+            enviar_mensagem_whatsapp(numero, mensagem_boas_vindas)
+        return {"status": "aguardando_dados"}
 
-        planilha.update_cell(user_row, 3, nome if nome else "")
-        planilha.update_cell(user_row, 4, email if email else "")
+    if status == "gratuito":
+        if interacoes_restantes == 0:
+            enviar_mensagem_whatsapp(numero, mensagem_limite_atingido)
+            return {"status": "limite_atingido"}
+        elif interacoes_restantes == 3:
+            enviar_mensagem_whatsapp(numero, mensagem_aviso_limite.format(interacoes_restantes=interacoes_restantes))
 
-        if not nome or not email:
-            return responder("Perfeito! Agora me diga seu *e-mail* para continuarmos. 📧")
+    resposta = gerar_resposta(texto)
+    enviar_mensagem_whatsapp(numero, resposta)
 
-    if not is_pagante and interacoes >= WHATSAPP_LIMIT:
-        return responder(
-            f"Chegamos ao limite de interações gratuitas. 😔\n\n"
-            "Se quiser continuar tendo acesso ao Meu Conselheiro Financeiro, clique no link abaixo e ative sua versão completa:\n"
-            "*[link premium aqui]*"
+    if status == "gratuito":
+        atualizar_interacoes(numero)
+
+    if "@" in texto and "." in texto and not email:
+        enviar_email(numero, texto)
+
+    return {"status": "mensagem_enviada"}
+
+def gerar_resposta(prompt_usuario):
+    try:
+        agora = datetime.datetime.now(pytz.timezone("America/Sao_Paulo"))
+        data_hora_formatada = agora.strftime("%d/%m/%Y %H:%M")
+
+        mensagens = [
+            {
+                "role": "system",
+                "content": (
+                    "Você é o Meu Conselheiro Financeiro, uma inteligência artificial criada para ajudar o usuário "
+                    "a organizar sua vida financeira, familiar, profissional e espiritual. Sua linguagem é clara, elegante, direta e "
+                    "amigável. Você é provocativo quando necessário, e não tem medo de dizer verdades. Você estimula a clareza de vida. "
+                    "Hoje é " + data_hora_formatada + "."
+                ),
+            },
+            {
+                "role": "user",
+                "content": prompt_usuario,
+            },
+        ]
+
+        resposta = openai.ChatCompletion.create(
+            model="gpt-4-turbo",
+            messages=mensagens,
+            temperature=0.7,
+            max_tokens=1000,
         )
 
-    if not is_pagante:
-        interacoes += 1
-        planilha.update_cell(user_row, 5, interacoes)
+        return resposta.choices[0].message["content"].strip()
 
-    contexto = search_context(user_message)
-    prompt = (
-        "Você é o Meu Conselheiro Financeiro, uma inteligência criada por Matheus Campos para ajudar pessoas a amadurecerem sua vida financeira, familiar, profissional e espiritual.\n\n"
-        f"Contexto relevante dos arquivos de Matheus:\n{contexto}\n\n"
-        f"Pergunta: {user_message}\n\n"
-        "Resposta:"
-    )
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Você é um planejador financeiro com visão católica e sabedoria prática. Seja direto, concreto e inspirador."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    resposta_final = response["choices"][0]["message"]["content"].strip()
-    return responder(resposta_final)
-
-# === Funções Auxiliares ===
-
-def responder(msg):
-    twiml = MessagingResponse()
-    twiml.message(msg)
-    return str(twiml)
-
-def find_user(sheet, number):
-    numbers = sheet.col_values(2)
-    try:
-        return numbers.index(number) + 1
-    except ValueError:
-        return None
+    except Exception as e:
+        return f"Erro ao gerar resposta: {str(e)}"
