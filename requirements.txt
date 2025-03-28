@@ -12,4 +12,4 @@ python-multipart==0.0.9
 numpy==1.26.4
 tqdm==4.66.4
 tiktoken==0.6.0
-faiss-cpu @ https://dl.fbaipublicfiles.com/faiss/python/wheels/cpu/faiss_cpu-1.7.4-cp311-cp311-manylinux2014_x86_64.whl
+pinecone==3.0.0
