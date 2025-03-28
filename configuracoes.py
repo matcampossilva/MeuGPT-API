@@ -12,8 +12,6 @@ MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')  # 👈🏽 NOVO!
 EMAIL_REMETENTE = os.getenv('EMAIL_REMETENTE')
 SENHA_REMETENTE = os.getenv('SENHA_REMETENTE')
 
-GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing'
-
 # 🔍 Função de verificação de usuário
 def verificar_usuario(numero, aba):
     """
