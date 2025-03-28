@@ -1,73 +1,33 @@
 import os
 import openai
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
-from uuid import uuid4
 
-# Carregar variáveis de ambiente
 load_dotenv()
 
+# Inicializa o cliente OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Configurações do Pinecone
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_env = os.getenv("PINECONE_ENV")  # ex: "us-east-1"
-pinecone_index_name = os.getenv("PINECONE_INDEX")  # ex: "meu-conselheiro"
+pinecone_env = os.getenv("PINECONE_ENV")  # Ex: "us-east-1"
 
-# Inicializar Pinecone
-pinecone.init(api_key=pinecone_api_key, environment=pinecone_env)
+# Cria instância do cliente Pinecone
+pc = Pinecone(api_key=pinecone_api_key)
 
-# Verifica se o índice existe
-if pinecone_index_name not in pinecone.list_indexes():
-    raise ValueError(f"Index '{pinecone_index_name}' não encontrado no Pinecone.")
+# Nome do index
+index_name = "meu-conselheiro"
 
-index = pinecone.Index(pinecone_index_name)
-
-# Função para dividir textos em chunks menores
-def split_text(text, max_tokens=500):
-    import tiktoken
-    encoding = tiktoken.get_encoding("cl100k_base")
-    tokens = encoding.encode(text)
-    chunks = []
-    for i in range(0, len(tokens), max_tokens):
-        chunk = tokens[i:i+max_tokens]
-        chunk_text = encoding.decode(chunk)
-        chunks.append(chunk_text)
-    return chunks
-
-# Caminho da pasta de conhecimento
-knowledge_path = "knowledge"
-
-all_chunks = []
-
-# Percorrer os arquivos .txt da pasta knowledge
-for filename in os.listdir(knowledge_path):
-    if filename.endswith(".txt"):
-        filepath = os.path.join(knowledge_path, filename)
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
-            chunks = split_text(content)
-            all_chunks.extend(chunks)
-
-print(f"🔍 Total de chunks para vetorização: {len(all_chunks)}")
-
-# Gerar embeddings com OpenAI
-batch_size = 50
-vectors_to_upsert = []
-
-for i in range(0, len(all_chunks), batch_size):
-    batch = all_chunks[i:i + batch_size]
-    response = openai.Embedding.create(
-        input=batch,
-        model="text-embedding-ada-002"
+# Criação do índice (se ainda não existir)
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=1536,
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud="aws",
+            region=pinecone_env  # us-east-1, etc.
+        )
     )
-    for j, embedding in enumerate(response["data"]):
-        vectors_to_upsert.append((
-            str(uuid4()),
-            embedding["embedding"],
-            {"text": batch[j]}
-        ))
 
-# Inserir os vetores no Pinecone
-print("📡 Subindo vetores para o Pinecone...")
-index.upsert(vectors=vectors_to_upsert)
-
-print("✅ Vetorização concluída e indexado no Pinecone com sucesso.")
+print("✅ Pinecone configurado com sucesso.")
