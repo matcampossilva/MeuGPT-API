@@ -1,7 +1,7 @@
 import os
-from dotenv import load_dotenv
-import requests
+import pytz
 import gspread
+from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 
 load_dotenv()
@@ -14,71 +14,58 @@ MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
 EMAIL_REMETENTE = os.getenv('EMAIL_REMETENTE')
 SENHA_REMETENTE = os.getenv('SENHA_REMETENTE')
 
-GOOGLE_SHEETS_URL = os.getenv("GOOGLE_SHEETS_URL")
+# Nome do arquivo .json da credencial do Google
+CREDS_FILE = "credenciais_gspread.json"
 
-# Variáveis para Google Sheets
+# Escopo e credenciais para Google Sheets
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-CREDS_FILE = "meugpt-api-sheets-92a9d439900d.json"
-SPREADSHEET_NAME = "Controle de Usuários"
-PAGANTES_SHEET = "Pagantes"
-GRATUITOS_SHEET = "Gratuitos"
-
-# Carrega planilha
 creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE)
 client = gspread.authorize(creds)
+
+# Nome da planilha
+SPREADSHEET_NAME = "Controle de usuários"
+
+# Abas
 spreadsheet = client.open(SPREADSHEET_NAME)
+aba_pagantes = spreadsheet.worksheet("Pagantes")
+aba_gratuitos = spreadsheet.worksheet("Gratuitos")
 
-def obter_status_usuario(whatsapp):
+def verificar_usuario(numero):
     try:
-        sheet_pagantes = spreadsheet.worksheet(PAGANTES_SHEET)
-        sheet_gratuitos = spreadsheet.worksheet(GRATUITOS_SHEET)
-
-        pagantes = sheet_pagantes.col_values(1)
-        gratuitos = sheet_gratuitos.col_values(1)
-
-        if whatsapp in pagantes:
-            return "PAGANTE"
-        elif whatsapp in gratuitos:
-            return "GRATUITO"
-        else:
-            return "NOVO"
-    except Exception as e:
-        print(f"Erro ao obter status do usuário: {e}")
-        return "ERRO"
-
-def verificar_usuario(whatsapp):
-    try:
-        sheet_pagantes = spreadsheet.worksheet(PAGANTES_SHEET)
-        pagantes = sheet_pagantes.col_values(1)
-        return whatsapp in pagantes
-    except Exception as e:
-        print(f"Erro ao verificar usuário: {e}")
+        numeros = aba_pagantes.col_values(2) + aba_gratuitos.col_values(2)
+        return numero in numeros
+    except:
         return False
 
-def atualizar_interacoes(whatsapp):
+def obter_status_usuario(numero):
     try:
-        sheet = spreadsheet.worksheet(GRATUITOS_SHEET)
-        data = sheet.get_all_records()
-
-        for idx, row in enumerate(data, start=2):
-            if str(row["WhatsApp"]) == whatsapp:
-                interacoes = int(row["Interações"])
-                sheet.update_cell(idx, 3, interacoes + 1)
-                return interacoes + 1
-    except Exception as e:
-        print(f"Erro ao atualizar interações: {e}")
-    return 0
-
-def registrar_usuario(nome, whatsapp, email):
-    try:
-        sheet = spreadsheet.worksheet(GRATUITOS_SHEET)
-        data = sheet.get_all_records()
-        telefones_existentes = [str(row["WhatsApp"]) for row in data]
-
-        if whatsapp not in telefones_existentes:
-            sheet.append_row([nome, whatsapp, 0, email])
-            print(f"✅ Novo usuário registrado: {nome} - {whatsapp}")
+        if numero in aba_pagantes.col_values(2):
+            return "ativo", None
+        elif numero in aba_gratuitos.col_values(2):
+            celula = aba_gratuitos.find(numero)
+            interacoes_restantes = int(aba_gratuitos.cell(celula.row, 4).value)
+            if interacoes_restantes <= 0:
+                return "bloqueado", 0
+            return "gratuito", interacoes_restantes
         else:
-            print(f"ℹ️ Usuário já existente: {whatsapp}")
+            return "novo", None
+    except:
+        return "erro", None
+
+def registrar_usuario(nome, numero, email):
+    try:
+        numero = str(numero)
+        if not numero.startswith("+"):
+            numero = f"+{numero}"
+        aba_gratuitos.append_row([nome, numero, email, 10])
     except Exception as e:
         print(f"Erro ao registrar usuário: {e}")
+
+def atualizar_interacoes(numero):
+    try:
+        celula = aba_gratuitos.find(numero)
+        interacoes = int(aba_gratuitos.cell(celula.row, 4).value)
+        if interacoes > 0:
+            aba_gratuitos.update_cell(celula.row, 4, interacoes - 1)
+    except Exception as e:
+        print(f"Erro ao atualizar interações: {e}")
