@@ -1,12 +1,18 @@
-# enviar_whatsapp.py
+import os
 from twilio.rest import Client
-from configuracoes import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, MESSAGING_SERVICE_SID
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+MESSAGING_SERVICE_SID = os.getenv("MESSAGING_SERVICE_SID")
 
 def enviar_whatsapp(mensagem, numero_destino="+5562992782150"):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client.messages.create(
-            messaging_service_sid=MESSAGING_SERVICE_SID,  # 👈🏽 Aqui está o segredo!
+            messaging_service_sid=MESSAGING_SERVICE_SID,  
             body=mensagem,
             to=f'whatsapp:{numero_destino}'
         )
