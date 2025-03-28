@@ -71,11 +71,12 @@ async def receber_mensagem(request: Request):
     if not verificar_usuario(numero):
         if nome and email:
             registrar_usuario(nome, numero, email)
-            saudacao = gerar_resposta("Dê boas-vindas ao usuário com tom motivador e elegante.")
+            saudacao = gerar_resposta("Dê boas-vindas ao usuário com tom motivador, misturando dinheiro, propósito e vida real.")
             enviar_mensagem_whatsapp(numero, saudacao)
+            return {"status": "novo_usuario_registrado"}
         else:
             enviar_mensagem_whatsapp(numero, mensagem_boas_vindas)
-        return {"status": "aguardando_dados"}
+            return {"status": "aguardando_dados_usuario"}
 
     if status == "gratuito":
         if interacoes_restantes == 0:
