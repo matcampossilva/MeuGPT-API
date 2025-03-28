@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "meugpt-api-sheets",
+  "private_key_id": "92a9d439900d0e51d9e2a5bb187ec0c5e9389c8b",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQDWctMpFxt75kyx\nMYX/yM1rKADSoNrEm58FjCHeMzGKBoWyjhaEJGe4JQO1B1Ir31VYaJoVr+LgpcHg\nmhSTU+8MhZk6zYsi2BxZoA8P5bU4i5ix17H0KEwjJKqWbq52uO1by8wJUht1ujLV\npPlRUWKHHCw2O1K3+ZBn9NYGMhTQXtbZJmSFJa7yFdn3Q3PiLqyyd5lIgZizmoxg\n88wFcevEiT1V7jW/ZFxGUJQewfG6FhmpWzetjcO+jvJsWhjsnxMxpCLVo0YX6y4p\nnmcpINN4txbWPL1Npmlr97JgOSiq5sapHuI5CUk4qHvG1mH/ajpcCkZiBvuc9oIo\nQnnbIhIfAgMBAAECggEAESLp1s2+5362wC4Z7B+qspZmwm4SLUXWRkY1aqEio0n0\nIxmRmQujsiZbDntASLs3AbKSJYuBkLwOKxmE7WT2pESEwxsrtCQa19qfeYC8o4Ec\nOZHn6X/S3bgPXagIjvomFYDKlDAYe6beaw4c0i+ztOI+cjL5YDQ0IuqAs8wKt7/G\n6o96IxXfmnni8H8h827s2q89f1t2Nn04IOzY0kdeYtMUSm+Jm9oDEYhb59L3fwpn\nPTOG1VJaNfr81jcjpSiVMuSd3BbkU5VLaZZ9RsRrgjIytGUHTm2+CrHOkKPMGVp8\nuVDLpGS6Lp7zBf/6K0E1xTqgoodXSokwnBsZICA68QKBgQDxjfvboNlPDcvyT8Vs\nufeOdefGrVi/jiqRE2i5LaPwkVHtgLHxa/9OOwQntBHbhnEtK2xvHNZ7LiQT8oRG\nvP31fKDGyK4C68u13u/AByPuZwhcotneN8cqCJ1DZWsBKS8oBNqjovR/r5je5vd1\n7UE2XCntuV+OZwq8Tn3KIl07CQKBgQDjRd4YuhAd+v7M5YVvsKdW3LKeUi3neKn5\nu0ljJspIU/HkdfiP1LVsHf/y+4jE6LYqcinVFjTJ8OcW7QEv4U7Hmdfdp1exO8iz\n70ai9xVfJgg8o+2EoS+jFoRDvs7mfCoykjQQ+B9RXTThBRIYJuq8zfKJlT+oK2M8\nVBZ0zo2l5wKBgDE3Va6dKkmyLPC1EiuiBG+RVGUloqR86e1fQAIi63kzkrbKdvcS\noxUkbydLyCurS9oBM/m7rXOxpgYubocfMLtY5kU6VEIiGwJ2ZvEAQ3Dqq0h8odlm\nEf1dffVib5fv9Ty5KHcY16pAc+xOsPLlIVlbE+vszixskEJn17dcoxRJAoGBAKgo\n6wMqsIAuVddvQAL7F2X62CKytYpeSo4gGFXHvsYzbnhXHXn2reH4dIfpuzHO6fKQ\nFAm5a4e7upDI/ibaM3sWhpVXm1fk30Tbl00/Os3zCwcrV7PZu7CVGXoytU3usx5F\n9UZVAH8oUtbn9JJwQSE/1OQdzUL2D2/028TDjCUjAn8ZHPGwRGr25FLbCSQUYuGi\ntPFdnJdQal3SvHCydzcVdUFxb6nAiuVUQl83H9VBnbB6Dxz+yxC7Wjl8g8z0wbcd\nk8tsjlIH8UYPTTW06n9TitUzbUkDNzcjPFkuzzyNkLy5jCpivcI86X8xkf40lEQH\nZBaVhACnmJTec77Co2st\n-----END PRIVATE KEY-----\n",
+  "client_email": "meugpt-service-account@meugpt-api-sheets.iam.gserviceaccount.com",
+  "client_id": "118261540690631135101",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/meugpt-service-account%40meugpt-api-sheets.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
