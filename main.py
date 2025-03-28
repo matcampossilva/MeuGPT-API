@@ -1,179 +1,133 @@
+import os
+import openai
+import faiss
+import pickle
+import numpy as np
 from fastapi import FastAPI, Request
+from dotenv import load_dotenv
+from twilio.twiml.messaging_response import MessagingResponse
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from twilio.rest import Client as TwilioClient
-import requests
-import os
-import re
+from datetime import datetime
+import pytz
 
+# === CONFIG ===
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+SPREADSHEET_KEY = os.getenv("SPREADSHEET_KEY")
+WHATSAPP_LIMIT = 10
+TIMEZONE = pytz.timezone("America/Sao_Paulo")
+
+INDEX_PATH = "vector_index/faiss.index"
+CHUNKS_PATH = "vector_index/chunks.pkl"
+
+# === FAISS + Vetorização ===
+index = faiss.read_index(INDEX_PATH)
+with open(CHUNKS_PATH, "rb") as f:
+    texts = pickle.load(f)
+
+def search_context(query, k=5):
+    response = openai.Embedding.create(
+        input=query,
+        model="text-embedding-3-small"
+    )
+    embedding = np.array(response["data"][0]["embedding"]).astype("float32")
+    distances, indices = index.search(np.array([embedding]), k)
+    results = [texts[i] for i in indices[0] if i < len(texts)]
+    return "\n---\n".join(results)
+
+# === Sheets ===
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("meugpt-api-sheets-92a9d439900d.json", scope)
+client = gspread.authorize(creds)
+
+pagantes = client.open_by_key(SPREADSHEET_KEY).worksheet("Pagantes")
+gratuitos = client.open_by_key(SPREADSHEET_KEY).worksheet("Gratuitos")
+
+# === FastAPI ===
 app = FastAPI()
 
-# Variáveis de ambiente
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-MESSAGING_SERVICE_SID = os.getenv('MESSAGING_SERVICE_SID')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-# Carregar arquivos de conhecimento
-with open("prompt.txt", "r", encoding="utf-8") as f:
-    PROMPT_INICIAL = f.read()
-
-with open("conhecimento/reflexoes.txt", "r", encoding="utf-8") as f:
-    REFLEXOES = f.read()
-
-with open("conhecimento/respostas_caixinhas.txt", "r", encoding="utf-8") as f:
-    RESPOSTAS_CAIXINHAS = f.read()
-
-# Conexão com Google Sheets
-def conecta_google_sheets():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name('/etc/secrets/GOOGLE_SHEETS_JSON', scope)
-    client = gspread.authorize(creds)
-    return client
-
-# Verifica se é pagante
-def verifica_pagante(numero):
-    client = conecta_google_sheets()
-    sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Pagantes')
-    lista = sheet.get_all_records()
-    for linha in lista:
-        if linha['WHATSAPP'] == numero and linha['STATUS'].upper() == 'ATIVO':
-            return True
-    return False
-
-# Atualiza ou insere gratuito e retorna nome e contador
-def atualiza_gratuitos(numero, nome, email):
-    client = conecta_google_sheets()
-    sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-    lista = sheet.get_all_records()
-    for i, linha in enumerate(lista):
-        if linha['WHATSAPP'] == numero:
-            novo_valor = int(linha['CONTADOR']) + 1
-            sheet.update_cell(i+2, 4, novo_valor)
-            return novo_valor, linha['NOME']
-    sheet.append_row([nome, numero, email, 1])
-    return 1, nome
-
-# Envia mensagem pelo WhatsApp
-def enviar_whatsapp(mensagem, numero_destino):
-    client_twilio = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    try:
-        client_twilio.messages.create(
-            messaging_service_sid=MESSAGING_SERVICE_SID,
-            body=mensagem,
-            to=f'whatsapp:{numero_destino}'
-        )
-        print(f"✅ WhatsApp enviado para {numero_destino}")
-    except Exception as e:
-        print(f"❌ Erro WhatsApp: {e}")
-
-# Extrai nome e e-mail da mensagem
-def extrair_dados_usuario(mensagem):
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    prompt = f"""Extraia apenas nome e e-mail desta mensagem: "{mensagem}".
-Responda no formato: Nome: nome do usuário; Email: email do usuário.
-Caso não encontre algum deles, responda: Nome: Não informado; Email: Não informado."""
-
-    body = {
-        "model": "gpt-4",
-        "messages": [{"role": "system", "content": prompt}],
-        "temperature": 0.2
-    }
-
-    response = requests.post(url, headers=headers, json=body)
-    try:
-        resultado = response.json()
-        if "choices" not in resultado:
-            print("❌ Erro na resposta da OpenAI:", resultado)
-            return 'Não informado', 'Não informado'
-        dados = resultado["choices"][0]["message"]["content"]
-        nome = re.search(r'Nome: (.*?);', dados)
-        email = re.search(r'Email: (.+)', dados)
-        nome = nome.group(1).strip() if nome else 'Não informado'
-        email = email.group(1).strip() if email else 'Não informado'
-        return nome, email
-    except Exception as e:
-        print("❌ Erro ao processar resposta da OpenAI:", e)
-        return 'Não informado', 'Não informado'
-
-# Consulta GPT com os arquivos de conhecimento e prompt
-def consulta_chatgpt(nome, mensagem_usuario):
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    full_prompt = f"""{PROMPT_INICIAL}
-
-[REFLEXÕES]
-{REFLEXOES}
-
-[RESPOSTAS DE CAIXINHA]
-{RESPOSTAS_CAIXINHAS}
-
-Usuário ({nome}): {mensagem_usuario}
-Conselheiro:"""
-
-    body = {
-        "model": "gpt-4",
-        "messages": [{"role": "system", "content": full_prompt}],
-        "temperature": 0.7
-    }
-
-    response = requests.post(url, headers=headers, json=body)
-    try:
-        resultado = response.json()
-        if "choices" not in resultado:
-            print("❌ Erro na resposta da OpenAI:", resultado)
-            return "Houve um erro ao processar sua resposta. Tente novamente em instantes."
-        return resultado["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print("❌ Erro ao processar resposta da OpenAI:", e)
-        return "Erro inesperado ao gerar resposta. Tente novamente."
-
-# Endpoint principal
 @app.post("/webhook")
-async def receber_mensagem(request: Request):
-    dados = await request.form()
-    numero = dados.get('From', '').replace('whatsapp:', '')
-    if not numero.startswith('+'):
-        numero = '+' + numero
-    mensagem_usuario = dados.get('Body', '').strip()
+async def whatsapp_webhook(request: Request):
+    form = await request.form()
+    user_message = form.get("Body", "").strip()
+    sender = form.get("From", "")
+    number = sender.replace("whatsapp:", "")
 
-    if verifica_pagante(numero):
-        resposta = consulta_chatgpt("Usuário Premium", mensagem_usuario)
-        enviar_whatsapp(resposta, numero)
-        return {"status": "premium"}
+    nome, email = None, None
 
-    nome, email = extrair_dados_usuario(mensagem_usuario)
-    if nome == 'Não informado' or email == 'Não informado':
-        client = conecta_google_sheets()
-        sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1bhnyG0-DaH3gE687_tUEy9kVI7rV-bxJl10bRKkDl2Y/edit?usp=sharing').worksheet('Gratuitos')
-        lista = sheet.get_all_records()
-        for linha in lista:
-            if linha['WHATSAPP'] == numero:
-                nome = linha['NOME']
-                break
+    user_row = find_user(pagantes, number)
+    planilha = pagantes
+    is_pagante = True
+
+    if user_row is None:
+        user_row = find_user(gratuitos, number)
+        planilha = gratuitos
+        is_pagante = False
+
+    if user_row is None:
+        now = datetime.now(TIMEZONE).strftime("%d/%m/%Y %H:%M:%S")
+        gratuitos.append_row([now, number, "", "", 1])
+        return responder("Olá! Antes de continuar, por favor, me diga seu *nome completo* e *e-mail*. Esses dados são obrigatórios para prosseguir. 😊")
+
+    row_values = planilha.row_values(user_row)
+    nome = row_values[2] if len(row_values) >= 3 else None
+    email = row_values[3] if len(row_values) >= 4 else None
+    interacoes = int(row_values[4]) if len(row_values) >= 5 else 0
+
+    if not nome or not email:
+        if "@" in user_message:
+            email = user_message
         else:
-            enviar_whatsapp("Olá! 👋🏼 Que bom ter você aqui. Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?", numero)
-            return {"status": "dados pendentes"}
+            nome = user_message
 
-    interacoes, nome = atualiza_gratuitos(numero, nome, email)
-    resposta = consulta_chatgpt(nome, mensagem_usuario)
+        planilha.update_cell(user_row, 3, nome if nome else "")
+        planilha.update_cell(user_row, 4, email if email else "")
 
-    if interacoes <= 7:
-        enviar_whatsapp(resposta, numero)
-    elif interacoes <= 10:
-        restante = 10 - interacoes
-        aviso = f"\n\n⚠️ Atenção: Você tem apenas mais {restante} interações gratuitas. Não deixe para depois a organização definitiva das suas finanças! Libere agora seu acesso Premium e tenha acompanhamento ilimitado, personalizado e alinhado ao que realmente importa para você. 👉🏼 [link premium]"
-        enviar_whatsapp(resposta + aviso, numero)
-    else:
-        aviso_final = f"⏳ {nome}, suas interações gratuitas chegaram ao fim! Libere seu acesso Premium agora e continue a jornada comigo: 🚀👉🏼 [link premium]"
-        enviar_whatsapp(aviso_final, numero)
+        if not nome or not email:
+            return responder("Perfeito! Agora me diga seu *e-mail* para continuarmos. 📧")
 
-    return {"status": "gratuito"}
+    if not is_pagante and interacoes >= WHATSAPP_LIMIT:
+        return responder(
+            f"Chegamos ao limite de interações gratuitas. 😔\n\n"
+            "Se quiser continuar tendo acesso ao Meu Conselheiro Financeiro, clique no link abaixo e ative sua versão completa:\n"
+            "*[link premium aqui]*"
+        )
+
+    if not is_pagante:
+        interacoes += 1
+        planilha.update_cell(user_row, 5, interacoes)
+
+    contexto = search_context(user_message)
+    prompt = (
+        "Você é o Meu Conselheiro Financeiro, uma inteligência criada por Matheus Campos para ajudar pessoas a amadurecerem sua vida financeira, familiar, profissional e espiritual.\n\n"
+        f"Contexto relevante dos arquivos de Matheus:\n{contexto}\n\n"
+        f"Pergunta: {user_message}\n\n"
+        "Resposta:"
+    )
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "Você é um planejador financeiro com visão católica e sabedoria prática. Seja direto, concreto e inspirador."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    resposta_final = response["choices"][0]["message"]["content"].strip()
+    return responder(resposta_final)
+
+# === Funções Auxiliares ===
+
+def responder(msg):
+    twiml = MessagingResponse()
+    twiml.message(msg)
+    return str(twiml)
+
+def find_user(sheet, number):
+    numbers = sheet.col_values(2)
+    try:
+        return numbers.index(number) + 1
+    except ValueError:
+        return None
