@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Nome da planilha
-SPREADSHEET_NAME = "Controle de Usuários"
+SPREADSHEET_NAME = "Controle de Usuários - MeuGPT"
 
 # Nome da aba de cada tipo de usuário
 ABA_PAGANTES = "Pagantes"
