@@ -30,21 +30,21 @@ def encontrar_usuario(numero, aba):
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{aba}!A2:D").execute()
     valores = result.get("values", [])
     for i, row in enumerate(valores):
-        if len(row) >= 1 and row[0] == numero:
+        if len(row) >= 1 and row[1] == numero:
             return i + 2, row  # linha e dados
     return None, None
 
-def adicionar_usuario(numero, nome, email, aba):
+def adicionar_usuario(nome, numero, email, aba):
     now = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y %H:%M:%S")
     sheet.values().append(
         spreadsheetId=SPREADSHEET_ID,
         range=f"{aba}!A:D",
         valueInputOption="RAW",
-        body={"values": [[numero, nome, email, now]]}
+        body={"values": [[nome, numero, email, now]]}
     ).execute()
 
-def atualizar_usuario(numero, nome, email, linha, aba):
-    valores = [numero, nome, email]
+def atualizar_usuario(nome, numero, email, linha, aba):
+    valores = [nome, numero, email]
     sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
         range=f"{aba}!A{linha}:C{linha}",
@@ -66,13 +66,11 @@ async def whatsapp_webhook(request: Request):
     form = await request.form()
     numero_raw = form.get("From", "")
     numero = numero_raw.replace("whatsapp:", "").strip()
-
-    # Normaliza número para formato internacional
     if not numero.startswith("+"):
         numero = f"+55{numero.lstrip('0').lstrip('55')}"
 
     mensagem = form.get("Body", "").strip()
-    
+
     if not numero or not mensagem:
         return {"status": "ignored"}
 
@@ -83,21 +81,18 @@ async def whatsapp_webhook(request: Request):
     # Caso novo usuário
     if not dados_pagante and not dados_gratuito:
         enviar_mensagem_whatsapp(numero,
-            "Antes da gente começar, me conta uma coisa: qual o seu nome e e-mail? 👇\n\n"
-            "Preciso disso pra te liberar o acesso gratuito aqui no Meu Conselheiro Financeiro. "
-            "A partir daqui, esquece robozinho engessado. Você vai ter uma conversa que mistura dinheiro, propósito e vida real. Sem enrolação. 💼🔥"
+            "Bem-vindo ao Meu Conselheiro Financeiro. 💼\n\n"
+            "Antes de continuarmos, preciso que você me diga seu nome completo e e-mail.\n\n"
+            "Assim eu consigo te identificar e liberar o seu acesso gratuito. Vamos nessa? 👇"
         )
-        adicionar_usuario(numero, "", "", "Gratuitos")
+        adicionar_usuario("", numero, "", "Gratuitos")
         return {"status": "novo usuário"}
 
     # Se for usuário gratuito
     if dados_gratuito:
         linha = linha_gratuito
-        nome, email = "", ""
-        if len(dados_gratuito) >= 2:
-            nome = dados_gratuito[1]
-        if len(dados_gratuito) >= 3:
-            email = dados_gratuito[2]
+        nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
+        email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
 
         # Captura nome e email
         if not nome or not email:
@@ -108,7 +103,7 @@ async def whatsapp_webhook(request: Request):
             else:
                 nome = mensagem if not nome else nome
 
-            atualizar_usuario(numero, nome, email, linha, "Gratuitos")
+            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
 
             if nome and email:
                 enviar_mensagem_whatsapp(numero,
@@ -127,7 +122,7 @@ async def whatsapp_webhook(request: Request):
                 "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
             )
             return {"status": "limite atingido"}
-        
+
         atualizar_interacoes(linha, interacoes + 1)
 
     # Se chegou aqui, é pagante ou gratuito liberado
