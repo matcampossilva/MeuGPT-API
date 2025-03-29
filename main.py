@@ -1,114 +1,83 @@
-import os
-import openai
-import pytz
-import datetime
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from configuracoes import (
-    verificar_usuario,
-    atualizar_interacoes,
-    registrar_usuario,
-    obter_status_usuario,
-)
+from openai import OpenAI
 from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
-from enviar_email import enviar_email
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
+client = OpenAI()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Mensagens padronizadas com tom comercial e adaptável
-mensagem_boas_vindas = (
-    "Antes da gente começar, me conta uma coisa: qual o seu nome e e-mail? 👇\n\n"
-    "Preciso disso pra te liberar o acesso gratuito aqui no Meu Conselheiro Financeiro. A partir daqui, esquece robozinho engessado. "
-    "Você vai ter uma conversa que mistura dinheiro, propósito e vida real. Sem enrolação. 💼🔥"
-)
-
-mensagem_aviso_limite = (
-    "Faltam só {interacoes_restantes} interações gratuitas... e eu ainda tenho muito pra te mostrar. 🤏⏳\n\n"
-    "Se você quiser seguir nessa jornada com liberdade total, clique aqui pra destravar tudo:\n\n"
-    "[INSIRA O LINK DO PLANO PREMIUM AQUI]\n\n"
-    "A escolha é sua. Mas se fosse comigo… eu já estaria lá dentro. 😎"
-)
-
-mensagem_limite_atingido = (
-    "Seu acesso gratuito terminou. Mas ó… isso aqui é só o começo. 💥\n\n"
-    "Quer continuar recebendo respostas personalizadas, alinhadas com sua vida financeira, familiar e espiritual? Então vem comigo:\n\n"
-    "[INSIRA O LINK DO PLANO PREMIUM AQUI]\n\n"
-    "Liberdade não se improvisa. Ela se constrói. Vamos nessa?"
-)
+# Google Sheets setup
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("meugpt-api-sheets-2e29d11818b1.json", scope)
+google_client = gspread.authorize(creds)
+sheet_pagantes = google_client.open("Clientes Meu Conselheiro Financeiro").worksheet("Pagantes")
+sheet_gratuitos = google_client.open("Clientes Meu Conselheiro Financeiro").worksheet("Gratuitos")
 
 @app.post("/webhook")
-async def receber_mensagem(request: Request):
+async def webhook(request: Request):
     form = await request.form()
+    mensagem = form.get("Body")
+    numero_usuario = form.get("From").replace("whatsapp:", "")
 
-    numero = form.get('From', '').replace('whatsapp:', '').strip()
-    texto = form.get('Body', '').strip()
+    dados_pagantes = sheet_pagantes.get_all_records()
+    dados_gratuitos = sheet_gratuitos.get_all_records()
 
-    nome = ""
-    email = ""
+    numeros_pagantes = [str(dado['WhatsApp']) for dado in dados_pagantes]
+    numeros_gratuitos = [str(dado['WhatsApp']) for dado in dados_gratuitos]
 
-    status, interacoes_restantes = obter_status_usuario(numero)
+    if numero_usuario in numeros_pagantes:
+        tipo_usuario = "pagante"
+        nome_usuario = [dado['Nome'] for dado in dados_pagantes if dado['WhatsApp'] == numero_usuario][0]
+        contador = None
+    elif numero_usuario in numeros_gratuitos:
+        tipo_usuario = "gratuito"
+        usuario_atual = [dado for dado in dados_gratuitos if dado['WhatsApp'] == numero_usuario][0]
+        contador = int(usuario_atual['Contador'])
+        nome_usuario = usuario_atual['Nome']
+    else:
+        tipo_usuario = "novo"
+        nome_usuario = ""
+        contador = 0
+        sheet_gratuitos.append_row([numero_usuario, "", "", contador])
 
-    if status == "bloqueado":
-        enviar_mensagem_whatsapp(mensagem_limite_atingido, numero)
-        return {"status": "bloqueado"}
-
-    if not verificar_usuario(numero):
-        if "@" in texto and "." in texto:
-            nome = "Usuário"
-            email = texto
-            registrar_usuario(nome, numero, email)
-            saudacao = gerar_resposta("Dê boas-vindas ao usuário com tom motivador e elegante.")
-            enviar_mensagem_whatsapp(saudacao, numero)
+    if tipo_usuario == "novo" or nome_usuario.strip() == "":
+        if "@" in mensagem:
+            nome, email = mensagem.split("\n")[0], mensagem.split("\n")[1]
+            sheet_gratuitos.update_cell(numeros_gratuitos.index(numero_usuario)+2, 2, nome)
+            sheet_gratuitos.update_cell(numeros_gratuitos.index(numero_usuario)+2, 3, email)
+            resposta = f"Show, {nome}! ✅ Cadastro feito. Vamos começar! 🔥"
         else:
-            enviar_mensagem_whatsapp(mensagem_boas_vindas, numero)
-        return {"status": "aguardando_dados"}
+            resposta = ("Antes da gente começar, me conta uma coisa: qual o seu nome e e-mail? 👇\n\n"
+                        "Preciso disso pra te liberar o acesso gratuito aqui no Meu Conselheiro Financeiro. "
+                        "A partir daqui, esquece robozinho engessado. Você vai ter uma conversa que mistura "
+                        "dinheiro, propósito e vida real. Sem enrolação. 💼🔥")
+    else:
+        if tipo_usuario == "gratuito" and contador >= 10:
+            resposta = "⚠️ Você atingiu o limite de interações gratuitas. Acesse o Premium para continuar."
+        else:
+            resposta_openai = client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[{"role": "user", "content": mensagem}]
+            )
+            resposta = resposta_openai.choices[0].message.content
 
-    if status == "gratuito":
-        if interacoes_restantes == 0:
-            enviar_mensagem_whatsapp(mensagem_limite_atingido, numero)
-            return {"status": "limite_atingido"}
-        elif interacoes_restantes == 3:
-            enviar_mensagem_whatsapp(mensagem_aviso_limite.format(interacoes_restantes=interacoes_restantes), numero)
+            if tipo_usuario == "gratuito":
+                contador += 1
+                sheet_gratuitos.update_cell(numeros_gratuitos.index(numero_usuario)+2, 4, contador)
 
-    resposta = gerar_resposta(texto)
-    enviar_mensagem_whatsapp(resposta, numero)
+                if contador >= 7 and contador < 10:
+                    resposta += (f"\n\n⚠️ Restam só {10 - contador} interações gratuitas! "
+                                 "Considere o Premium para acesso completo.")
 
-    if status == "gratuito":
-        atualizar_interacoes(numero)
+    enviar_mensagem_whatsapp(resposta, numero_usuario)
 
-    return {"status": "mensagem_enviada"}
+    return {"status": "Mensagem enviada"}
 
-def gerar_resposta(prompt_usuario):
-    try:
-        agora = datetime.datetime.now(pytz.timezone("America/Sao_Paulo"))
-        data_hora_formatada = agora.strftime("%d/%m/%Y %H:%M")
-
-        mensagens = [
-            {
-                "role": "system",
-                "content": (
-                    "Você é o Meu Conselheiro Financeiro, uma inteligência artificial criada para ajudar o usuário "
-                    "a organizar sua vida financeira, familiar, profissional e espiritual. Sua linguagem é clara, elegante, direta e "
-                    "amigável. Você é provocativo quando necessário, e não tem medo de dizer verdades. Você estimula a clareza de vida. "
-                    "Hoje é " + data_hora_formatada + "."
-                ),
-            },
-            {
-                "role": "user",
-                "content": prompt_usuario,
-            },
-        ]
-
-        resposta = openai.ChatCompletion.create(
-            model="gpt-4-turbo",
-            messages=mensagens,
-            temperature=0.7,
-            max_tokens=1000,
-        )
-
-        return resposta.choices[0].message["content"].strip()
-
-    except Exception as e:
-        return f"Erro ao gerar resposta: {str(e)}"
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
