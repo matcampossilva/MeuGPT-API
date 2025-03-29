@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from uuid import uuid4
+import tiktoken
 
 load_dotenv()
 
@@ -15,6 +16,7 @@ pc = Pinecone(api_key=pinecone_api_key)
 index = pc.Index(pinecone_index_name)
 
 knowledge_dir = "knowledge"
+encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
 
 def read_files(path):
     contents = []
@@ -25,19 +27,13 @@ def read_files(path):
                 contents.append((filename, text))
     return contents
 
-# CORREÇÃO DEFINITIVA AQUI: CHUNKS MUITO MENORES E SEGURANÇA CONTRA TOKEN EXCESSIVO
-def chunk_text(text, max_chars=1000):
+# Correção definitiva usando TOKENS
+def chunk_text_by_tokens(text, max_tokens=4000):
+    tokens = encoding.encode(text)
     chunks = []
-    current_chunk = ""
-    for paragraph in text.split("\n\n"):
-        if len(current_chunk) + len(paragraph) < max_chars:
-            current_chunk += paragraph + "\n\n"
-        else:
-            if current_chunk.strip():
-                chunks.append(current_chunk.strip())
-            current_chunk = paragraph + "\n\n"
-    if current_chunk.strip():
-        chunks.append(current_chunk.strip())
+    for i in range(0, len(tokens), max_tokens):
+        chunk = tokens[i:i + max_tokens]
+        chunks.append(encoding.decode(chunk))
     return chunks
 
 def embed_text(text):
@@ -52,7 +48,7 @@ files = read_files(knowledge_dir)
 total_chunks = 0
 
 for filename, text in files:
-    chunks = chunk_text(text)
+    chunks = chunk_text_by_tokens(text)
     vectors = []
     for chunk in chunks:
         embedding = embed_text(chunk)
