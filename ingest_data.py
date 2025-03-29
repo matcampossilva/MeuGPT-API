@@ -8,7 +8,6 @@ load_dotenv()
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_env = os.getenv("PINECONE_ENV")
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 
 client = OpenAI(api_key=openai_api_key)
@@ -26,7 +25,8 @@ def read_files(path):
                 contents.append((filename, text))
     return contents
 
-def chunk_text(text, max_length=1000):
+# Ajuste importante: pedaços menores (500 caracteres por chunk)
+def chunk_text(text, max_length=500):
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk = ""
