@@ -2,13 +2,14 @@ from twilio.rest import Client
 import os
 from dotenv import load_dotenv
 
+# Carrega as variáveis de ambiente
 load_dotenv()
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 MESSAGING_SERVICE_SID = os.getenv("MESSAGING_SERVICE_SID")
 
-def enviar_whatsapp(mensagem, numero_destino):
+def enviar_whatsapp(numero_destino, mensagem):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client.messages.create(
