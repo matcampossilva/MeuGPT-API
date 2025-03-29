@@ -1,5 +1,12 @@
 from twilio.rest import Client
-from configuracoes import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, MESSAGING_SERVICE_SID
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+MESSAGING_SERVICE_SID = os.getenv("MESSAGING_SERVICE_SID")
 
 def enviar_whatsapp(mensagem, numero_destino):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
