@@ -25,17 +25,17 @@ def read_files(path):
                 contents.append((filename, text))
     return contents
 
-# Ajuste importante: pedaços menores (500 caracteres por chunk)
-def chunk_text(text, max_length=500):
-    paragraphs = text.split("\n\n")
+# CORREÇÃO DEFINITIVA AQUI: CHUNKS MUITO MENORES E SEGURANÇA CONTRA TOKEN EXCESSIVO
+def chunk_text(text, max_chars=1000):
     chunks = []
     current_chunk = ""
-    for para in paragraphs:
-        if len(current_chunk) + len(para) <= max_length:
-            current_chunk += para + "\n\n"
+    for paragraph in text.split("\n\n"):
+        if len(current_chunk) + len(paragraph) < max_chars:
+            current_chunk += paragraph + "\n\n"
         else:
-            chunks.append(current_chunk.strip())
-            current_chunk = para + "\n\n"
+            if current_chunk.strip():
+                chunks.append(current_chunk.strip())
+            current_chunk = paragraph + "\n\n"
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
     return chunks
