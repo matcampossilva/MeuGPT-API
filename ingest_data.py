@@ -42,7 +42,7 @@ def chunk_text(text, max_length=1000):
 
 def embed_text(text):
     response = client.embeddings.create(
-        input=[text],
+        input=text,
         model="text-embedding-ada-002"
     )
     return response.data[0].embedding
