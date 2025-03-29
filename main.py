@@ -6,13 +6,13 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
-from openai import OpenAI
+import openai
 
 # Carregar variáveis de ambiente
 load_dotenv()
 
-# OpenAI client com API Key do projeto
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# API Key direto no objeto global
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Google Sheets setup
 SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
@@ -135,14 +135,14 @@ async def whatsapp_webhook(request: Request):
     )
 
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message.content
+        resposta = response["choices"][0]["message"]["content"]
     except Exception as e:
         resposta = f"Erro ao gerar resposta:\n\n{e}"
 
