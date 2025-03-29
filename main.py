@@ -1,5 +1,4 @@
 import os
-import openai
 import pytz
 from fastapi import FastAPI, Request
 from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
@@ -7,11 +6,13 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
+from openai import OpenAI
 
 # Carregar variáveis de ambiente
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# OpenAI client com API Key do projeto
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Google Sheets setup
 SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
@@ -63,7 +64,9 @@ def atualizar_interacoes(linha, interacoes):
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
-    numero = form.get("From", "").replace("whatsapp:", "")
+    numero = form.get("From", "").replace("whatsapp:", "").replace(" ", "").replace("(", "").replace(")", "").replace("-", "")
+    if not numero.startswith("+"):
+        numero = f"+{numero}"
     mensagem = form.get("Body", "").strip()
     
     if not numero or not mensagem:
@@ -132,14 +135,14 @@ async def whatsapp_webhook(request: Request):
     )
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message["content"]
+        resposta = response.choices[0].message.content
     except Exception as e:
         resposta = f"Erro ao gerar resposta:\n\n{e}"
 
