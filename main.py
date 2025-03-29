@@ -1,83 +1,147 @@
-from fastapi import FastAPI, Request
-from openai import OpenAI
-from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import os
+import openai
+import pytz
+from fastapi import FastAPI, Request
+from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from datetime import datetime
 from dotenv import load_dotenv
 
+# Carregar variáveis de ambiente
 load_dotenv()
 
-app = FastAPI()
-client = OpenAI()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Google Sheets setup
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("meugpt-api-sheets-2e29d11818b1.json", scope)
-google_client = gspread.authorize(creds)
-sheet_pagantes = google_client.open("Clientes Meu Conselheiro Financeiro").worksheet("Pagantes")
-sheet_gratuitos = google_client.open("Clientes Meu Conselheiro Financeiro").worksheet("Gratuitos")
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
+credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
+service = build('sheets', 'v4', credentials=credentials)
+sheet = service.spreadsheets()
 
+app = FastAPI()
+
+MAX_INTERACOES_GRATUITAS = 10
+
+# Funções auxiliares
+def encontrar_usuario(numero, aba):
+    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{aba}!A2:D").execute()
+    valores = result.get("values", [])
+    for i, row in enumerate(valores):
+        if len(row) >= 1 and row[0] == numero:
+            return i + 2, row  # linha e dados
+    return None, None
+
+def adicionar_usuario(numero, nome, email, aba):
+    now = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y %H:%M:%S")
+    sheet.values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{aba}!A:D",
+        valueInputOption="RAW",
+        body={"values": [[numero, nome, email, now]]}
+    ).execute()
+
+def atualizar_usuario(numero, nome, email, linha, aba):
+    valores = [numero, nome, email]
+    sheet.values().update(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{aba}!A{linha}:C{linha}",
+        valueInputOption="RAW",
+        body={"values": [valores]}
+    ).execute()
+
+def atualizar_interacoes(linha, interacoes):
+    sheet.values().update(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"Gratuitos!E{linha}",
+        valueInputOption="RAW",
+        body={"values": [[interacoes]]}
+    ).execute()
+
+# Endpoint do Webhook do WhatsApp
 @app.post("/webhook")
-async def webhook(request: Request):
+async def whatsapp_webhook(request: Request):
     form = await request.form()
-    mensagem = form.get("Body")
-    numero_usuario = form.get("From").replace("whatsapp:", "")
+    numero = form.get("From", "").replace("whatsapp:", "")
+    mensagem = form.get("Body", "").strip()
+    
+    if not numero or not mensagem:
+        return {"status": "ignored"}
 
-    dados_pagantes = sheet_pagantes.get_all_records()
-    dados_gratuitos = sheet_gratuitos.get_all_records()
+    # Buscar usuário nas planilhas
+    linha_pagante, dados_pagante = encontrar_usuario(numero, "Pagantes")
+    linha_gratuito, dados_gratuito = encontrar_usuario(numero, "Gratuitos")
 
-    numeros_pagantes = [str(dado['WhatsApp']) for dado in dados_pagantes]
-    numeros_gratuitos = [str(dado['WhatsApp']) for dado in dados_gratuitos]
+    # Caso novo usuário
+    if not dados_pagante and not dados_gratuito:
+        enviar_mensagem_whatsapp(numero,
+            "Antes da gente começar, me conta uma coisa: qual o seu nome e e-mail? 👇\n\n"
+            "Preciso disso pra te liberar o acesso gratuito aqui no Meu Conselheiro Financeiro. "
+            "A partir daqui, esquece robozinho engessado. Você vai ter uma conversa que mistura dinheiro, propósito e vida real. Sem enrolação. 💼🔥"
+        )
+        adicionar_usuario(numero, "", "", "Gratuitos")
+        return {"status": "novo usuário"}
 
-    if numero_usuario in numeros_pagantes:
-        tipo_usuario = "pagante"
-        nome_usuario = [dado['Nome'] for dado in dados_pagantes if dado['WhatsApp'] == numero_usuario][0]
-        contador = None
-    elif numero_usuario in numeros_gratuitos:
-        tipo_usuario = "gratuito"
-        usuario_atual = [dado for dado in dados_gratuitos if dado['WhatsApp'] == numero_usuario][0]
-        contador = int(usuario_atual['Contador'])
-        nome_usuario = usuario_atual['Nome']
-    else:
-        tipo_usuario = "novo"
-        nome_usuario = ""
-        contador = 0
-        sheet_gratuitos.append_row([numero_usuario, "", "", contador])
+    # Se for usuário gratuito
+    if dados_gratuito:
+        linha = linha_gratuito
+        nome, email = "", ""
+        if len(dados_gratuito) >= 2:
+            nome = dados_gratuito[1]
+        if len(dados_gratuito) >= 3:
+            email = dados_gratuito[2]
 
-    if tipo_usuario == "novo" or nome_usuario.strip() == "":
-        if "@" in mensagem:
-            nome, email = mensagem.split("\n")[0], mensagem.split("\n")[1]
-            sheet_gratuitos.update_cell(numeros_gratuitos.index(numero_usuario)+2, 2, nome)
-            sheet_gratuitos.update_cell(numeros_gratuitos.index(numero_usuario)+2, 3, email)
-            resposta = f"Show, {nome}! ✅ Cadastro feito. Vamos começar! 🔥"
-        else:
-            resposta = ("Antes da gente começar, me conta uma coisa: qual o seu nome e e-mail? 👇\n\n"
-                        "Preciso disso pra te liberar o acesso gratuito aqui no Meu Conselheiro Financeiro. "
-                        "A partir daqui, esquece robozinho engessado. Você vai ter uma conversa que mistura "
-                        "dinheiro, propósito e vida real. Sem enrolação. 💼🔥")
-    else:
-        if tipo_usuario == "gratuito" and contador >= 10:
-            resposta = "⚠️ Você atingiu o limite de interações gratuitas. Acesse o Premium para continuar."
-        else:
-            resposta_openai = client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[{"role": "user", "content": mensagem}]
+        # Captura nome e email
+        if not nome or not email:
+            partes = mensagem.split()
+            if "@" in mensagem:
+                email = mensagem
+                nome = " ".join(partes[:-1])
+            else:
+                nome = mensagem if not nome else nome
+
+            atualizar_usuario(numero, nome, email, linha, "Gratuitos")
+
+            if nome and email:
+                enviar_mensagem_whatsapp(numero,
+                    f"Perfeito, {nome.split()[0]}! 👊\n\n"
+                    "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰"
+                )
+            else:
+                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+            return {"status": "dados atualizados"}
+
+        # Controle de interações
+        interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+        if interacoes >= MAX_INTERACOES_GRATUITAS:
+            enviar_mensagem_whatsapp(numero,
+                f"{nome.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
+                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
             )
-            resposta = resposta_openai.choices[0].message.content
+            return {"status": "limite atingido"}
+        
+        atualizar_interacoes(linha, interacoes + 1)
 
-            if tipo_usuario == "gratuito":
-                contador += 1
-                sheet_gratuitos.update_cell(numeros_gratuitos.index(numero_usuario)+2, 4, contador)
+    # Se chegou aqui, é pagante ou gratuito liberado
+    prompt_base = (
+        "Você é o Meu Conselheiro Financeiro, um assistente que ajuda famílias a ganharem clareza financeira, "
+        "com foco em propósito, patrimônio e vida real. Você mistura temas como dinheiro, vocação, fé, maturidade pessoal, "
+        "educação dos filhos, e decisões patrimoniais de médio e longo prazo. "
+        "Responda com profundidade, sem ser superficial. Não use linguagem de IA. Fale com autoridade e humanidade."
+    )
 
-                if contador >= 7 and contador < 10:
-                    resposta += (f"\n\n⚠️ Restam só {10 - contador} interações gratuitas! "
-                                 "Considere o Premium para acesso completo.")
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": prompt_base},
+                {"role": "user", "content": mensagem}
+            ]
+        )
+        resposta = response.choices[0].message["content"]
+    except Exception as e:
+        resposta = f"Erro ao gerar resposta:\n\n{e}"
 
-    enviar_mensagem_whatsapp(resposta, numero_usuario)
-
-    return {"status": "Mensagem enviada"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
+    enviar_mensagem_whatsapp(numero, resposta)
+    return {"status": "ok"}
