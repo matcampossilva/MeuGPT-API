@@ -1,7 +1,12 @@
-# enviar_email.py
 import smtplib
+import os
 from email.mime.text import MIMEText
-from configuracoes import EMAIL_REMETENTE, SENHA_REMETENTE
+from dotenv import load_dotenv
+
+load_dotenv()
+
+EMAIL_REMETENTE = os.getenv("EMAIL_REMETENTE")
+SENHA_REMETENTE = os.getenv("SENHA_REMETENTE")
 
 def enviar_email(destinatario, assunto, corpo):
     mensagem = MIMEText(corpo)
