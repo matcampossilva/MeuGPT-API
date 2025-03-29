@@ -1,18 +1,17 @@
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+import openai
 from pinecone import Pinecone
 from uuid import uuid4
 
 # Carrega variáveis do .env
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV")
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 
-# Inicializa clientes com a nova sintaxe
-client = OpenAI(api_key=openai_api_key)
+# Inicializa Pinecone
 pc = Pinecone(api_key=pinecone_api_key)
 index = pc.Index(pinecone_index_name)
 
@@ -43,11 +42,11 @@ def chunk_text(text, max_length=1000):
     return chunks
 
 def embed_text(text):
-    response = client.embeddings.create(
+    response = openai.Embedding.create(
         input=text,
         model="text-embedding-ada-002"
     )
-    return response.data[0].embedding
+    return response['data'][0]['embedding']
 
 # Executa ingestão corretamente
 print("📚 Iniciando ingestão...")
