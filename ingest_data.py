@@ -1,8 +1,7 @@
 import os
 from dotenv import load_dotenv
-import pinecone
-from pinecone import ServerlessSpec, Pinecone
 from openai import OpenAI
+from pinecone import Pinecone
 from uuid import uuid4
 
 # Carrega variáveis do .env
@@ -12,7 +11,7 @@ pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV")
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 
-# Inicializa clientes
+# Inicializa clientes com a nova sintaxe
 client = OpenAI(api_key=openai_api_key)
 pc = Pinecone(api_key=pinecone_api_key)
 index = pc.Index(pinecone_index_name)
@@ -29,28 +28,28 @@ def read_files(path):
                 contents.append((filename, text))
     return contents
 
-def chunk_text(text, max_tokens=500):
+def chunk_text(text, max_length=1000):
+    paragraphs = text.split("\n\n")
     chunks = []
-    paragraphs = text.split("\n")
     current_chunk = ""
     for para in paragraphs:
-        if len(current_chunk) + len(para) < max_tokens:
-            current_chunk += para + "\n"
+        if len(current_chunk) + len(para) <= max_length:
+            current_chunk += para + "\n\n"
         else:
             chunks.append(current_chunk.strip())
-            current_chunk = para + "\n"
-    if current_chunk:
+            current_chunk = para + "\n\n"
+    if current_chunk.strip():
         chunks.append(current_chunk.strip())
     return chunks
 
 def embed_text(text):
     response = client.embeddings.create(
-        input=[text],
+        input=text,
         model="text-embedding-ada-002"
     )
     return response.data[0].embedding
 
-# Roda ingestão
+# Executa ingestão corretamente
 print("📚 Iniciando ingestão...")
 files = read_files(knowledge_dir)
 total_chunks = 0
