@@ -64,9 +64,13 @@ def atualizar_interacoes(linha, interacoes):
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
-    numero = form.get("From", "").replace("whatsapp:", "").replace(" ", "").replace("(", "").replace(")", "").replace("-", "")
+    numero_raw = form.get("From", "")
+    numero = numero_raw.replace("whatsapp:", "").strip()
+
+    # Normaliza número para formato internacional
     if not numero.startswith("+"):
-        numero = f"+{numero}"
+        numero = f"+55{numero.lstrip('0').lstrip('55')}"
+
     mensagem = form.get("Body", "").strip()
     
     if not numero or not mensagem:
