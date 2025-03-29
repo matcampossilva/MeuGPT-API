@@ -10,7 +10,7 @@ from configuracoes import (
     registrar_usuario,
     obter_status_usuario,
 )
-from enviar_whatsapp import enviar_mensagem_whatsapp  # 👈🏽 Ajustado aqui
+from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
 from enviar_email import enviar_email
 
 app = FastAPI()
@@ -38,61 +38,45 @@ mensagem_limite_atingido = (
     "Liberdade não se improvisa. Ela se constrói. Vamos nessa?"
 )
 
-class Mensagem(BaseModel):
-    nome: str
-    email: str
-    whatsapp: str
-    texto: str
-
 @app.post("/webhook")
 async def receber_mensagem(request: Request):
     form = await request.form()
-    mensagem = Mensagem(
-        nome=form.get("nome", ""),
-        email=form.get("email", ""),
-        whatsapp=form.get("whatsapp", ""),
-        texto=form.get("texto", ""),
-    )
 
-    numero = mensagem.whatsapp
-    texto = mensagem.texto.strip()
-    nome = mensagem.nome
-    email = mensagem.email
+    numero = form.get('From', '').replace('whatsapp:', '').strip()
+    texto = form.get('Body', '').strip()
 
-    if not numero.startswith("+"):
-        numero = f"+{numero}"
+    nome = ""
+    email = ""
 
     status, interacoes_restantes = obter_status_usuario(numero)
 
     if status == "bloqueado":
-        enviar_mensagem_whatsapp(numero, mensagem_limite_atingido)
+        enviar_mensagem_whatsapp(mensagem_limite_atingido, numero)
         return {"status": "bloqueado"}
 
     if not verificar_usuario(numero):
-        if nome and email:
+        if "@" in texto and "." in texto:
+            nome = "Usuário"
+            email = texto
             registrar_usuario(nome, numero, email)
-            saudacao = gerar_resposta("Dê boas-vindas ao usuário com tom motivador, misturando dinheiro, propósito e vida real.")
-            enviar_mensagem_whatsapp(numero, saudacao)
-            return {"status": "novo_usuario_registrado"}
+            saudacao = gerar_resposta("Dê boas-vindas ao usuário com tom motivador e elegante.")
+            enviar_mensagem_whatsapp(saudacao, numero)
         else:
-            enviar_mensagem_whatsapp(numero, mensagem_boas_vindas)
-            return {"status": "aguardando_dados_usuario"}
+            enviar_mensagem_whatsapp(mensagem_boas_vindas, numero)
+        return {"status": "aguardando_dados"}
 
     if status == "gratuito":
         if interacoes_restantes == 0:
-            enviar_mensagem_whatsapp(numero, mensagem_limite_atingido)
+            enviar_mensagem_whatsapp(mensagem_limite_atingido, numero)
             return {"status": "limite_atingido"}
         elif interacoes_restantes == 3:
-            enviar_mensagem_whatsapp(numero, mensagem_aviso_limite.format(interacoes_restantes=interacoes_restantes))
+            enviar_mensagem_whatsapp(mensagem_aviso_limite.format(interacoes_restantes=interacoes_restantes), numero)
 
     resposta = gerar_resposta(texto)
-    enviar_mensagem_whatsapp(numero, resposta)
+    enviar_mensagem_whatsapp(resposta, numero)
 
     if status == "gratuito":
         atualizar_interacoes(numero)
-
-    if "@" in texto and "." in texto and not email:
-        enviar_email(numero, texto)
 
     return {"status": "mensagem_enviada"}
 
