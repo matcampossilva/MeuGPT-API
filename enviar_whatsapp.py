@@ -2,7 +2,7 @@
 from twilio.rest import Client
 from configuracoes import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
 
-def enviar_whatsapp(mensagem, numero_destino="+5562999022021"):
+def enviar_whatsapp(mensagem, numero_destino):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client.messages.create(
@@ -14,6 +14,7 @@ def enviar_whatsapp(mensagem, numero_destino="+5562999022021"):
     except Exception as e:
         print(f"❌ Erro ao enviar WhatsApp: {e}")
 
-# Exemplo prático para testar imediatamente:
+# Exemplo prático para testar:
 if __name__ == "__main__":
-    enviar_whatsapp("Teste do Meu Conselheiro Financeiro!")
+    numero_teste = input("Digite o número de destino (+55...): ")
+    enviar_whatsapp("Teste do Meu Conselheiro Financeiro!", numero_teste)
