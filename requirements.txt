@@ -1,7 +1,10 @@
-fastapi
-uvicorn
-gspread
-oauth2client
-python-dotenv
-openai
-twilio
+fastapi==0.115.1
+uvicorn==0.34.0
+openai==1.14.3
+twilio==9.5.1
+python-dotenv==1.0.1
+google-auth==2.38.0
+google-api-python-client==2.121.0
+pytz==2024.1
+requests==2.32.3
+python-multipart==0.0.9
