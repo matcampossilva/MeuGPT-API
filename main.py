@@ -1,7 +1,7 @@
 import os
 import pytz
 import re
-import openai  # ✅ Substitui uso do cliente OpenAI()
+import openai
 from fastapi import FastAPI, Request
 from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
 from google.oauth2 import service_account
@@ -12,7 +12,7 @@ from logs.logger import registrar_erro
 
 # Carregar variáveis de ambiente
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ forma clássica e estável
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Carregar prompt do arquivo externo
 with open("prompt.txt", "r", encoding="utf-8") as file:
@@ -85,8 +85,8 @@ async def whatsapp_webhook(request: Request):
 
     if not dados_pagante and not dados_gratuito:
         enviar_mensagem_whatsapp(
-            numero,
-            "Olá! 👋🏼 Que bom ter você aqui.\n\nPara começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?"
+            "Olá! 👋🏼 Que bom ter você aqui.\n\nPara começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?",
+            numero
         )
         adicionar_usuario("", numero, "", "Gratuitos")
         return {"status": "novo usuário"}
@@ -107,30 +107,30 @@ async def whatsapp_webhook(request: Request):
 
         if not nome or not email:
             if not nome:
-                enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
+                enviar_mensagem_whatsapp("Faltou só o nome completo. Pode mandar! ✍️", numero)
             elif not email:
-                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+                enviar_mensagem_whatsapp("Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧", numero)
             return {"status": "dados parciais atualizados"}
 
         enviar_mensagem_whatsapp(
-            numero,
             f"Perfeito, {nome.split()[0]}! 👊\n\n"
-            "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰"
+            "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰",
+            numero
         )
 
         interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
         if interacoes >= MAX_INTERACOES_GRATUITAS:
             enviar_mensagem_whatsapp(
-                numero,
                 f"{nome.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒",
+                numero
             )
             return {"status": "limite atingido"}
 
         atualizar_interacoes(linha, interacoes + 1)
 
     try:
-        response = openai.ChatCompletion.create(  # ✅ usando a forma clássica
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
@@ -143,5 +143,5 @@ async def whatsapp_webhook(request: Request):
         registrar_erro(erro_msg)
         resposta = "Tivemos um problema técnico aqui 😵. Já estou vendo isso e logo voltamos ao normal!"
 
-    enviar_mensagem_whatsapp(numero, resposta)
+    enviar_mensagem_whatsapp(resposta, numero)
     return {"status": "ok"}
