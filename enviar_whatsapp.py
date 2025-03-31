@@ -1,20 +1,26 @@
 # enviar_whatsapp.py
+import os
 from twilio.rest import Client
-from configuracoes import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
+from dotenv import load_dotenv
 
-def enviar_whatsapp(mensagem, numero_destino):
+load_dotenv()
+
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+MESSAGING_SERVICE_SID = os.getenv("MESSAGING_SERVICE_SID")
+
+def enviar_whatsapp(mensagem, numero_destino="+5562999022021"):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client.messages.create(
-            from_='whatsapp:+14155238886',
+            messaging_service_sid=MESSAGING_SERVICE_SID,
             body=mensagem,
-            to=f'whatsapp:{numero_destino}'
+            to=f"whatsapp:{numero_destino}"
         )
         print(f"✅ Mensagem enviada com sucesso para {numero_destino}. SID: {message.sid}")
     except Exception as e:
         print(f"❌ Erro ao enviar WhatsApp: {e}")
 
-# Exemplo prático para testar:
+# Exemplo para teste direto:
 if __name__ == "__main__":
-    numero_teste = input("Digite o número de destino (+55...): ")
-    enviar_whatsapp("Teste do Meu Conselheiro Financeiro!", numero_teste)
+    enviar_whatsapp("Teste do Meu Conselheiro Financeiro em PRODUÇÃO!")
