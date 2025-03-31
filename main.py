@@ -1,6 +1,7 @@
 import os
 import pytz
 import re
+import openai  # ✅ Substitui uso do cliente OpenAI()
 from fastapi import FastAPI, Request
 from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
 from google.oauth2 import service_account
@@ -8,11 +9,10 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-from openai import OpenAI  # ✅ NOVO
 
 # Carregar variáveis de ambiente
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # ✅ NOVO
+openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ forma clássica e estável
 
 # Carregar prompt do arquivo externo
 with open("prompt.txt", "r", encoding="utf-8") as file:
@@ -130,14 +130,14 @@ async def whatsapp_webhook(request: Request):
         atualizar_interacoes(linha, interacoes + 1)
 
     try:
-        response = client.chat.completions.create(  # ✅ NOVO
+        response = openai.ChatCompletion.create(  # ✅ usando a forma clássica
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message.content  # ✅ NOVO
+        resposta = response.choices[0].message.content
     except Exception as e:
         erro_msg = f"Erro ao gerar resposta para o número {numero}: {e}"
         registrar_erro(erro_msg)
