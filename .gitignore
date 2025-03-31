@@ -1,5 +1,5 @@
 .env
 __pycache__/
 *.json
-logs/
-*.log
+logs/__pycache__/
+logs/logs_erros.log
