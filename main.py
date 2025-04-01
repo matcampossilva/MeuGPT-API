@@ -1,3 +1,5 @@
+# Força rebuild no Render – ajuste técnico forçado
+
 import os
 import pytz
 import re
@@ -8,10 +10,10 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-import openai
+import openai  # ✅ usando biblioteca compatível
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ compatível com openai==0.28.1
 
 with open("prompt.txt", "r", encoding="utf-8") as file:
     prompt_base = file.read()
@@ -102,8 +104,11 @@ async def whatsapp_webhook(request: Request):
 
         if nome and email:
             atualizar_usuario(nome, numero, email, linha, "Gratuitos")
-            primeiro_nome = nome.split()[0].replace(".", "")
 
+            # ✅ Atualiza os dados locais para não repetir mensagens
+            dados_gratuito = [nome, numero, email, dados_gratuito[3] if len(dados_gratuito) > 3 else "", dados_gratuito[4] if len(dados_gratuito) > 4 else 0]
+
+            primeiro_nome = nome.split()[0].replace(".", "")
             enviar_mensagem_whatsapp(
                 numero,
                 f"Perfeito, {primeiro_nome}! 👊\n\n"
@@ -122,8 +127,6 @@ async def whatsapp_webhook(request: Request):
                 return {"status": "limite atingido"}
 
             atualizar_interacoes(linha, interacoes + 1)
-
-            return {"status": "dados atualizados"}  # <- PULA RESPOSTA DA OPENAI
 
         else:
             if not nome:
