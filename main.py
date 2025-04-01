@@ -10,10 +10,10 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-import openai
+import openai  # ✅ usando biblioteca compatível
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ compatível com openai==0.28.1
 
 with open("prompt.txt", "r", encoding="utf-8") as file:
     prompt_base = file.read()
@@ -65,14 +65,8 @@ def extrair_nome_email(texto):
     email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
     email = email_match.group(0) if email_match else ""
     nome = texto.replace(email, "").strip() if email else texto.strip()
-
-    # Valida se nome parece um nome real (2 palavras, sem números)
-    if nome and (len(nome.split()) >= 2) and not any(char.isdigit() for char in nome):
-        nome_valido = nome
-    else:
-        nome_valido = ""
-
-    return nome_valido, email
+    nome = re.sub(r"\s+", " ", nome).strip()
+    return nome, email
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -89,6 +83,7 @@ async def whatsapp_webhook(request: Request):
     linha_pagante, dados_pagante = encontrar_usuario(numero, "Pagantes")
     linha_gratuito, dados_gratuito = encontrar_usuario(numero, "Gratuitos")
 
+    # Novo usuário
     if not dados_pagante and not dados_gratuito:
         adicionar_usuario("", numero, "", "Gratuitos")
         enviar_mensagem_whatsapp(
@@ -97,44 +92,51 @@ async def whatsapp_webhook(request: Request):
         )
         return {"status": "novo usuário"}
 
+    # Usuário gratuito em processo de cadastro
     if dados_gratuito:
         linha = linha_gratuito
-        nome_atual = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
-        email_atual = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
+        nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
+        email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
-        nome_final = nome_atual
-        email_final = email_atual
 
-        atualizou = False
+        atualizou_dados = False
+        if email_msg and "@" in email_msg and "." in email_msg:
+            email = email_msg
+            atualizou_dados = True
+        if nome_msg and len(nome_msg.split()) >= 2:
+            nome = nome_msg
+            atualizou_dados = True
 
-        if email_msg and "@" in email_msg and "." in email_msg and not email_atual:
-            email_final = email_msg
-            atualizou = True
+        if nome and email and atualizou_dados:
+            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
+            primeiro_nome = nome.split()[0].replace(".", "")
 
-        if nome_msg and nome_msg != "" and not nome_atual:
-            nome_final = nome_msg
-            atualizou = True
-
-        if atualizou:
-            atualizar_usuario(nome_final, numero, email_final, linha, "Gratuitos")
-            primeiro_nome = nome_final.split()[0].replace(".", "")
             enviar_mensagem_whatsapp(
                 numero,
                 f"Perfeito, {primeiro_nome}! 👊\n\nRecebi seus dados. Pode mandar sua dúvida agora."
             )
 
-        interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
-        if interacoes >= MAX_INTERACOES_GRATUITAS:
-            enviar_mensagem_whatsapp(
-                numero,
-                f"{nome_final.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
-            )
-            return {"status": "limite atingido"}
+            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+            if interacoes >= MAX_INTERACOES_GRATUITAS:
+                enviar_mensagem_whatsapp(
+                    numero,
+                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
+                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+                )
+                return {"status": "limite atingido"}
 
-        atualizar_interacoes(linha, interacoes + 1)
+            atualizar_interacoes(linha, interacoes + 1)
+            return {"status": "dados recebidos"}  # <-- Aqui encerramos o fluxo para evitar envio pro GPT
 
+        elif not nome:
+            enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
+            return {"status": "aguardando nome"}
+        elif not email:
+            enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+            return {"status": "aguardando email"}
+
+    # Usuário já validado: chama o GPT normalmente
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
