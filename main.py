@@ -10,10 +10,10 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-import openai  # ✅ usando biblioteca compatível
+import openai
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ compatível com openai==0.28.1
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 with open("prompt.txt", "r", encoding="utf-8") as file:
     prompt_base = file.read()
@@ -65,7 +65,14 @@ def extrair_nome_email(texto):
     email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
     email = email_match.group(0) if email_match else ""
     nome = texto.replace(email, "").strip() if email else texto.strip()
-    return nome, email
+
+    # Valida se nome parece um nome real (2 palavras, sem números)
+    if nome and (len(nome.split()) >= 2) and not any(char.isdigit() for char in nome):
+        nome_valido = nome
+    else:
+        nome_valido = ""
+
+    return nome_valido, email
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -92,53 +99,51 @@ async def whatsapp_webhook(request: Request):
 
     if dados_gratuito:
         linha = linha_gratuito
-        nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
-        email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
+        nome_atual = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
+        email_atual = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
+        nome_final = nome_atual
+        email_final = email_atual
 
-        if email_msg and "@" in email_msg and "." in email_msg:
-            email = email_msg
-        if nome_msg and len(nome_msg.split()) >= 2:
-            nome = nome_msg
+        atualizou = False
 
-        if nome and email:
-            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
-            primeiro_nome = nome.split()[0].replace(".", "")
+        if email_msg and "@" in email_msg and "." in email_msg and not email_atual:
+            email_final = email_msg
+            atualizou = True
 
-            # ✅ Mensagem ajustada aqui para evitar redundância com o GPT
+        if nome_msg and nome_msg != "" and not nome_atual:
+            nome_final = nome_msg
+            atualizou = True
+
+        if atualizou:
+            atualizar_usuario(nome_final, numero, email_final, linha, "Gratuitos")
+            primeiro_nome = nome_final.split()[0].replace(".", "")
             enviar_mensagem_whatsapp(
                 numero,
                 f"Perfeito, {primeiro_nome}! 👊\n\nRecebi seus dados. Pode mandar sua dúvida agora."
             )
 
-            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
-            if interacoes >= MAX_INTERACOES_GRATUITAS:
-                enviar_mensagem_whatsapp(
-                    numero,
-                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
-                )
-                return {"status": "limite atingido"}
+        interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+        if interacoes >= MAX_INTERACOES_GRATUITAS:
+            enviar_mensagem_whatsapp(
+                numero,
+                f"{nome_final.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
+                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+            )
+            return {"status": "limite atingido"}
 
-            atualizar_interacoes(linha, interacoes + 1)
-
-        else:
-            if not nome:
-                enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
-            elif not email:
-                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
-            return {"status": "dados incompletos"}
+        atualizar_interacoes(linha, interacoes + 1)
 
     try:
-        response = openai.ChatCompletion.create(  # ✅ uso clássico compatível
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message["content"]  # ✅ para versão 0.28.1
+        resposta = response.choices[0].message["content"]
     except Exception as e:
         registrar_erro(f"Erro ao gerar resposta para o número {numero}: {e}")
         resposta = "Tivemos um problema técnico aqui 😵. Já estou vendo isso e logo voltamos ao normal!"
