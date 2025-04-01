@@ -1,5 +1,4 @@
 # Força rebuild no Render – ajuste técnico forçado
-
 import os
 import pytz
 import re
@@ -10,10 +9,10 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-import openai  # ✅ usando biblioteca compatível
+from openai import OpenAI
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ compatível com openai==0.28.1
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 with open("prompt.txt", "r", encoding="utf-8") as file:
     prompt_base = file.read()
@@ -108,16 +107,14 @@ async def whatsapp_webhook(request: Request):
 
             enviar_mensagem_whatsapp(
                 numero,
-                f"Perfeito, {primeiro_nome}! 👊\n\n"
-                "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰"
+                f"Perfeito, {primeiro_nome}! 👊\n\nPode mandar sua dúvida financeira. Tô aqui pra te ajudar com clareza, sem enrolação.\n\nSe puder ser específico, melhor ainda: me conta o que está tirando seu sono hoje. 💬📊"
             )
 
             interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
             if interacoes >= MAX_INTERACOES_GRATUITAS:
                 enviar_mensagem_whatsapp(
                     numero,
-                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\nPra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
                 )
                 return {"status": "limite atingido"}
 
@@ -131,14 +128,14 @@ async def whatsapp_webhook(request: Request):
             return {"status": "dados incompletos"}
 
     try:
-        response = openai.ChatCompletion.create(  # ✅ uso clássico compatível
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message["content"]  # ✅ para versão 0.28.1
+        resposta = response.choices[0].message.content
     except Exception as e:
         registrar_erro(f"Erro ao gerar resposta para o número {numero}: {e}")
         resposta = "Tivemos um problema técnico aqui 😵. Já estou vendo isso e logo voltamos ao normal!"
