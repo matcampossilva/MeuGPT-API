@@ -65,7 +65,6 @@ def extrair_nome_email(texto):
     email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
     email = email_match.group(0) if email_match else ""
     nome = texto.replace(email, "").strip() if email else texto.strip()
-    nome = re.sub(r"\s+", " ", nome).strip()
     return nome, email
 
 @app.post("/webhook")
@@ -83,7 +82,6 @@ async def whatsapp_webhook(request: Request):
     linha_pagante, dados_pagante = encontrar_usuario(numero, "Pagantes")
     linha_gratuito, dados_gratuito = encontrar_usuario(numero, "Gratuitos")
 
-    # Novo usuário
     if not dados_pagante and not dados_gratuito:
         adicionar_usuario("", numero, "", "Gratuitos")
         enviar_mensagem_whatsapp(
@@ -92,29 +90,33 @@ async def whatsapp_webhook(request: Request):
         )
         return {"status": "novo usuário"}
 
-    # Usuário gratuito em processo de cadastro
     if dados_gratuito:
         linha = linha_gratuito
-        nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
-        email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
+        nome_salvo = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
+        email_salvo = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
+        nome_final = nome_salvo
+        email_final = email_salvo
         atualizou_dados = False
+
         if email_msg and "@" in email_msg and "." in email_msg:
-            email = email_msg
+            email_final = email_msg
             atualizou_dados = True
         if nome_msg and len(nome_msg.split()) >= 2:
-            nome = nome_msg
+            nome_final = nome_msg
             atualizou_dados = True
 
-        if nome and email and atualizou_dados:
-            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
-            primeiro_nome = nome.split()[0].replace(".", "")
+        if nome_final and email_final:
+            if atualizou_dados:
+                atualizar_usuario(nome_final, numero, email_final, linha, "Gratuitos")
+            primeiro_nome = nome_final.split()[0].replace(".", "")
 
             enviar_mensagem_whatsapp(
                 numero,
-                f"Perfeito, {primeiro_nome}! 👊\n\nRecebi seus dados. Pode mandar sua dúvida agora."
+                f"Perfeito, {primeiro_nome}! 👊\n\n"
+                "Recebi seus dados. Pode mandar sua dúvida agora."
             )
 
             interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
@@ -127,25 +129,23 @@ async def whatsapp_webhook(request: Request):
                 return {"status": "limite atingido"}
 
             atualizar_interacoes(linha, interacoes + 1)
-            return {"status": "dados recebidos"}  # <-- Aqui encerramos o fluxo para evitar envio pro GPT
 
-        elif not nome:
-            enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
-            return {"status": "aguardando nome"}
-        elif not email:
-            enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
-            return {"status": "aguardando email"}
+        else:
+            if not nome_final:
+                enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
+            elif not email_final:
+                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+            return {"status": "dados incompletos"}
 
-    # Usuário já validado: chama o GPT normalmente
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.ChatCompletion.create(  # ✅ uso clássico compatível
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message["content"]
+        resposta = response.choices[0].message["content"]  # ✅ para versão 0.28.1
     except Exception as e:
         registrar_erro(f"Erro ao gerar resposta para o número {numero}: {e}")
         resposta = "Tivemos um problema técnico aqui 😵. Já estou vendo isso e logo voltamos ao normal!"
