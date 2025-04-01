@@ -1,4 +1,3 @@
-# main.py
 import os
 import pytz
 import re
@@ -26,6 +25,7 @@ sheet = service.spreadsheets()
 app = FastAPI()
 MAX_INTERACOES_GRATUITAS = 10
 
+
 def encontrar_usuario(numero, aba):
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{aba}!A2:E").execute()
     valores = result.get("values", [])
@@ -33,6 +33,7 @@ def encontrar_usuario(numero, aba):
         if len(row) >= 2 and row[1] == numero:
             return i + 2, row
     return None, None
+
 
 def adicionar_usuario(nome, numero, email, aba):
     now = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y %H:%M:%S")
@@ -43,6 +44,7 @@ def adicionar_usuario(nome, numero, email, aba):
         body={"values": [[nome, numero, email, now, 0]]}
     ).execute()
 
+
 def atualizar_usuario(nome, numero, email, linha, aba):
     valores = [nome, numero, email]
     sheet.values().update(
@@ -52,6 +54,7 @@ def atualizar_usuario(nome, numero, email, linha, aba):
         body={"values": [valores]}
     ).execute()
 
+
 def atualizar_interacoes(linha, interacoes):
     sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
@@ -60,11 +63,13 @@ def atualizar_interacoes(linha, interacoes):
         body={"values": [[interacoes]]}
     ).execute()
 
+
 def extrair_nome_email(texto):
     email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
     email = email_match.group(0) if email_match else ""
     nome = texto.replace(email, "").strip() if email else texto.strip()
     return nome, email
+
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -93,31 +98,32 @@ async def whatsapp_webhook(request: Request):
         linha = linha_gratuito
         nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
         email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
-        interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
-        if email_msg and "@" in email_msg and "." in email_msg:
-            email = email_msg
-        if nome_msg and len(nome_msg.split()) >= 2:
-            nome = nome_msg
+        atualizou_algo = False
 
-        if nome and email:
+        if email_msg and "@" in email_msg and "." in email_msg and email != email_msg:
+            email = email_msg
+            atualizou_algo = True
+        if nome_msg and len(nome_msg.split()) >= 2 and nome != nome_msg:
+            nome = nome_msg
+            atualizou_algo = True
+
+        if nome and email and atualizou_algo:
             atualizar_usuario(nome, numero, email, linha, "Gratuitos")
             primeiro_nome = nome.split()[0].replace(".", "")
 
-            if interacoes < MAX_INTERACOES_GRATUITAS:
-                atualizar_interacoes(linha, interacoes + 1)
+            enviar_mensagem_whatsapp(
+                numero,
+                f"Perfeito, {primeiro_nome}! 👊\n\n"
+                "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
+                "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\n"
+                "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
+            )
 
-                enviar_mensagem_whatsapp(
-                    numero,
-                    f"Perfeito, {primeiro_nome}! 👊\n\n"
-                    "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
-                    "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\n"
-                    "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
-                )
-                return {"status": "cadastro finalizado"}
-            else:
+            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+            if interacoes >= MAX_INTERACOES_GRATUITAS:
                 enviar_mensagem_whatsapp(
                     numero,
                     f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
@@ -125,11 +131,26 @@ async def whatsapp_webhook(request: Request):
                 )
                 return {"status": "limite atingido"}
 
-        if not nome:
-            enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
-        elif not email:
-            enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
-        return {"status": "dados incompletos"}
+            atualizar_interacoes(linha, interacoes + 1)
+            return {"status": "dados atualizados"}
+
+        elif not nome or not email:
+            if not nome:
+                enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
+            elif not email:
+                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+            return {"status": "dados incompletos"}
+
+        else:
+            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+            if interacoes >= MAX_INTERACOES_GRATUITAS:
+                enviar_mensagem_whatsapp(
+                    numero,
+                    f"{nome.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
+                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+                )
+                return {"status": "limite atingido"}
+            atualizar_interacoes(linha, interacoes + 1)
 
     try:
         response = openai.ChatCompletion.create(
