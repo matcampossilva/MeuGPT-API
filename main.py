@@ -10,10 +10,10 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-import openai  # ✅ usando biblioteca compatível
+import openai
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ compatível com openai==0.28.1
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 with open("prompt.txt", "r", encoding="utf-8") as file:
     prompt_base = file.read()
@@ -92,31 +92,26 @@ async def whatsapp_webhook(request: Request):
 
     if dados_gratuito:
         linha = linha_gratuito
-        nome_salvo = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
-        email_salvo = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
+        nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
+        email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
-        nome_final = nome_salvo
-        email_final = email_salvo
-        atualizou_dados = False
-
         if email_msg and "@" in email_msg and "." in email_msg:
-            email_final = email_msg
-            atualizou_dados = True
+            email = email_msg
         if nome_msg and len(nome_msg.split()) >= 2:
-            nome_final = nome_msg
-            atualizou_dados = True
+            nome = nome_msg
 
-        if nome_final and email_final:
-            if atualizou_dados:
-                atualizar_usuario(nome_final, numero, email_final, linha, "Gratuitos")
-            primeiro_nome = nome_final.split()[0].replace(".", "")
+        if nome and email:
+            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
+            primeiro_nome = nome.split()[0].replace(".", "")
 
             enviar_mensagem_whatsapp(
                 numero,
                 f"Perfeito, {primeiro_nome}! 👊\n\n"
-                "Recebi seus dados. Pode mandar sua dúvida agora."
+                "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
+                "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\n"
+                "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
             )
 
             interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
@@ -129,23 +124,24 @@ async def whatsapp_webhook(request: Request):
                 return {"status": "limite atingido"}
 
             atualizar_interacoes(linha, interacoes + 1)
+            return {"status": "registrado"}  # <- evita nova resposta abaixo
 
         else:
-            if not nome_final:
+            if not nome:
                 enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
-            elif not email_final:
+            elif not email:
                 enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
             return {"status": "dados incompletos"}
 
     try:
-        response = openai.ChatCompletion.create(  # ✅ uso clássico compatível
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},
                 {"role": "user", "content": mensagem}
             ]
         )
-        resposta = response.choices[0].message["content"]  # ✅ para versão 0.28.1
+        resposta = response.choices[0].message["content"]
     except Exception as e:
         registrar_erro(f"Erro ao gerar resposta para o número {numero}: {e}")
         resposta = "Tivemos um problema técnico aqui 😵. Já estou vendo isso e logo voltamos ao normal!"
