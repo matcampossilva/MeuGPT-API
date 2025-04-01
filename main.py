@@ -106,10 +106,10 @@ async def whatsapp_webhook(request: Request):
             atualizar_usuario(nome, numero, email, linha, "Gratuitos")
             primeiro_nome = nome.split()[0].replace(".", "")
 
+            # ✅ Mensagem ajustada aqui para evitar redundância com o GPT
             enviar_mensagem_whatsapp(
                 numero,
-                f"Perfeito, {primeiro_nome}! 👊\n\n"
-                "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰"
+                f"Perfeito, {primeiro_nome}! 👊\n\nRecebi seus dados. Pode mandar sua dúvida agora."
             )
 
             interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
