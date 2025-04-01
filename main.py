@@ -65,7 +65,7 @@ def extrair_nome_email(texto):
     email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
     email = email_match.group(0) if email_match else ""
     nome = texto.replace(email, "").strip() if email else texto.strip()
-    return nome, email
+    return nome.strip(), email.strip()
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -97,41 +97,40 @@ async def whatsapp_webhook(request: Request):
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
-        if email_msg and "@" in email_msg and "." in email_msg:
-            email = email_msg
-        if nome_msg and len(nome_msg.split()) >= 2:
-            nome = nome_msg
+        nome_valido = nome_msg and len(nome_msg.split()) >= 2
+        email_valido = email_msg and "@" in email_msg and "." in email_msg
 
-        if nome and email:
-            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
-            primeiro_nome = nome.split()[0].replace(".", "")
-
-            enviar_mensagem_whatsapp(
-                numero,
-                f"Perfeito, {primeiro_nome}! 👊\n\n"
-                "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
-                "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\n"
-                "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
-            )
-
-            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
-            if interacoes >= MAX_INTERACOES_GRATUITAS:
+        if (not nome or not email) and (nome_valido or email_valido):
+            nome = nome_msg if nome_valido else nome
+            email = email_msg if email_valido else email
+            if nome and email:
+                atualizar_usuario(nome, numero, email, linha, "Gratuitos")
+                primeiro_nome = nome.split()[0].replace(".", "")
                 enviar_mensagem_whatsapp(
                     numero,
-                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+                    f"Perfeito, {primeiro_nome}! 👊\n\n"
+                    "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
+                    "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\n"
+                    "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
                 )
-                return {"status": "limite atingido"}
+                return {"status": "dados atualizados"}
+            else:
+                if not nome:
+                    enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
+                elif not email:
+                    enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+                return {"status": "dados incompletos"}
 
-            atualizar_interacoes(linha, interacoes + 1)
-            return {"status": "registrado"}  # <- evita nova resposta abaixo
+        interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+        if interacoes >= MAX_INTERACOES_GRATUITAS:
+            enviar_mensagem_whatsapp(
+                numero,
+                f"{nome.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
+                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+            )
+            return {"status": "limite atingido"}
 
-        else:
-            if not nome:
-                enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
-            elif not email:
-                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
-            return {"status": "dados incompletos"}
+        atualizar_interacoes(linha, interacoes + 1)
 
     try:
         response = openai.ChatCompletion.create(
