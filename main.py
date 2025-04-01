@@ -1,6 +1,7 @@
 import os
 import pytz
 import re
+import openai
 from fastapi import FastAPI, Request
 from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
 from google.oauth2 import service_account
@@ -8,10 +9,9 @@ from googleapiclient.discovery import build
 from datetime import datetime
 from dotenv import load_dotenv
 from logs.logger import registrar_erro
-from openai import OpenAI
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 with open("prompt.txt", "r", encoding="utf-8") as file:
     prompt_base = file.read()
@@ -95,7 +95,6 @@ async def whatsapp_webhook(request: Request):
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
-        # Atualiza apenas se ambos forem válidos
         if email_msg and "@" in email_msg and "." in email_msg:
             email = email_msg
         if nome_msg and len(nome_msg.split()) >= 2:
@@ -130,7 +129,7 @@ async def whatsapp_webhook(request: Request):
             return {"status": "dados incompletos"}
 
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": prompt_base},

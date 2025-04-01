@@ -1,5 +1,13 @@
 .env
 __pycache__/
-*.json
+*.pyc
 logs/__pycache__/
 logs/logs_erros.log
+.DS_Store
+
+# Evita subir arquivos de IDEs
+.vscode/
+.idea/
+
+# Especificamente para evitar subir a credencial do Google (mantendo segurança sem ignorar todos os .json)
+GOOGLE_SHEETS_KEY.json
