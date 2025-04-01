@@ -95,40 +95,39 @@ async def whatsapp_webhook(request: Request):
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
-        # Validações mínimas para não salvar qualquer texto como nome/email
+        # Atualiza apenas se ambos forem válidos
         if email_msg and "@" in email_msg and "." in email_msg:
             email = email_msg
         if nome_msg and len(nome_msg.split()) >= 2:
             nome = nome_msg
 
-        if nome or email:
+        if nome and email:
             atualizar_usuario(nome, numero, email, linha, "Gratuitos")
+            primeiro_nome = nome.split()[0].replace(".", "")
 
-        if not nome or not email:
+            enviar_mensagem_whatsapp(
+                numero,
+                f"Perfeito, {primeiro_nome}! 👊\n\n"
+                "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰"
+            )
+
+            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
+            if interacoes >= MAX_INTERACOES_GRATUITAS:
+                enviar_mensagem_whatsapp(
+                    numero,
+                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
+                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
+                )
+                return {"status": "limite atingido"}
+
+            atualizar_interacoes(linha, interacoes + 1)
+
+        else:
             if not nome:
                 enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
             elif not email:
                 enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
-            return {"status": "dados parciais atualizados"}
-
-        # Agora com nome e e-mail válidos
-        primeiro_nome = nome.split()[0].replace(".", "")
-        enviar_mensagem_whatsapp(
-            numero,
-            f"Perfeito, {primeiro_nome}! 👊\n\n"
-            "Pode mandar sua dúvida financeira. Eu tô aqui pra te ajudar com clareza, sem papo furado. Bora? 💬💰"
-        )
-
-        interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
-        if interacoes >= MAX_INTERACOES_GRATUITAS:
-            enviar_mensagem_whatsapp(
-                numero,
-                f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
-            )
-            return {"status": "limite atingido"}
-
-        atualizar_interacoes(linha, interacoes + 1)
+            return {"status": "dados incompletos"}
 
     try:
         response = client.chat.completions.create(
