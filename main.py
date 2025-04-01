@@ -25,7 +25,6 @@ sheet = service.spreadsheets()
 app = FastAPI()
 MAX_INTERACOES_GRATUITAS = 10
 
-
 def encontrar_usuario(numero, aba):
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{aba}!A2:E").execute()
     valores = result.get("values", [])
@@ -33,7 +32,6 @@ def encontrar_usuario(numero, aba):
         if len(row) >= 2 and row[1] == numero:
             return i + 2, row
     return None, None
-
 
 def adicionar_usuario(nome, numero, email, aba):
     now = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y %H:%M:%S")
@@ -44,7 +42,6 @@ def adicionar_usuario(nome, numero, email, aba):
         body={"values": [[nome, numero, email, now, 0]]}
     ).execute()
 
-
 def atualizar_usuario(nome, numero, email, linha, aba):
     valores = [nome, numero, email]
     sheet.values().update(
@@ -54,7 +51,6 @@ def atualizar_usuario(nome, numero, email, linha, aba):
         body={"values": [valores]}
     ).execute()
 
-
 def atualizar_interacoes(linha, interacoes):
     sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
@@ -63,13 +59,11 @@ def atualizar_interacoes(linha, interacoes):
         body={"values": [[interacoes]]}
     ).execute()
 
-
 def extrair_nome_email(texto):
     email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
     email = email_match.group(0) if email_match else ""
     nome = texto.replace(email, "").strip() if email else texto.strip()
     return nome, email
-
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -101,16 +95,12 @@ async def whatsapp_webhook(request: Request):
 
         nome_msg, email_msg = extrair_nome_email(mensagem)
 
-        atualizou_algo = False
-
-        if email_msg and "@" in email_msg and "." in email_msg and email != email_msg:
+        if email_msg and "@" in email_msg and "." in email_msg:
             email = email_msg
-            atualizou_algo = True
-        if nome_msg and len(nome_msg.split()) >= 2 and nome != nome_msg:
+        if nome_msg and len(nome_msg.split()) >= 2:
             nome = nome_msg
-            atualizou_algo = True
 
-        if nome and email and atualizou_algo:
+        if nome and email:
             atualizar_usuario(nome, numero, email, linha, "Gratuitos")
             primeiro_nome = nome.split()[0].replace(".", "")
 
@@ -132,25 +122,15 @@ async def whatsapp_webhook(request: Request):
                 return {"status": "limite atingido"}
 
             atualizar_interacoes(linha, interacoes + 1)
-            return {"status": "dados atualizados"}
 
-        elif not nome or not email:
+            return {"status": "dados atualizados"}  # <- PULA RESPOSTA DA OPENAI
+
+        else:
             if not nome:
                 enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
             elif not email:
                 enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
             return {"status": "dados incompletos"}
-
-        else:
-            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
-            if interacoes >= MAX_INTERACOES_GRATUITAS:
-                enviar_mensagem_whatsapp(
-                    numero,
-                    f"{nome.split()[0]}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
-                )
-                return {"status": "limite atingido"}
-            atualizar_interacoes(linha, interacoes + 1)
 
     try:
         response = openai.ChatCompletion.create(
