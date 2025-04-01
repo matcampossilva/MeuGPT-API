@@ -1,4 +1,3 @@
-# enviar_whatsapp.py
 import os
 from twilio.rest import Client
 from dotenv import load_dotenv
@@ -9,7 +8,7 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 MESSAGING_SERVICE_SID = os.getenv("MESSAGING_SERVICE_SID")
 
-def enviar_whatsapp(mensagem, numero_destino="+5562999022021"):
+def enviar_whatsapp(numero_destino, mensagem):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
         message = client.messages.create(
@@ -23,4 +22,4 @@ def enviar_whatsapp(mensagem, numero_destino="+5562999022021"):
 
 # Exemplo para teste direto:
 if __name__ == "__main__":
-    enviar_whatsapp("Teste do Meu Conselheiro Financeiro em PRODUÇÃO!")
+    enviar_whatsapp("+5562999022021", "Teste do Meu Conselheiro Financeiro em PRODUÇÃO!")
