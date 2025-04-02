@@ -18,3 +18,4 @@ logs/logs_erros.log
 
 # Ignora arquivo sensível da credencial do Google (será adicionado no Render manualmente)
 secrets/credentials.json
+.env
