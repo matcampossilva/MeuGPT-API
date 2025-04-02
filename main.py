@@ -1,152 +1,146 @@
-# Força rebuild no Render – ajuste técnico forçado
-
 import os
+import openai
+from fastapi import FastAPI, Request
+from twilio.rest import Client
+from dotenv import load_dotenv
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 import pytz
 import re
-from fastapi import FastAPI, Request
-from enviar_whatsapp import enviar_whatsapp as enviar_mensagem_whatsapp
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from datetime import datetime
-from dotenv import load_dotenv
-from logs.logger import registrar_erro
-import openai  # ✅ usando biblioteca compatível
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # ✅ compatível com openai==0.28.1
 
-with open("prompt.txt", "r", encoding="utf-8") as file:
-    prompt_base = file.read()
-
-SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
-service = build('sheets', 'v4', credentials=credentials)
-sheet = service.spreadsheets()
+# VARIÁVEIS DE AMBIENTE
+openai.api_key = os.getenv("OPENAI_API_KEY")
+client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+SHEET_NAME = os.getenv("SHEET_NAME")
 
 app = FastAPI()
-MAX_INTERACOES_GRATUITAS = 10
 
-def encontrar_usuario(numero, aba):
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{aba}!A2:E").execute()
-    valores = result.get("values", [])
-    for i, row in enumerate(valores):
-        if len(row) >= 2 and row[1] == numero:
-            return i + 2, row
-    return None, None
+# PLANILHA
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+gs = gspread.authorize(creds)
+sheet = gs.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
 
-def adicionar_usuario(nome, numero, email, aba):
-    now = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y %H:%M:%S")
-    sheet.values().append(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{aba}!A:E",
-        valueInputOption="RAW",
-        body={"values": [[nome, numero, email, now, 0]]}
-    ).execute()
+def format_number(raw_number):
+    return raw_number.replace("whatsapp:", "").strip()
 
-def atualizar_usuario(nome, numero, email, linha, aba):
-    valores = [nome, numero, email]
-    sheet.values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{aba}!A{linha}:C{linha}",
-        valueInputOption="RAW",
-        body={"values": [valores]}
-    ).execute()
+def get_user_row(user_number):
+    try:
+        values = sheet.col_values(2)
+        return values.index(user_number) + 1 if user_number in values else None
+    except:
+        return None
 
-def atualizar_interacoes(linha, interacoes):
-    sheet.values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"Gratuitos!E{linha}",
-        valueInputOption="RAW",
-        body={"values": [[interacoes]]}
-    ).execute()
+def update_user_data(row, name=None, email=None):
+    if name:
+        sheet.update_cell(row, 1, name.strip())
+    if email:
+        sheet.update_cell(row, 3, email.strip())
 
-def extrair_nome_email(texto):
-    email_match = re.search(r"[\w\.-]+@[\w\.-]+", texto)
-    email = email_match.group(0) if email_match else ""
-    nome = texto.replace(email, "").strip() if email else texto.strip()
-    return nome, email
+def create_user(user_number, name=None, email=None):
+    now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+    sheet.append_row([name or "", user_number, email or "", now, 0])
+
+def extract_email(text):
+    match = re.search(r'[\w\.-]+@[\w\.-]+', text)
+    return match.group(0) if match else None
+
+def extract_name(text):
+    if " " in text.strip() and len(text.split()) >= 2:
+        return text.strip()
+    return None
+
+def count_tokens(text):
+    return len(text.split())
+
+def update_token_count(row, tokens):
+    count = int(sheet.cell(row, 5).value or 0)
+    sheet.update_cell(row, 5, count + tokens)
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
-    numero_raw = form.get("From", "")
-    numero = numero_raw.replace("whatsapp:", "").strip()
-    if not numero.startswith("+"):
-        numero = f"+55{numero.lstrip('0').lstrip('55')}"
-    mensagem = form.get("Body", "").strip()
+    incoming_msg = form["Body"].strip()
+    from_number = format_number(form["From"])
 
-    if not numero or not mensagem:
-        return {"status": "ignored"}
+    row = get_user_row(from_number)
 
-    linha_pagante, dados_pagante = encontrar_usuario(numero, "Pagantes")
-    linha_gratuito, dados_gratuito = encontrar_usuario(numero, "Gratuitos")
+    if row:
+        values = sheet.row_values(row)
+        name = values[0].strip() if len(values) > 0 else ""
+        email = values[2].strip() if len(values) > 2 else ""
+    else:
+        create_user(from_number)
+        row = get_user_row(from_number)
+        name = ""
+        email = ""
 
-    if not dados_pagante and not dados_gratuito:
-        adicionar_usuario("", numero, "", "Gratuitos")
-        enviar_mensagem_whatsapp(
-            numero,
-            "Olá! 👋🏼 Que bom ter você aqui.\n\nPara começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?"
-        )
-        return {"status": "novo usuário"}
+    # === COLETA DE NOME E E-MAIL ===
+    if not name or not email:
+        captured_name = extract_name(incoming_msg) if not name else None
+        captured_email = extract_email(incoming_msg) if not email else None
 
-    if dados_gratuito:
-        linha = linha_gratuito
-        nome = dados_gratuito[0] if len(dados_gratuito) >= 1 else ""
-        email = dados_gratuito[2] if len(dados_gratuito) >= 3 else ""
+        if captured_name:
+            update_user_data(row, name=captured_name)
+            name = captured_name
 
-        nome_msg, email_msg = extrair_nome_email(mensagem)
+        if captured_email:
+            update_user_data(row, email=captured_email)
+            email = captured_email
 
-        if email_msg and "@" in email_msg and "." in email_msg:
-            email = email_msg
-        if nome_msg and len(nome_msg.split()) >= 2:
-            nome = nome_msg
+        if not name and not email:
+            send_message(from_number, "Olá! 👋 Que bom ter você aqui.\n\nPara começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
+            return {"status": "aguardando nome e email"}
 
-        if nome and email:
-            atualizar_usuario(nome, numero, email, linha, "Gratuitos")
+        if name and not email:
+            send_message(from_number, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+            return {"status": "aguardando email"}
 
-            # ✅ Atualiza os dados locais para não repetir mensagens
-            dados_gratuito = [nome, numero, email, dados_gratuito[3] if len(dados_gratuito) > 3 else "", dados_gratuito[4] if len(dados_gratuito) > 4 else 0]
+        if email and not name:
+            send_message(from_number, "Faltou só o nome completo. Pode mandar! ✍️")
+            return {"status": "aguardando nome"}
 
-            primeiro_nome = nome.split()[0].replace(".", "")
-            enviar_mensagem_whatsapp(
-                numero,
-                f"Perfeito, {primeiro_nome}! 👊\n\n"
-                "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
-                "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\n"
-                "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
-            )
+        # Se ambos foram capturados nesta mensagem
+        if name and email:
+            welcome_msg = f"""Perfeito, {name}! 👊
 
-            interacoes = int(dados_gratuito[4]) if len(dados_gratuito) >= 5 else 0
-            if interacoes >= MAX_INTERACOES_GRATUITAS:
-                enviar_mensagem_whatsapp(
-                    numero,
-                    f"{primeiro_nome}, você chegou ao limite de interações gratuitas. 😬\n\n"
-                    "Pra continuar tendo acesso ao Meu Conselheiro Financeiro e levar sua vida financeira pra outro nível, é só entrar aqui: [LINK PREMIUM] 🔒"
-                )
-                return {"status": "limite atingido"}
+Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊
 
-            atualizar_interacoes(linha, interacoes + 1)
+Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.
 
-        else:
-            if not nome:
-                enviar_mensagem_whatsapp(numero, "Faltou só o nome completo. Pode mandar! ✍️")
-            elif not email:
-                enviar_mensagem_whatsapp(numero, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
-            return {"status": "dados incompletos"}
+Me conta: qual é a principal situação financeira que você quer resolver hoje?"""
+            send_message(from_number, welcome_msg)
+            return {"status": "cadastro completo"}
 
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": prompt_base},
-                {"role": "user", "content": mensagem}
-            ]
-        )
-        resposta = response.choices[0].message["content"]
-    except Exception as e:
-        registrar_erro(f"Erro ao gerar resposta para o número {numero}: {e}")
-        resposta = "Tivemos um problema técnico aqui 😵. Já estou vendo isso e logo voltamos ao normal!"
+    # === CONTINUA A CONVERSA COM BASE NO PROMPT ===
+    prompt_base = open("prompt.txt", "r").read()
 
-    enviar_mensagem_whatsapp(numero, resposta)
-    return {"status": "ok"}
+    full_prompt = f"""{prompt_base}
+
+Usuário: {incoming_msg}
+Conselheiro:"""
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": full_prompt}],
+        temperature=0.7,
+    )
+
+    reply = response["choices"][0]["message"]["content"].strip()
+    tokens = count_tokens(incoming_msg) + count_tokens(reply)
+    update_token_count(row, tokens)
+    send_message(from_number, reply)
+
+    return {"status": "mensagem enviada"}
+
+def send_message(to, body):
+    client.messages.create(
+        body=body,
+        from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+        to=f"whatsapp:{to}"
+    )
