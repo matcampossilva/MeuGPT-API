@@ -16,35 +16,52 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-SHEET_NAME = os.getenv("SHEET_NAME")
+GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
 
 app = FastAPI()
 
-# PLANILHA GOOGLE
+# PLANILHAS GOOGLE
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv("GOOGLE_SHEETS_KEY_FILE"), scope)
 gs = gspread.authorize(creds)
-sheet = gs.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
+
+# ==== FUNÇÕES DE PLANILHA ====
+
+def get_user_status(user_number):
+    try:
+        pagantes = gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Pagantes").col_values(2)
+        gratuitos = gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Gratuitos").col_values(2)
+        if user_number in pagantes:
+            return "Pagantes"
+        elif user_number in gratuitos:
+            return "Gratuitos"
+        else:
+            return "Novo"
+    except Exception as e:
+        print(f"Erro ao verificar status do usuário: {e}")
+        return "Novo"
+
+def get_user_sheet(user_number):
+    status = get_user_status(user_number)
+    controle = gs.open_by_key(GOOGLE_SHEET_ID)
+
+    if status == "Pagantes":
+        return controle.worksheet("Pagantes")
+    elif status == "Gratuitos":
+        return controle.worksheet("Gratuitos")
+    else:
+        now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+        sheet = controle.worksheet("Gratuitos")
+        sheet.append_row(["", user_number, "", now, 0])
+        return sheet
+
+def get_gastos_sheet():
+    return gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
+
+# ==== FUNÇÕES AUXILIARES ====
 
 def format_number(raw_number):
     return raw_number.replace("whatsapp:", "").strip()
-
-def get_user_row(user_number):
-    try:
-        values = sheet.col_values(2)
-        return values.index(user_number) + 1 if user_number in values else None
-    except:
-        return None
-
-def update_user_data(row, name=None, email=None):
-    if name:
-        sheet.update_cell(row, 1, name.strip())
-    if email:
-        sheet.update_cell(row, 3, email.strip())
-
-def create_user(user_number, name=None, email=None):
-    now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-    sheet.append_row([name or "", user_number, email or "", now, 0])
 
 def extract_email(text):
     match = re.search(r'[\w\.-]+@[\w\.-]+', text)
@@ -58,23 +75,6 @@ def extract_name(text):
 def count_tokens(text):
     return len(text.split())
 
-def update_token_count(row, tokens):
-    count = int(sheet.cell(row, 5).value or 0)
-    sheet.update_cell(row, 5, count + tokens)
-
-def carregar_historico(numero):
-    caminho = f"conversas/{numero}.txt"
-    if os.path.exists(caminho):
-        with open(caminho, "r", encoding="utf-8") as f:
-            return f.read()
-    return ""
-
-def salvar_mensagem(numero, role, mensagem):
-    caminho = f"conversas/{numero}.txt"
-    os.makedirs("conversas", exist_ok=True)
-    with open(caminho, "a", encoding="utf-8") as f:
-        f.write(f"{role}: {mensagem}\n")
-
 def send_message(to, body):
     client.messages.create(
         body=body,
@@ -82,34 +82,32 @@ def send_message(to, body):
         to=f"whatsapp:{to}"
     )
 
+# ==== ENDPOINT PRINCIPAL ====
+
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
 
-    row = get_user_row(from_number)
+    sheet = get_user_sheet(from_number)
+    values = sheet.col_values(2)
+    row = values.index(from_number) + 1 if from_number in values else None
 
-    if row:
-        values = sheet.row_values(row)
-        name = values[0].strip() if len(values) > 0 else ""
-        email = values[2].strip() if len(values) > 2 else ""
-    else:
-        create_user(from_number)
-        row = get_user_row(from_number)
-        name = ""
-        email = ""
+    name = sheet.cell(row, 1).value.strip() if sheet.cell(row, 1).value else ""
+    email = sheet.cell(row, 3).value.strip() if sheet.cell(row, 3).value else ""
 
+    # COLETA DE NOME E EMAIL
     if not name or not email:
         captured_name = extract_name(incoming_msg) if not name else None
         captured_email = extract_email(incoming_msg) if not email else None
 
         if captured_name:
-            update_user_data(row, name=captured_name)
+            sheet.update_cell(row, 1, captured_name)
             name = captured_name
 
         if captured_email:
-            update_user_data(row, email=captured_email)
+            sheet.update_cell(row, 3, captured_email)
             email = captured_email
 
         if not name and not email:
@@ -135,13 +133,21 @@ Me conta: qual é a principal situação financeira que você quer resolver hoje
             send_message(from_number, welcome_msg)
             return {"status": "cadastro completo"}
 
-    prompt_base = open("prompt.txt", "r", encoding="utf-8").read()
-    historico = carregar_historico(from_number)
+    # MEMÓRIA DE CONVERSA
+    conversa_path = f"conversas/{from_number}.txt"
+    if not os.path.exists(conversa_path):
+        with open(conversa_path, "w") as f:
+            f.write("")
+
+    with open(conversa_path, "a") as f:
+        f.write(f"Usuário: {incoming_msg}\n")
+
+    prompt_base = open("prompt.txt", "r").read()
+    historico = open(conversa_path, "r").read()
 
     full_prompt = f"""{prompt_base}
 
 {historico}
-Usuário: {incoming_msg}
 Conselheiro:"""
 
     response = openai.ChatCompletion.create(
@@ -151,12 +157,12 @@ Conselheiro:"""
     )
 
     reply = response["choices"][0]["message"]["content"].strip()
-    tokens = count_tokens(incoming_msg) + count_tokens(reply)
 
-    update_token_count(row, tokens)
-    salvar_mensagem(from_number, "Usuário", incoming_msg)
-    salvar_mensagem(from_number, "Conselheiro", reply)
+    with open(conversa_path, "a") as f:
+        f.write(f"Conselheiro: {reply}\n")
+
+    tokens = count_tokens(incoming_msg) + count_tokens(reply)
+    sheet.update_cell(row, 5, int(sheet.cell(row, 5).value or 0) + tokens)
 
     send_message(from_number, reply)
-
     return {"status": "mensagem enviada"}
