@@ -22,11 +22,10 @@ app = FastAPI()
 
 # PLANILHA GOOGLE
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("secrets/credentials.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv("GOOGLE_SHEETS_KEY_FILE"), scope)
 gs = gspread.authorize(creds)
 sheet = gs.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
 
-# FUNÇÕES AUXILIARES
 def format_number(raw_number):
     return raw_number.replace("whatsapp:", "").strip()
 
@@ -63,6 +62,19 @@ def update_token_count(row, tokens):
     count = int(sheet.cell(row, 5).value or 0)
     sheet.update_cell(row, 5, count + tokens)
 
+def carregar_historico(numero):
+    caminho = f"conversas/{numero}.txt"
+    if os.path.exists(caminho):
+        with open(caminho, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+def salvar_mensagem(numero, role, mensagem):
+    caminho = f"conversas/{numero}.txt"
+    os.makedirs("conversas", exist_ok=True)
+    with open(caminho, "a", encoding="utf-8") as f:
+        f.write(f"{role}: {mensagem}\n")
+
 def send_message(to, body):
     client.messages.create(
         body=body,
@@ -88,7 +100,6 @@ async def whatsapp_webhook(request: Request):
         name = ""
         email = ""
 
-    # === COLETA DE NOME E E-MAIL ===
     if not name or not email:
         captured_name = extract_name(incoming_msg) if not name else None
         captured_email = extract_email(incoming_msg) if not email else None
@@ -124,11 +135,12 @@ Me conta: qual é a principal situação financeira que você quer resolver hoje
             send_message(from_number, welcome_msg)
             return {"status": "cadastro completo"}
 
-    # === CONTINUA CONVERSA COM GPT ===
-    prompt_base = open("prompt.txt", "r").read()
+    prompt_base = open("prompt.txt", "r", encoding="utf-8").read()
+    historico = carregar_historico(from_number)
 
     full_prompt = f"""{prompt_base}
 
+{historico}
 Usuário: {incoming_msg}
 Conselheiro:"""
 
@@ -140,7 +152,11 @@ Conselheiro:"""
 
     reply = response["choices"][0]["message"]["content"].strip()
     tokens = count_tokens(incoming_msg) + count_tokens(reply)
+
     update_token_count(row, tokens)
+    salvar_mensagem(from_number, "Usuário", incoming_msg)
+    salvar_mensagem(from_number, "Conselheiro", reply)
+
     send_message(from_number, reply)
 
     return {"status": "mensagem enviada"}
