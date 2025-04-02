@@ -15,8 +15,7 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-SHEET_NAME = os.getenv("SHEET_NAME")
+GOOGLE_SHEET_ID = os.getenv("SPREADSHEET_ID")
 
 app = FastAPI()
 
@@ -24,27 +23,31 @@ app = FastAPI()
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 gs = gspread.authorize(creds)
-sheet = gs.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
 
 def format_number(raw_number):
     return raw_number.replace("whatsapp:", "").strip()
 
-def get_user_row(user_number):
-    try:
-        values = sheet.col_values(2)
-        return values.index(user_number) + 1 if user_number in values else None
-    except:
-        return None
-
-def update_user_data(row, name=None, email=None):
-    if name:
-        sheet.update_cell(row, 1, name.strip())
-    if email:
-        sheet.update_cell(row, 3, email.strip())
+def get_user_worksheet_and_row(user_number):
+    for aba in ["Pagantes", "Gratuitos"]:
+        try:
+            worksheet = gs.open_by_key(GOOGLE_SHEET_ID).worksheet(aba)
+            values = worksheet.col_values(2)
+            if user_number in values:
+                return worksheet, values.index(user_number) + 1
+        except:
+            continue
+    return None, None
 
 def create_user(user_number, name=None, email=None):
+    worksheet = gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Gratuitos")
     now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-    sheet.append_row([name or "", user_number, email or "", now, 0])
+    worksheet.append_row([name or "", user_number, email or "", now, 0])
+
+def update_user_data(worksheet, row, name=None, email=None):
+    if name:
+        worksheet.update_cell(row, 1, name.strip())
+    if email:
+        worksheet.update_cell(row, 3, email.strip())
 
 def extract_email(text):
     match = re.search(r'[\w\.-]+@[\w\.-]+', text)
@@ -58,9 +61,9 @@ def extract_name(text):
 def count_tokens(text):
     return len(text.split())
 
-def update_token_count(row, tokens):
-    count = int(sheet.cell(row, 5).value or 0)
-    sheet.update_cell(row, 5, count + tokens)
+def update_token_count(worksheet, row, tokens):
+    count = int(worksheet.cell(row, 5).value or 0)
+    worksheet.update_cell(row, 5, count + tokens)
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -68,29 +71,26 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
 
-    row = get_user_row(from_number)
+    worksheet, row = get_user_worksheet_and_row(from_number)
 
-    if row:
-        values = sheet.row_values(row)
-        name = values[0].strip() if len(values) > 0 else ""
-        email = values[2].strip() if len(values) > 2 else ""
-    else:
+    if not worksheet or not row:
         create_user(from_number)
-        row = get_user_row(from_number)
-        name = ""
-        email = ""
+        worksheet, row = get_user_worksheet_and_row(from_number)
 
-    # === COLETA DE NOME E E-MAIL ===
+    values = worksheet.row_values(row)
+    name = values[0].strip() if len(values) > 0 else ""
+    email = values[2].strip() if len(values) > 2 else ""
+
     if not name or not email:
         captured_name = extract_name(incoming_msg) if not name else None
         captured_email = extract_email(incoming_msg) if not email else None
 
         if captured_name:
-            update_user_data(row, name=captured_name)
+            update_user_data(worksheet, row, name=captured_name)
             name = captured_name
 
         if captured_email:
-            update_user_data(row, email=captured_email)
+            update_user_data(worksheet, row, email=captured_email)
             email = captured_email
 
         if not name and not email:
@@ -105,7 +105,6 @@ async def whatsapp_webhook(request: Request):
             send_message(from_number, "Faltou só o nome completo. Pode mandar! ✍️")
             return {"status": "aguardando nome"}
 
-        # Se ambos foram capturados nesta mensagem
         if name and email:
             welcome_msg = f"""Perfeito, {name}! 👊
 
@@ -133,7 +132,7 @@ Conselheiro:"""
 
     reply = response["choices"][0]["message"]["content"].strip()
     tokens = count_tokens(incoming_msg) + count_tokens(reply)
-    update_token_count(row, tokens)
+    update_token_count(worksheet, row, tokens)
     send_message(from_number, reply)
 
     return {"status": "mensagem enviada"}
