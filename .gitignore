@@ -1,13 +1,20 @@
+# Ignora variáveis de ambiente
 .env
+
+# Ignora arquivos e pastas temporárias do Python
 __pycache__/
 *.pyc
+
+# Ignora logs locais
 logs/__pycache__/
 logs/logs_erros.log
+
+# Ignora arquivos específicos do macOS
 .DS_Store
 
-# Evita subir arquivos de IDEs
+# Ignora arquivos de configuração de IDEs
 .vscode/
 .idea/
 
-# Especificamente para evitar subir a credencial do Google (mantendo segurança sem ignorar todos os .json)
-GOOGLE_SHEETS_KEY.json
+# Ignora arquivo sensível da credencial do Google (será adicionado no Render manualmente)
+secrets/credentials.json
