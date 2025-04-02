@@ -17,20 +17,23 @@ client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
+GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
 
 app = FastAPI()
 
 # PLANILHAS GOOGLE
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv("GOOGLE_SHEETS_KEY_FILE"), scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
 # ==== FUNÇÕES DE PLANILHA ====
 
 def get_user_status(user_number):
     try:
-        pagantes = gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Pagantes").col_values(2)
-        gratuitos = gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Gratuitos").col_values(2)
+        controle = gs.open_by_key(GOOGLE_SHEET_ID)
+        pagantes = controle.worksheet("Pagantes").col_values(2)
+        gratuitos = controle.worksheet("Gratuitos").col_values(2)
+
         if user_number in pagantes:
             return "Pagantes"
         elif user_number in gratuitos:
@@ -56,7 +59,12 @@ def get_user_sheet(user_number):
         return sheet
 
 def get_gastos_sheet():
-    return gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
+    try:
+        gastos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
+        return gastos.worksheet("Gastos Diários")
+    except Exception as e:
+        print(f"Erro ao acessar planilha de gastos: {e}")
+        return None
 
 # ==== FUNÇÕES AUXILIARES ====
 
@@ -90,6 +98,7 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
 
+    # PLANILHA DO USUÁRIO
     sheet = get_user_sheet(from_number)
     values = sheet.col_values(2)
     row = values.index(from_number) + 1 if from_number in values else None
