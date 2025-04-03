@@ -1,5 +1,3 @@
-Main
-
 import os
 import openai
 from fastapi import FastAPI, Request
