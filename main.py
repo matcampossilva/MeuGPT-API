@@ -11,6 +11,7 @@ import re
 
 load_dotenv()
 
+# ENV VARS
 openai.api_key = os.getenv("OPENAI_API_KEY")
 client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
@@ -19,10 +20,12 @@ GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
 
 app = FastAPI()
 
+# GOOGLE SHEETS
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
+# === UTILITÁRIOS ===
 
 def format_number(raw_number):
     return raw_number.replace("whatsapp:", "").strip()
@@ -31,21 +34,8 @@ def extract_email(text):
     match = re.search(r'[\w\.-]+@[\w\.-]+', text)
     return match.group(0) if match else None
 
-def extract_name(text):
-    nome_limpo = text.strip()
-    if len(nome_limpo.split()) >= 2 and not any(char in nome_limpo for char in "1234567890!@#$%¨&*()"):
-        return nome_limpo
-    return None
-
-def nome_valido(text):
-    if not text:
-        return False
-    nome = text.strip()
-    return len(nome.split()) >= 2 and not any(char in nome for char in "0123456789!@#")
-
-def capitalize_response(text):
-    blocos = text.split("\n")
-    return "\n".join(bloco.capitalize() if bloco and bloco[0].islower() else bloco for bloco in blocos)
+def nome_valido(nome):
+    return len(nome.split()) >= 2
 
 def count_tokens(text):
     return len(text.split())
@@ -57,24 +47,28 @@ def send_message(to, body):
         to=f"whatsapp:{to}"
     )
 
-def get_user_status(user_number):
+def capitalizar_texto(texto):
+    return '. '.join(frase.strip().capitalize() for frase in texto.split('. '))
+
+# === PLANILHAS ===
+
+def get_user_status(number):
     try:
         controle = gs.open_by_key(GOOGLE_SHEET_ID)
         pagantes = controle.worksheet("Pagantes").col_values(2)
         gratuitos = controle.worksheet("Gratuitos").col_values(2)
 
-        if user_number in pagantes:
+        if number in pagantes:
             return "Pagantes"
-        elif user_number in gratuitos:
+        elif number in gratuitos:
             return "Gratuitos"
         else:
             return "Novo"
-    except Exception as e:
-        print(f"Erro ao verificar status do usuário: {e}")
+    except:
         return "Novo"
 
-def get_user_sheet(user_number):
-    status = get_user_status(user_number)
+def get_user_sheet(number):
+    status = get_user_status(number)
     controle = gs.open_by_key(GOOGLE_SHEET_ID)
 
     if status == "Pagantes":
@@ -84,8 +78,10 @@ def get_user_sheet(user_number):
     else:
         now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
         sheet = controle.worksheet("Gratuitos")
-        sheet.append_row(["", user_number, "", now, 0, 0])
+        sheet.append_row(["", number, "", now, 0, 0])
         return sheet
+
+# === ENDPOINT ===
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -93,84 +89,67 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
     sheet = get_user_sheet(from_number)
-
     values = sheet.col_values(2)
-    row = values.index(from_number) + 1 if from_number in values else None
+    row = values.index(from_number) + 1
 
     name = sheet.cell(row, 1).value.strip() if sheet.cell(row, 1).value else ""
     email = sheet.cell(row, 3).value.strip() if sheet.cell(row, 3).value else ""
 
+    captured_name = None
     captured_email = extract_email(incoming_msg)
-    captured_name = extract_name(incoming_msg)
 
-    # Se ainda não foi capturado o nome completo ou e-mail
     if not name or not email:
-        if captured_email and not email:
-            sheet.update_cell(row, 3, captured_email)
-            email = captured_email
+        if nome_valido(incoming_msg):
+            captured_name = incoming_msg.strip()
 
-        if captured_name and not name and nome_valido(captured_name):
+        if captured_name:
             sheet.update_cell(row, 1, captured_name)
             name = captured_name
 
+        if captured_email:
+            sheet.update_cell(row, 3, captured_email)
+            email = captured_email
+
         if not name and not email:
-            send_message(from_number,
-                "Ei! Que bom te ver por aqui. 🙌\n\n"
-                "Antes da gente começar de verdade, preciso só de dois detalhes:\n\n"
-                "👉 Seu nome completo (como quem assina um contrato importante)\n"
-                "👉 Seu e-mail\n\n"
-                "Pode mandar os dois aqui mesmo e já seguimos. 😉"
-            )
-            return {"status": "aguardando nome e email"}
+            send_message(from_number, "Ei! Que bom te ver por aqui. 🙌\n\nAntes da gente começar de verdade, preciso só de dois detalhes:\n👉 Seu nome completo (como quem assina um contrato importante)\n👉 Seu e-mail\n\nPode mandar os dois aqui mesmo e já seguimos. 😉")
+            return {"status": "aguardando_nome_email"}
 
         if name and not email:
-            send_message(from_number,
-                "Faltou só o e-mail agora. Vai lá, sem medo. 🙏")
-            return {"status": "aguardando email"}
+            send_message(from_number, "Faltou só o e-mail. Vai lá, sem medo. 🙏")
+            return {"status": "aguardando_email"}
 
         if email and not name:
-            send_message(from_number,
-                "Faltou o nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
-            return {"status": "aguardando nome"}
+            send_message(from_number, "Faltou o nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
+            return {"status": "aguardando_nome"}
 
         if name and email:
-            first_name = name.split()[0]
-            welcome = (
-                f"Perfeito, {first_name}! 👊\n\n"
-                "Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\n"
-                "Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos "
-                "e até com orientações práticas de vida espiritual e familiar.\n\n"
-                "Me conta: qual é a principal situação financeira que você quer resolver hoje?"
-            )
+            primeiro_nome = name.split()[0]
+            welcome = f"Perfeito, {primeiro_nome}! 👊\n\nSeus dados estão registrados. Agora sim, podemos começar de verdade. 😊\n\nEstou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.\n\nMe conta: qual é a principal situação financeira que você quer resolver hoje?"
             send_message(from_number, welcome)
-            return {"status": "cadastro completo"}
+            return {"status": "cadastro_completo"}
 
-    # MEMÓRIA
+    # === MEMÓRIA DE CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
     os.makedirs("conversas", exist_ok=True)
-    if not os.path.exists(conversa_path):
-        with open(conversa_path, "w") as f:
-            f.write("")
 
     with open(conversa_path, "a") as f:
         f.write(f"Usuário: {incoming_msg}\n")
 
-    prompt_base = open("prompt.txt", "r").read()
-    historico = open(conversa_path, "r").read()
+    with open("prompt.txt", "r", encoding="utf-8") as f:
+        prompt_base = f.read()
 
-    full_prompt = f"""{prompt_base}
+    with open(conversa_path, "r") as f:
+        historico = f.read()
 
-{historico}
-Conselheiro:"""
+    full_prompt = f"{prompt_base}\n\n{historico}\nConselheiro:"
 
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.7,
+        temperature=0.7
     )
 
-    reply = response["choices"][0]["message"]["content"].strip()
-    reply = capitalize_response(reply)
+    reply = capitalizar_texto(response["choices"][0]["message"]["content"].strip())
 
     with open(conversa_path, "a") as f:
         f.write(f"Conselheiro: {reply}\n")
@@ -180,4 +159,4 @@ Conselheiro:"""
     sheet.update_cell(row, 6, int(sheet.cell(row, 6).value or 0) + 1)
 
     send_message(from_number, reply)
-    return {"status": "mensagem enviada"}
+    return {"status": "mensagem_enviada"}
