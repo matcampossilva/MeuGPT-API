@@ -145,47 +145,46 @@ async def whatsapp_webhook(request: Request):
             "Pra continuar com seu conselheiro financeiro pessoal (que é mais paciente que muita gente), acesse: https://seulinkpremium.com")
         return {"status": "limite atingido"}
 
-    captured_email = extract_email(incoming_msg) if not email else None
-    captured_name = incoming_msg if not name and nome_valido(incoming_msg) else None
-
     if not name or not email:
-        if captured_name:
+        captured_email = extract_email(incoming_msg)
+        captured_name = incoming_msg if nome_valido(incoming_msg) else None
+
+        if captured_name and not name:
             sheet.update_cell(row, 1, captured_name)
             name = captured_name
 
-        if captured_email:
+        if captured_email and not email:
             sheet.update_cell(row, 3, captured_email)
             email = captured_email
 
         if not name and not email:
             send_message(from_number,
-                "Ei! Que bom te ver por aqui. 🙌\n\n"
-                "Antes da gente começar de verdade, preciso só de dois detalhes:\n"
+                "Antes da gente começar, preciso só de dois detalhes:\n"
                 "👉 Seu nome completo (como quem assina um contrato importante)\n"
                 "👉 Seu e-mail\n\n"
-                "Pode mandar os dois aqui mesmo e já seguimos. 😉")
+                "Pode mandar os dois aqui mesmo. 😉")
             return {"status": "aguardando nome e email"}
 
-        if name and not email:
-            send_message(from_number, "Faltou só o e-mail. Vai lá, sem medo. 🙏")
-            return {"status": "aguardando email"}
-
-        if email and not name:
+        if not name:
             send_message(from_number,
                 "Faltou o nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
             return {"status": "aguardando nome"}
 
-        if name and email:
-            primeiro_nome = name.split()[0]
-            welcome_msg = f"""Perfeito, {primeiro_nome}! 👊
+        if not email:
+            send_message(from_number,
+                "Faltou só o e-mail. Vai lá, sem medo. 🙏")
+            return {"status": "aguardando email"}
+
+        primeiro_nome = name.split()[0]
+        welcome_msg = f"""Perfeito, {primeiro_nome}! 👊
 
 Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊
 
 Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.
 
 Me conta: qual é a principal situação financeira que você quer resolver hoje?"""
-            send_message(from_number, welcome_msg)
-            return {"status": "cadastro completo"}
+        send_message(from_number, welcome_msg)
+        return {"status": "cadastro completo"}
 
     conversa_path = f"conversas/{from_number}.txt"
     with open(conversa_path, "a") as f:
