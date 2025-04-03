@@ -15,7 +15,7 @@ app = FastAPI()
 
 # === AMBIENTE ===
 openai.api_key = os.getenv("OPENAI_API_KEY")
-client = Client(os.getenv("TWILIO_ACCOUNT_SID"], os.getenv("TWILIO_AUTH_TOKEN"))
+client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
