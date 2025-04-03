@@ -1,6 +1,7 @@
 import os
 import openai
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from twilio.rest import Client
 from dotenv import load_dotenv
 import gspread
@@ -9,24 +10,21 @@ from datetime import datetime
 import pytz
 import re
 
-# === INICIALIZAÇÃO ===
 load_dotenv()
 app = FastAPI()
 
-# === AMBIENTE ===
+# === VARIÁVEIS DE AMBIENTE ===
 openai.api_key = os.getenv("OPENAI_API_KEY")
 client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
 GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
 
-# === PLANILHAS GOOGLE ===
+# === PLANILHA ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
-# === PLANILHA ===
 def get_user_status(user_number):
     try:
         controle = gs.open_by_key(GOOGLE_SHEET_ID)
@@ -39,14 +37,12 @@ def get_user_status(user_number):
             return "Gratuitos"
         else:
             return "Novo"
-    except Exception as e:
-        print(f"Erro ao verificar status do usuário: {e}")
+    except:
         return "Novo"
 
 def get_user_sheet(user_number):
     status = get_user_status(user_number)
     controle = gs.open_by_key(GOOGLE_SHEET_ID)
-
     if status == "Pagantes":
         return controle.worksheet("Pagantes")
     elif status == "Gratuitos":
@@ -60,6 +56,8 @@ def get_user_sheet(user_number):
 # === VALIDAÇÃO DE NOME ===
 def nome_valido(text):
     if not text:
+        return False
+    if "meu nome" in text.lower() or "é" in text.lower():
         return False
     partes = text.strip().split()
     if len(partes) < 2:
@@ -99,15 +97,12 @@ def increment_interactions(sheet, row):
     return count
 
 def passou_limite(sheet, row):
-    status = sheet.title
-    if status != "Gratuitos":
-        return False
-    return get_interactions(sheet, row) >= 10
+    return sheet.title == "Gratuitos" and get_interactions(sheet, row) >= 10
 
 def is_boas_vindas(text):
     return text.lower() in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]
 
-# === ENDPOINT PRINCIPAL ===
+# === WEBHOOK PRINCIPAL ===
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
@@ -221,6 +216,24 @@ Conselheiro:"""
     send_message(from_number, reply)
     return {"status": "mensagem enviada"}
 
+# === ENDPOINT DE VIDA ===
 @app.get("/health")
 def health_check():
     return {"status": "vivo, lúcido e com fé"}
+
+# === ENDPOINT DE RESET DE USUÁRIO (para testes) ===
+@app.get("/reset_user")
+def reset_user(numero: str):
+    try:
+        path = f"conversas/{numero}.txt"
+        if os.path.exists(path):
+            os.remove(path)
+        sheet = get_user_sheet(numero)
+        values = sheet.col_values(2)
+        row = values.index(numero) + 1 if numero in values else None
+        if row:
+            sheet.update_cell(row, 5, 0)
+            sheet.update_cell(row, 6, 0)
+        return JSONResponse(content={"status": "reset completo"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"erro": str(e)})
