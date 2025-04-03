@@ -30,7 +30,6 @@ def get_user_status(user_number):
         controle = gs.open_by_key(GOOGLE_SHEET_ID)
         pagantes = controle.worksheet("Pagantes").col_values(2)
         gratuitos = controle.worksheet("Gratuitos").col_values(2)
-
         if user_number in pagantes:
             return "Pagantes"
         elif user_number in gratuitos:
@@ -52,17 +51,17 @@ def get_user_sheet(user_number):
         sheet = controle.worksheet("Gratuitos")
         sheet.append_row(["", user_number, "", now, 0, 0])
         return sheet
-
+    
 # === VALIDAÇÃO DE NOME ===
 def nome_valido(text):
-    if not text:
-        return False
-    if "meu nome" in text.lower() or "é" in text.lower():
+    if not text
         return False
     partes = text.strip().split()
     if len(partes) < 2:
         return False
     if any(char in text for char in "@!?0123456789#%$*"):
+        return False
+    if "meu nome" in text.lower() or "já mandei" in text.lower() or "é" in text.lower():
         return False
     return True
 
@@ -202,9 +201,8 @@ Conselheiro:"""
 
     reply = response["choices"][0]["message"]["content"].strip()
 
-    if historico.count("Usuário:") > 1:
-        if reply.lower().startswith("olá"):
-            reply = re.sub(r"(?i)^olá[!,.\s]*", "", reply).strip().capitalize()
+    # Remove "olá" mesmo no meio do texto
+    reply = re.sub(r"(?i)\b(ol[áa])[!,.\s]*", "", reply, count=1).strip().capitalize()
 
     with open(conversa_path, "a") as f:
         f.write(f"Conselheiro: {reply}\n")
@@ -216,12 +214,10 @@ Conselheiro:"""
     send_message(from_number, reply)
     return {"status": "mensagem enviada"}
 
-# === ENDPOINT DE VIDA ===
 @app.get("/health")
 def health_check():
     return {"status": "vivo, lúcido e com fé"}
 
-# === ENDPOINT DE RESET DE USUÁRIO (para testes) ===
 @app.get("/reset_user")
 def reset_user(numero: str):
     try:
