@@ -123,10 +123,8 @@ async def whatsapp_webhook(request: Request):
         if is_boas_vindas(incoming_msg):
             send_message(from_number,
                 "Ei! Que bom te ver por aqui. 🙌\n\n"
-                "Antes da gente começar de verdade, preciso só de dois detalhes:\n"
-                "👉 Seu nome completo (como quem assina um contrato importante)\n"
-                "👉 Seu e-mail\n\n"
-                "Pode mandar os dois aqui mesmo e já seguimos. 😉")
+                "Antes da gente começar de verdade, me diz primeiro uma coisa:\n"
+                "👉 Qual é o seu nome completo, como quem assina um contrato importante?")
             return {"status": "mensagem de boas-vindas enviada"}
         sheet = get_user_sheet(from_number)
         values = sheet.col_values(2)
@@ -146,8 +144,18 @@ async def whatsapp_webhook(request: Request):
         return {"status": "limite atingido"}
 
     if not name or not email:
-        captured_email = extract_email(incoming_msg)
-        captured_name = incoming_msg if nome_valido(incoming_msg) else None
+        linhas = incoming_msg.split("\n")
+        captured_name = None
+        captured_email = None
+
+        for linha in linhas:
+            linha = linha.strip()
+            if not captured_email:
+                possible_email = extract_email(linha)
+                if possible_email:
+                    captured_email = possible_email
+            if not captured_name and nome_valido(linha):
+                captured_name = linha
 
         if captured_name and not name:
             sheet.update_cell(row, 1, captured_name)
@@ -157,32 +165,24 @@ async def whatsapp_webhook(request: Request):
             sheet.update_cell(row, 3, captured_email)
             email = captured_email
 
-        if not name and not email:
-            send_message(from_number,
-                "Antes da gente começar, preciso só de dois detalhes:\n"
-                "👉 Seu nome completo (como quem assina um contrato importante)\n"
-                "👉 Seu e-mail\n\n"
-                "Pode mandar os dois aqui mesmo. 😉")
-            return {"status": "aguardando nome e email"}
-
         if not name:
             send_message(from_number,
-                "Faltou o nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
+                "Faltou seu nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
             return {"status": "aguardando nome"}
 
         if not email:
             send_message(from_number,
-                "Faltou só o e-mail. Vai lá, sem medo. 🙏")
+                "Agora me manda seu e-mail pra gente fechar esse cadastro. 📧")
             return {"status": "aguardando email"}
 
         primeiro_nome = name.split()[0]
         welcome_msg = f"""Perfeito, {primeiro_nome}! 👊
 
-Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊
+Agora sim, vamos em frente — bem-vindo de verdade! 😄
 
-Estou aqui pra te ajudar com suas finanças, seus investimentos, decisões sobre empréstimos e até com orientações práticas de vida espiritual e familiar.
+Sou seu Conselheiro Financeiro pessoal. Tô aqui pra caminhar contigo, de forma leve e prática, mas com profundidade. A gente vai cuidar das suas finanças, decisões de vida e, se quiser, até trocar ideias sobre o que realmente importa: Deus, família e propósito.
 
-Me conta: qual é a principal situação financeira que você quer resolver hoje?"""
+Me conta: o que tá pegando aí hoje na parte financeira?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
 
