@@ -15,7 +15,7 @@ app = FastAPI()
 
 # === AMBIENTE ===
 openai.api_key = os.getenv("OPENAI_API_KEY")
-client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+client = Client(os.getenv("TWILIO_ACCOUNT_SID"], os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
@@ -122,9 +122,8 @@ async def whatsapp_webhook(request: Request):
     if status == "Novo":
         if is_boas_vindas(incoming_msg):
             send_message(from_number,
-                "Ei! Que bom te ver por aqui. 🙌\n\n"
-                "Antes da gente começar de verdade, me diz primeiro uma coisa:\n"
-                "👉 Qual é o seu nome completo, como quem assina um contrato importante?")
+                "Olá! 👋🏼 Que bom ter você aqui.\n\n"
+                "Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
             return {"status": "mensagem de boas-vindas enviada"}
         sheet = get_user_sheet(from_number)
         values = sheet.col_values(2)
@@ -167,22 +166,22 @@ async def whatsapp_webhook(request: Request):
 
         if not name:
             send_message(from_number,
-                "Faltou seu nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
+                "Faltou só seu nome completo — como você assina mesmo. ✍️")
             return {"status": "aguardando nome"}
 
         if not email:
             send_message(from_number,
-                "Agora me manda seu e-mail pra gente fechar esse cadastro. 📧")
+                "Agora me manda seu e-mail, por favor. 📧")
             return {"status": "aguardando email"}
 
         primeiro_nome = name.split()[0]
         welcome_msg = f"""Perfeito, {primeiro_nome}! 👊
 
-Agora sim, vamos em frente — bem-vindo de verdade! 😄
+Fico feliz em te ver por aqui. Agora sim, podemos caminhar juntos — com clareza, propósito e leveza. 😄
 
-Sou seu Conselheiro Financeiro pessoal. Tô aqui pra caminhar contigo, de forma leve e prática, mas com profundidade. A gente vai cuidar das suas finanças, decisões de vida e, se quiser, até trocar ideias sobre o que realmente importa: Deus, família e propósito.
+Sou seu Conselheiro Financeiro pessoal. Tô aqui pra te ajudar a colocar ordem nas finanças sem deixar de lado o que realmente importa: Deus, sua família e sua missão.
 
-Me conta: o que tá pegando aí hoje na parte financeira?"""
+Me conta: o que tá tirando sua paz hoje na parte financeira?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
 
