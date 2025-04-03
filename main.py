@@ -54,7 +54,7 @@ def get_user_sheet(user_number):
     
 # === VALIDAÇÃO DE NOME ===
 def nome_valido(text):
-    if not text
+    if not text:
         return False
     partes = text.strip().split()
     if len(partes) < 2:
