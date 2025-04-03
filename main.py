@@ -105,7 +105,10 @@ def passou_limite(sheet, row):
     return get_interactions(sheet, row) >= 10
 
 def is_boas_vindas(text):
-    return text.lower() in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]
+    saudacoes = ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]
+    text = text.lower()
+    return any(sauda in text for sauda in saudacoes)
+
 
 # === ENDPOINT PRINCIPAL ===
 @app.post("/webhook")
