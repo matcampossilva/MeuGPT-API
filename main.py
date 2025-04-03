@@ -26,7 +26,7 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
-# === FUNÇÕES DE PLANILHA ===
+# === PLANILHA ===
 def get_user_status(user_number):
     try:
         controle = gs.open_by_key(GOOGLE_SHEET_ID)
@@ -114,22 +114,20 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
 
-    # Criação da pasta de conversas
     if not os.path.exists("conversas"):
         os.makedirs("conversas")
 
     status = get_user_status(from_number)
 
-    # NOVO USUÁRIO → Saudações apenas
     if status == "Novo":
         if is_boas_vindas(incoming_msg):
             send_message(from_number,
-                "Olá! Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
-                "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
-                "Me conta uma coisa: Qual é seu maior objetivo financeiro hoje?")
+                "Ei! Que bom te ver por aqui. 🙌\n\n"
+                "Antes da gente começar de verdade, preciso só de dois detalhes:\n"
+                "👉 Seu nome completo (como quem assina um contrato importante)\n"
+                "👉 Seu e-mail\n\n"
+                "Pode mandar os dois aqui mesmo e já seguimos. 😉")
             return {"status": "mensagem de boas-vindas enviada"}
-
-        # Cria linha do usuário após a primeira mensagem útil
         sheet = get_user_sheet(from_number)
         values = sheet.col_values(2)
         row = values.index(from_number) + 1 if from_number in values else None
@@ -141,14 +139,12 @@ async def whatsapp_webhook(request: Request):
     name = sheet.cell(row, 1).value.strip() if sheet.cell(row, 1).value else ""
     email = sheet.cell(row, 3).value.strip() if sheet.cell(row, 3).value else ""
 
-    # BLOQUEIO
     if passou_limite(sheet, row):
         send_message(from_number,
             "⚠️ Você atingiu o limite gratuito de 10 interações.\n\n"
             "Pra continuar com seu conselheiro financeiro pessoal (que é mais paciente que muita gente), acesse: https://seulinkpremium.com")
         return {"status": "limite atingido"}
 
-    # ONBOARDING
     captured_email = extract_email(incoming_msg) if not email else None
     captured_name = incoming_msg if not name and nome_valido(incoming_msg) else None
 
@@ -163,8 +159,11 @@ async def whatsapp_webhook(request: Request):
 
         if not name and not email:
             send_message(from_number,
-                "Antes de qualquer coisa, preciso só de dois detalhes essenciais pra te ajudar de verdade:\n\n"
-                "👉 Seu nome completo\n👉 Seu e-mail\n\nPode mandar os dois aqui mesmo 🙌")
+                "Ei! Que bom te ver por aqui. 🙌\n\n"
+                "Antes da gente começar de verdade, preciso só de dois detalhes:\n"
+                "👉 Seu nome completo (como quem assina um contrato importante)\n"
+                "👉 Seu e-mail\n\n"
+                "Pode mandar os dois aqui mesmo e já seguimos. 😉")
             return {"status": "aguardando nome e email"}
 
         if name and not email:
@@ -177,7 +176,8 @@ async def whatsapp_webhook(request: Request):
             return {"status": "aguardando nome"}
 
         if name and email:
-            welcome_msg = f"""Perfeito, {name}! 👊
+            primeiro_nome = name.split()[0]
+            welcome_msg = f"""Perfeito, {primeiro_nome}! 👊
 
 Seus dados estão registrados. Agora sim, podemos começar de verdade. 😊
 
@@ -187,7 +187,6 @@ Me conta: qual é a principal situação financeira que você quer resolver hoje
             send_message(from_number, welcome_msg)
             return {"status": "cadastro completo"}
 
-    # MEMÓRIA DE CONVERSA
     conversa_path = f"conversas/{from_number}.txt"
     with open(conversa_path, "a") as f:
         f.write(f"Usuário: {incoming_msg}\n")
@@ -208,6 +207,10 @@ Conselheiro:"""
 
     reply = response["choices"][0]["message"]["content"].strip()
 
+    if historico.count("Usuário:") > 1:
+        if reply.lower().startswith("olá"):
+            reply = re.sub(r"(?i)^olá[!,.\s]*", "", reply).strip().capitalize()
+
     with open(conversa_path, "a") as f:
         f.write(f"Conselheiro: {reply}\n")
 
@@ -218,7 +221,6 @@ Conselheiro:"""
     send_message(from_number, reply)
     return {"status": "mensagem enviada"}
 
-# === HEALTH CHECK ===
 @app.get("/health")
 def health_check():
     return {"status": "vivo, lúcido e com fé"}
