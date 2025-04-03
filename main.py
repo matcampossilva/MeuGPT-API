@@ -1,110 +1,17 @@
-import os
-import openai
-from fastapi import FastAPI, Request
-from twilio.rest import Client
-from dotenv import load_dotenv
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-import pytz
-import re
+# ... [todo o import e load_dotenv exatamente igual]
 
-load_dotenv()
-
-# VARIÁVEIS DE AMBIENTE
-openai.api_key = os.getenv("OPENAI_API_KEY")
-client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-
-app = FastAPI()
-
-# PLANILHAS GOOGLE
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
-
-# ==== PLANILHAS ====
-
-def get_user_status(user_number):
-    try:
-        controle = gs.open_by_key(GOOGLE_SHEET_ID)
-        pagantes = controle.worksheet("Pagantes").col_values(2)
-        gratuitos = controle.worksheet("Gratuitos").col_values(2)
-
-        if user_number in pagantes:
-            return "Pagantes"
-        elif user_number in gratuitos:
-            return "Gratuitos"
-        else:
-            return "Novo"
-    except Exception as e:
-        print(f"Erro ao verificar status do usuário: {e}")
-        return "Novo"
-
-def get_user_sheet(user_number):
-    status = get_user_status(user_number)
-    controle = gs.open_by_key(GOOGLE_SHEET_ID)
-
-    if status == "Pagantes":
-        return controle.worksheet("Pagantes")
-    elif status == "Gratuitos":
-        return controle.worksheet("Gratuitos")
-    else:
-        now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        sheet = controle.worksheet("Gratuitos")
-        sheet.append_row(["", user_number, "", now, 0, 0])
-        return sheet
-
-# ==== FUNÇÕES AUXILIARES ====
-
-def format_number(raw_number):
-    return raw_number.replace("whatsapp:", "").strip()
-
-def extract_email(text):
-    match = re.search(r'[\w\.-]+@[\w\.-]+', text)
-    return match.group(0) if match else None
-
-def extract_name(text):
-    text = text.strip()
-    if len(text.split()) >= 2 and "@" not in text and len(text) <= 60:
-        return text
-    return None
-
-def count_tokens(text):
-    return len(text.split())
-
-def send_message(to, body):
-    client.messages.create(
-        body=body,
-        messaging_service_sid=MESSAGING_SERVICE_SID,
-        to=f"whatsapp:{to}"
-    )
-
-def get_interactions(sheet, row):
-    try:
-        val = sheet.cell(row, 6).value
-        return int(val) if val else 0
-    except:
-        return 0
-
-def increment_interactions(sheet, row):
-    count = get_interactions(sheet, row) + 1
-    sheet.update_cell(row, 6, count)
-    return count
-
-def passou_limite(sheet, row):
-    status = sheet.title
-    if status != "Gratuitos":
+# === Coloca essa função nova pra validar nome ===
+def nome_valido(text):
+    if not text:
         return False
-    return get_interactions(sheet, row) >= 10
+    partes = text.strip().split()
+    if len(partes) < 2:
+        return False
+    if any(char in text for char in "@!?0123456789#%$*"):
+        return False
+    return True
 
-def is_boas_vindas(text):
-    return text.lower() in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]
-
-# ==== ENDPOINT PRINCIPAL ====
+# ... [resto igual até o webhook]
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -112,13 +19,12 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
 
-    # Garante que a pasta de conversas existe
     if not os.path.exists("conversas"):
         os.makedirs("conversas")
 
     status = get_user_status(from_number)
 
-    # Mensagem de boas-vindas para novos usuários
+    # NOVO USUÁRIO → Só responde com mensagem de boas-vindas, não salva nada ainda
     if status == "Novo":
         if is_boas_vindas(incoming_msg):
             send_message(from_number,
@@ -127,11 +33,16 @@ async def whatsapp_webhook(request: Request):
                 "Me conta uma coisa: Qual é seu maior objetivo financeiro hoje?")
             return {"status": "mensagem de boas-vindas enviada"}
 
-    # Obtenção da planilha e linha do usuário
-    sheet = get_user_sheet(from_number)
-    values = sheet.col_values(2)
-    row = values.index(from_number) + 1 if from_number in values else None
+        # Cria o usuário na planilha após a primeira mensagem *não genérica*
+        sheet = get_user_sheet(from_number)
+        values = sheet.col_values(2)
+        row = values.index(from_number) + 1 if from_number in values else None
+    else:
+        sheet = get_user_sheet(from_number)
+        values = sheet.col_values(2)
+        row = values.index(from_number) + 1 if from_number in values else None
 
+    # Valida e recupera nome/email
     name = sheet.cell(row, 1).value.strip() if sheet.cell(row, 1).value else ""
     email = sheet.cell(row, 3).value.strip() if sheet.cell(row, 3).value else ""
 
@@ -144,7 +55,7 @@ async def whatsapp_webhook(request: Request):
 
     # ONBOARDING (nome e email)
     captured_email = extract_email(incoming_msg) if not email else None
-    captured_name = extract_name(incoming_msg) if not name else None
+    captured_name = incoming_msg if not name and nome_valido(incoming_msg) else None
 
     if not name or not email:
         if captured_name:
@@ -211,9 +122,3 @@ Conselheiro:"""
 
     send_message(from_number, reply)
     return {"status": "mensagem enviada"}
-
-# ==== ENDPOINT DE SAÚDE ====
-
-@app.get("/health")
-def health_check():
-    return {"status": "vivo, lúcido e com fé"}
