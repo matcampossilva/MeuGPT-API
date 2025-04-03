@@ -19,7 +19,6 @@ GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
 GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
 
-# FASTAPI APP DEFINIDO AQUI (sim, agora não vai quebrar)
 app = FastAPI()
 
 # PLANILHAS GOOGLE
@@ -117,6 +116,10 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
 
+    # Garante que a pasta de conversas existe
+    if not os.path.exists("conversas"):
+        os.makedirs("conversas")
+
     sheet = get_user_sheet(from_number)
     values = sheet.col_values(2)
     row = values.index(from_number) + 1 if from_number in values else None
@@ -126,10 +129,10 @@ async def whatsapp_webhook(request: Request):
 
     # BLOQUEIO POR LIMITE
     if passou_limite(sheet, row):
-        send_message(from_number, "⚠️ Você atingiu o limite gratuito de 10 interações.\n\nPara continuar com seu conselheiro financeiro pessoal, acesse: https://seulinkpremium.com")
+        send_message(from_number, "⚠️ Você atingiu o limite gratuito de 10 interações.\n\nPra continuar com seu conselheiro financeiro pessoal (que é mais paciente que muita gente), acesse: https://seulinkpremium.com")
         return {"status": "limite atingido"}
 
-    # ONBOARDING
+    # ONBOARDING — coleta de nome e email com personalidade
     captured_email = extract_email(incoming_msg) if not email else None
     captured_name = extract_name(incoming_msg) if not name else None
 
@@ -143,15 +146,15 @@ async def whatsapp_webhook(request: Request):
             email = captured_email
 
         if not name and not email:
-            send_message(from_number, "Olá! 👋 Que bom ter você aqui.\n\nPara começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
+            send_message(from_number, "Olá! 👋 Que bom ter você aqui.\n\nAntes de começarmos essa jornada financeira e (quem sabe) espiritual, preciso só do seu nome e do seu e-mail. Pode mandar os dois aqui mesmo. 🙏📩")
             return {"status": "aguardando nome e email"}
 
         if name and not email:
-            send_message(from_number, "Só falta o e-mail agora pra eu liberar seu acesso. Pode mandar! 📧")
+            send_message(from_number, "Faltou só o e-mail. Não fuja agora, estou começando a confiar em você. 📧")
             return {"status": "aguardando email"}
 
         if email and not name:
-            send_message(from_number, "Faltou só o nome completo. Pode mandar! ✍️")
+            send_message(from_number, "Quase lá. Agora me diz seu nome completo — aquele que você usaria numa reunião com o gerente do banco. ✍️")
             return {"status": "aguardando nome"}
 
         if name and email:
@@ -167,10 +170,6 @@ Me conta: qual é a principal situação financeira que você quer resolver hoje
 
     # MEMÓRIA DE CONVERSA
     conversa_path = f"conversas/{from_number}.txt"
-    if not os.path.exists(conversa_path):
-        with open(conversa_path, "w") as f:
-            f.write("")
-
     with open(conversa_path, "a") as f:
         f.write(f"Usuário: {incoming_msg}\n")
 
@@ -204,4 +203,4 @@ Conselheiro:"""
 
 @app.get("/health")
 def health_check():
-    return {"status": "vivo e funcionando"}
+    return {"status": "vivo, lúcido e pronto pra mais boletos"}
