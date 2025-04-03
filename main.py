@@ -55,16 +55,8 @@ def get_user_sheet(user_number):
     else:
         now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
         sheet = controle.worksheet("Gratuitos")
-        sheet.append_row(["", user_number, "", now, 0, 0])  # Inclui coluna de interações zerada
+        sheet.append_row(["", user_number, "", now, 0, 0])
         return sheet
-
-def get_gastos_sheet():
-    try:
-        gastos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
-        return gastos.worksheet("Gastos Diários")
-    except Exception as e:
-        print(f"Erro ao acessar planilha de gastos: {e}")
-        return None
 
 # ==== FUNÇÕES AUXILIARES ====
 
@@ -76,8 +68,9 @@ def extract_email(text):
     return match.group(0) if match else None
 
 def extract_name(text):
-    if " " in text.strip() and len(text.split()) >= 2:
-        return text.strip()
+    text = text.strip()
+    if len(text.split()) >= 2 and "@" not in text and len(text) <= 60:
+        return text
     return None
 
 def count_tokens(text):
@@ -108,6 +101,9 @@ def passou_limite(sheet, row):
         return False
     return get_interactions(sheet, row) >= 10
 
+def is_boas_vindas(text):
+    return text.lower() in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]
+
 # ==== ENDPOINT PRINCIPAL ====
 
 @app.post("/webhook")
@@ -120,6 +116,18 @@ async def whatsapp_webhook(request: Request):
     if not os.path.exists("conversas"):
         os.makedirs("conversas")
 
+    status = get_user_status(from_number)
+
+    # Mensagem de boas-vindas para novos usuários
+    if status == "Novo":
+        if is_boas_vindas(incoming_msg):
+            send_message(from_number,
+                "Olá! Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
+                "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
+                "Me conta uma coisa: Qual é seu maior objetivo financeiro hoje?")
+            return {"status": "mensagem de boas-vindas enviada"}
+
+    # Obtenção da planilha e linha do usuário
     sheet = get_user_sheet(from_number)
     values = sheet.col_values(2)
     row = values.index(from_number) + 1 if from_number in values else None
@@ -129,10 +137,12 @@ async def whatsapp_webhook(request: Request):
 
     # BLOQUEIO POR LIMITE
     if passou_limite(sheet, row):
-        send_message(from_number, "⚠️ Você atingiu o limite gratuito de 10 interações.\n\nPra continuar com seu conselheiro financeiro pessoal (que é mais paciente que muita gente), acesse: https://seulinkpremium.com")
+        send_message(from_number,
+            "⚠️ Você atingiu o limite gratuito de 10 interações.\n\n"
+            "Pra continuar com seu conselheiro financeiro pessoal (que é mais paciente que muita gente), acesse: https://seulinkpremium.com")
         return {"status": "limite atingido"}
 
-    # ONBOARDING — coleta de nome e email com personalidade
+    # ONBOARDING (nome e email)
     captured_email = extract_email(incoming_msg) if not email else None
     captured_name = extract_name(incoming_msg) if not name else None
 
@@ -146,15 +156,18 @@ async def whatsapp_webhook(request: Request):
             email = captured_email
 
         if not name and not email:
-            send_message(from_number, "Olá! 👋 Que bom ter você aqui.\n\nAntes de começarmos essa jornada financeira e (quem sabe) espiritual, preciso só do seu nome e do seu e-mail. Pode mandar os dois aqui mesmo. 🙏📩")
+            send_message(from_number,
+                "Antes de qualquer coisa, preciso só de dois detalhes essenciais pra te ajudar de verdade:\n\n"
+                "👉 Seu nome completo\n👉 Seu e-mail\n\nPode mandar os dois aqui mesmo 🙌")
             return {"status": "aguardando nome e email"}
 
         if name and not email:
-            send_message(from_number, "Faltou só o e-mail. Não fuja agora, estou começando a confiar em você. 📧")
+            send_message(from_number, "Faltou só o e-mail. Vai lá, sem medo. 🙏")
             return {"status": "aguardando email"}
 
         if email and not name:
-            send_message(from_number, "Quase lá. Agora me diz seu nome completo — aquele que você usaria numa reunião com o gerente do banco. ✍️")
+            send_message(from_number,
+                "Faltou o nome completo — aquele que você usaria pra assinar um contrato importante. ✍️")
             return {"status": "aguardando nome"}
 
         if name and email:
@@ -203,4 +216,4 @@ Conselheiro:"""
 
 @app.get("/health")
 def health_check():
-    return {"status": "vivo, lúcido e pronto pra mais boletos"}
+    return {"status": "vivo, lúcido e com fé"}
