@@ -123,7 +123,7 @@ async def whatsapp_webhook(request: Request):
         if is_boas_vindas(incoming_msg):
             send_message(from_number,
                 "Olá! 👋🏼 Que bom ter você aqui.\n\n"
-                "Para começarmos nossa jornada financeira juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
+                "Sou seu Conselheiro Financeiro pessoal. Para começarmos nossa jornada juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
             return {"status": "mensagem de boas-vindas enviada"}
         sheet = get_user_sheet(from_number)
         values = sheet.col_values(2)
@@ -166,7 +166,7 @@ async def whatsapp_webhook(request: Request):
 
         if not name:
             send_message(from_number,
-                "Faltou só seu nome completo — como você assina mesmo. ✍️")
+                "Faltou só seu nome completo — preciso fazer seu cadastro, senão perco meu emprego. ✍️")
             return {"status": "aguardando nome"}
 
         if not email:
