@@ -1,11 +1,9 @@
-import os
 import gspread
-from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import pytz
+import os
+from dotenv import load_dotenv
 
-# === CONFIG ===
 load_dotenv()
 
 GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
@@ -15,62 +13,67 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
-# === CATEGORIAS AUTOMÁTICAS ===
-CATEGORIAS_AUTOMATICAS = {
+planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
+sheet = planilha.worksheet("Gastos Diários")
+
+# Categorias padrao
+CATEGORIAS_PADRAO = {
     "almoço": "Alimentação",
-    "jantar": "Alimentação",
-    "café": "Alimentação",
-    "ifood": "Alimentação",
-    "combustível": "Transporte",
-    "gasolina": "Transporte",
-    "uber": "Transporte",
+    "cafe": "Alimentação",
+    "supermercado": "Alimentação",
+    "presente": "Presentes",
+    "esposa": "Presentes",
+    "aluguel": "Moradia",
+    "condomínio": "Moradia",
     "água": "Moradia",
     "luz": "Moradia",
     "internet": "Moradia",
-    "aluguel": "Moradia",
-    "shopping": "Lazer",
-    "cinema": "Lazer",
-    "netflix": "Lazer",
+    "iptu": "Impostos",
+    "ipva": "Impostos",
+    "remédio": "Saúde",
+    "frédéric": "Frédéric",
+    "mensalidade": "Frédéric",
+    "gasolina": "Transporte",
+    "uber": "Transporte",
+    "pix": "Extras"
 }
 
-# === CATEGORIZAÇÃO INTELIGENTE ===
-def categorizar(descricao):
-    desc_lower = descricao.lower()
-    for chave, categoria in CATEGORIAS_AUTOMATICAS.items():
-        if chave in desc_lower:
-            return categoria
-    return None
+def sugerir_categoria(descricao):
+    descricao = descricao.lower()
+    for chave in CATEGORIAS_PADRAO:
+        if chave in descricao:
+            return CATEGORIAS_PADRAO[chave]
+    return "Extras"
 
-# === REGISTRO DE GASTO ===
-def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento, data_gasto=None):
+def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento):
+    categoria = sugerir_categoria(descricao)
+    data_gasto = datetime.now().strftime("%d/%m/%Y")
+    data_registro = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+    linha = [
+        nome_usuario,
+        numero_usuario,
+        descricao,
+        categoria,
+        valor,
+        forma_pagamento,
+        data_gasto,
+        data_registro
+    ]
+
     try:
-        planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
-        aba = planilha.worksheet("Gastos Diários")
-
-        # Datas
-        fuso = pytz.timezone("America/Sao_Paulo")
-        agora = datetime.now(fuso)
-        data_registro = agora.strftime("%d/%m/%Y %H:%M:%S")
-        data_gasto = data_gasto or agora.strftime("%d/%m/%Y")
-
-        categoria = categorizar(descricao)
-        if not categoria:
-            categoria = "A DEFINIR"
-
-        nova_linha = [
-            nome_usuario,
-            numero_usuario,
-            descricao,
-            categoria,
-            float(valor),
-            forma_pagamento,
-            data_gasto,
-            data_registro
-        ]
-
-        aba.append_row(nova_linha)
-        return {"status": "ok", "categoria": categoria}
+        sheet.append_row(linha)
+        with open("log_registros.txt", "a") as f:
+            f.write(f"✅ REGISTRO: {linha}\n")
+        return {
+            "status": "ok",
+            "categoria": categoria
+        }
 
     except Exception as e:
-        print(f"[ERRO ao registrar gasto] {e}")
-        return {"status": "erro", "mensagem": str(e)}
+        with open("log_registros.txt", "a") as f:
+            f.write(f"❌ ERRO: {e} - Linha: {linha}\n")
+        return {
+            "status": "erro",
+            "mensagem": str(e)
+        }

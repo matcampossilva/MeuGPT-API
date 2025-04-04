@@ -8,6 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
 import re
+from gastos import registrar_gasto
 
 # === INICIALIZAÇÃO ===
 load_dotenv()
@@ -109,6 +110,28 @@ def is_boas_vindas(text):
     text = text.lower()
     return any(sauda in text for sauda in saudacoes)
 
+def detectar_gastos(texto):
+    return any(moeda in texto for moeda in ["R$", ",00", ".00", "gastei", "comprei", "- débito", "- crédito", "pix"])
+
+def extrair_gastos(texto):
+    blocos = [b.strip() for b in texto.split(",") if b.strip()]
+    gastos = []
+    for bloco in blocos:
+        match = re.search(r"([\d\.,]+).*?([\w\s]+?)\s*-\s*(\w+)", bloco, re.IGNORECASE)
+        if match:
+            valor_raw = match.group(1).replace(".", "").replace(",", ".")
+            descricao = match.group(2).strip().capitalize()
+            forma = match.group(3).strip().capitalize()
+            try:
+                valor = float(valor_raw)
+                gastos.append({
+                    "descricao": descricao,
+                    "valor": valor,
+                    "forma_pagamento": forma
+                })
+            except ValueError:
+                continue
+    return gastos
 
 # === ENDPOINT PRINCIPAL ===
 @app.post("/webhook")
@@ -178,15 +201,28 @@ async def whatsapp_webhook(request: Request):
             return {"status": "aguardando email"}
 
         primeiro_nome = name.split()[0]
-        welcome_msg = f"""Perfeito, {primeiro_nome}! 👊
-
-Fico feliz em te ver por aqui. Agora sim, podemos caminhar juntos — com clareza, propósito e leveza. 😄
-
-Sou seu Conselheiro Financeiro pessoal. Tô aqui pra te ajudar a colocar ordem nas finanças sem deixar de lado o que realmente importa: Deus, sua família e sua missão.
-
-Me conta: o que tá tirando sua paz hoje na parte financeira?"""
+        welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nFico feliz em te ver por aqui. Agora sim, podemos caminhar juntos — com clareza, propósito e leveza. 😄\n\nSou seu Conselheiro Financeiro pessoal. Tô aqui pra te ajudar a colocar ordem nas finanças sem deixar de lado o que realmente importa: Deus, sua família e sua missão.\n\nMe conta: o que tá tirando sua paz hoje na parte financeira?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
+
+    if detectar_gastos(incoming_msg):
+        gastos = extrair_gastos(incoming_msg)
+        if gastos:
+            resultados = []
+            for gasto in gastos:
+                resultado = registrar_gasto(
+                    nome_usuario=name,
+                    numero_usuario=from_number,
+                    descricao=gasto["descricao"],
+                    valor=gasto["valor"],
+                    forma_pagamento=gasto["forma_pagamento"]
+                )
+                resultados.append(f"{gasto['descricao']}: {resultado['categoria']}")
+
+            resumo = "\n".join(resultados)
+            confirmacao = f"Tudo certo! 🧾 Seus gastos foram registrados:\n\n{resumo}"
+            send_message(from_number, confirmacao)
+            return {"status": "gastos registrados"}
 
     conversa_path = f"conversas/{from_number}.txt"
     with open(conversa_path, "a") as f:
@@ -195,9 +231,7 @@ Me conta: o que tá tirando sua paz hoje na parte financeira?"""
     prompt_base = open("prompt.txt", "r").read()
     historico = open(conversa_path, "r").read()
 
-    full_prompt = f"""{prompt_base}
-
-{historico}
+    full_prompt = f"""{prompt_base}\n\n{historico}
 Conselheiro:"""
 
     response = openai.ChatCompletion.create(
