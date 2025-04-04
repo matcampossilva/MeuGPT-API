@@ -115,10 +115,10 @@ def detectar_gastos(texto):
     return any(moeda in texto for moeda in ["R$", ",00", ".00", "gastei", "comprei", "- débito", "- crédito", "pix"])
 
 def extrair_gastos(texto):
-    blocos = [b.strip() for b in texto.split(",") if b.strip()]
+    linhas = texto.split("\n")
     gastos = []
-    for bloco in blocos:
-        match = re.search(r"([\d\.,]+).*?([\w\s]+?)\s*-\s*(\w+)", bloco, re.IGNORECASE)
+    for linha in linhas:
+        match = re.search(r"(\d{1,3}(?:[\.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(\w+)", linha.strip(), re.IGNORECASE)
         if match:
             valor_raw = match.group(1).replace(".", "").replace(",", ".")
             descricao = match.group(2).strip().capitalize()
