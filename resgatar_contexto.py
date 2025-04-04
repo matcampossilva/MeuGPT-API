@@ -1,18 +1,17 @@
 import os
-from dotenv import load_dotenv
-from openai import OpenAI
+import openai
 from pinecone import Pinecone
+from dotenv import load_dotenv
 import tiktoken
 
 load_dotenv()
 
-# OpenAI
-openai_api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=openai_api_key)
-
-# Pinecone
+# Chaves
+openai.api_key = os.getenv("OPENAI_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
+
+# Pinecone
 pc = Pinecone(api_key=pinecone_api_key)
 index = pc.Index(pinecone_index_name)
 
@@ -20,11 +19,11 @@ index = pc.Index(pinecone_index_name)
 encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
 
 def gerar_embedding(texto):
-    response = client.embeddings.create(
+    response = openai.Embedding.create(
         input=texto,
         model="text-embedding-ada-002"
     )
-    return response.data[0].embedding
+    return response['data'][0]['embedding']
 
 def buscar_conhecimento_relevante(pergunta_usuario, top_k=3):
     embedding = gerar_embedding(pergunta_usuario)
