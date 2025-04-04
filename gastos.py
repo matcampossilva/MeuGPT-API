@@ -78,33 +78,28 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
         return {"status": "erro", "mensagem": str(e)}
 
 # === ALTERAR CATEGORIA ===
-def atualizar_categoria(numero_usuario, descricao, valor, nova_categoria):
+def atualizar_categoria(numero_usuario, descricao, data_gasto, nova_categoria):
     try:
         planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
         aba = planilha.worksheet("Gastos Diários")
-        valores = aba.get_all_values()
+        registros = aba.get_all_values()
 
-        for i, linha in enumerate(valores):
-            if i == 0:
-                continue  # pula cabeçalho
+        for i, linha in enumerate(registros[1:], start=2):  # pula cabeçalho
+            numero = linha[1].strip()
+            desc = linha[2].strip().lower()
+            data = linha[6].strip()
 
-            linha_numero = linha[1].strip()
-            linha_descricao = linha[2].strip().lower()
-            linha_valor_raw = linha[4].replace("R$", "").replace(",", ".").strip()
+            if (
+                numero == numero_usuario
+                and desc == descricao.strip().lower()
+                and data == data_gasto
+            ):
+                aba.update_cell(i, 4, nova_categoria)  # coluna D (categoria)
+                return True
 
-            try:
-                linha_valor = float(linha_valor_raw)
-            except:
-                linha_valor = 0
-
-            if (linha_numero == numero_usuario and
-                linha_descricao == descricao.lower().strip() and
-                abs(linha_valor - float(valor)) < 0.01):
-                aba.update_cell(i + 1, 4, nova_categoria)
-                return {"status": "ok", "mensagem": "Categoria atualizada com sucesso."}
-
-        return {"status": "erro", "mensagem": "Gasto não encontrado."}
+        print("[ATUALIZAR CATEGORIA] Nenhum gasto correspondente encontrado.")
+        return False
 
     except Exception as e:
         print(f"[ERRO ao atualizar categoria] {e}")
-        return {"status": "erro", "mensagem": str(e)}
+        return False
