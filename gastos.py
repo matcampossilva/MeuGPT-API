@@ -1,5 +1,6 @@
 import os
 import gspread
+import json
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
@@ -15,12 +16,11 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
-# === CATEGORIAS AUTOMÁTICAS ===
-CATEGORIAS_AUTOMATICAS = {
+# === BASE DE CATEGORIAS DO USUÁRIO ===
+CATEGORIAS_PADRAO = {
     "almoço": "Alimentação",
     "jantar": "Alimentação",
     "café": "Alimentação",
-    "padaria": "Alimentação",
     "ifood": "Alimentação",
     "combustível": "Transporte",
     "gasolina": "Transporte",
@@ -32,40 +32,63 @@ CATEGORIAS_AUTOMATICAS = {
     "shopping": "Lazer",
     "cinema": "Lazer",
     "netflix": "Lazer",
+    "farmácia": "Saúde",
+    "remédio": "Saúde",
     "presente": "Presentes",
     "frédéric": "Frédéric"
 }
 
-# === CATEGORIZAÇÃO INTELIGENTE ===
-def categorizar(descricao):
+CATEGORIAS_USUARIO_PATH = "categorias_usuario.json"
+
+def carregar_categorias_usuario():
+    if not os.path.exists(CATEGORIAS_USUARIO_PATH):
+        return {}
+    with open(CATEGORIAS_USUARIO_PATH, "r") as f:
+        return json.load(f)
+
+def salvar_categorias_usuario(dados):
+    with open(CATEGORIAS_USUARIO_PATH, "w") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+
+def atualizar_categoria_usuario(numero, descricao, categoria):
+    dados = carregar_categorias_usuario()
+    if numero not in dados:
+        dados[numero] = {}
+    dados[numero][descricao.lower()] = categoria
+    salvar_categorias_usuario(dados)
+
+def categorizar(descricao, numero_usuario):
     desc_lower = descricao.lower()
-    for chave, categoria in CATEGORIAS_AUTOMATICAS.items():
+    categorias_usuario = carregar_categorias_usuario().get(numero_usuario, {})
+
+    for chave, categoria in categorias_usuario.items():
         if chave in desc_lower:
             return categoria
+
+    for chave, categoria in CATEGORIAS_PADRAO.items():
+        if chave in desc_lower:
+            return categoria
+
     return "A DEFINIR"
 
-# === REGISTRO DE GASTO ===
 def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento, data_gasto=None):
     try:
         planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
         aba = planilha.worksheet("Gastos Diários")
 
-        # Datas
         fuso = pytz.timezone("America/Sao_Paulo")
         agora = datetime.now(fuso)
         data_registro = agora.strftime("%d/%m/%Y %H:%M:%S")
         data_gasto = data_gasto or agora.strftime("%d/%m/%Y")
 
-        categoria = categorizar(descricao)
-
-        valor_float = float(valor) if isinstance(valor, (int, float)) else 0.0
+        categoria = categorizar(descricao, numero_usuario)
 
         nova_linha = [
             nome_usuario,
             numero_usuario,
             descricao,
             categoria,
-            round(float(valor), 2),
+            f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
             forma_pagamento,
             data_gasto,
             data_registro
