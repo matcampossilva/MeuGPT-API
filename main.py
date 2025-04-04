@@ -10,6 +10,7 @@ import pytz
 import re
 from gastos import registrar_gasto
 from gerar_resumo import gerar_resumo
+from resgatar_contexto import buscar_conhecimento_relevante
 
 # === INICIALIZAÇÃO ===
 load_dotenv()
@@ -237,8 +238,17 @@ async def whatsapp_webhook(request: Request):
     prompt_base = open("prompt.txt", "r").read()
     historico = open(conversa_path, "r").read()
 
-    full_prompt = f"""{prompt_base}\n\n{historico}
-Conselheiro:"""
+    # Resgata contexto relevante com base na última pergunta
+    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=3)
+
+    full_prompt = f"""{prompt_base}
+
+    # Conhecimento relevante:
+    {contexto_resgatado}
+
+    # Conversa recente:
+    {historico}
+    Conselheiro:"""
 
     response = openai.ChatCompletion.create(
         model="gpt-4",
