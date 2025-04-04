@@ -1,4 +1,3 @@
-# gastos.py
 import os
 import gspread
 from dotenv import load_dotenv
@@ -8,6 +7,7 @@ import pytz
 
 # === CONFIG ===
 load_dotenv()
+
 GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
 GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
 
@@ -15,27 +15,28 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
+# === CATEGORIAS AUTOMÁTICAS ===
 CATEGORIAS_AUTOMATICAS = {
-    "padaria": "Alimentação",
     "almoço": "Alimentação",
     "jantar": "Alimentação",
     "café": "Alimentação",
+    "padaria": "Alimentação",
     "ifood": "Alimentação",
-    "mercado": "Alimentação",
+    "combustível": "Transporte",
     "gasolina": "Transporte",
     "uber": "Transporte",
-    "combustível": "Transporte",
     "água": "Moradia",
     "luz": "Moradia",
-    "aluguel": "Moradia",
     "internet": "Moradia",
-    "presente": "Presentes",
+    "aluguel": "Moradia",
+    "shopping": "Lazer",
     "cinema": "Lazer",
     "netflix": "Lazer",
-    "frédéric": "Frédéric",
-    "mensalidade frédéric": "Frédéric",
+    "presente": "Presentes",
+    "frédéric": "Frédéric"
 }
 
+# === CATEGORIZAÇÃO INTELIGENTE ===
 def categorizar(descricao):
     desc_lower = descricao.lower()
     for chave, categoria in CATEGORIAS_AUTOMATICAS.items():
@@ -43,11 +44,13 @@ def categorizar(descricao):
             return categoria
     return "A DEFINIR"
 
+# === REGISTRO DE GASTO ===
 def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento, data_gasto=None):
     try:
         planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
         aba = planilha.worksheet("Gastos Diários")
 
+        # Datas
         fuso = pytz.timezone("America/Sao_Paulo")
         agora = datetime.now(fuso)
         data_registro = agora.strftime("%d/%m/%Y %H:%M:%S")
@@ -55,18 +58,14 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
 
         categoria = categorizar(descricao)
 
-        valor_corrigido = 0.0
-        try:
-            valor_corrigido = float(str(valor).replace("R$", "").replace(",", "."))
-        except:
-            valor_corrigido = 0.0
+        valor_float = float(valor) if isinstance(valor, (int, float)) else 0.0
 
         nova_linha = [
             nome_usuario,
             numero_usuario,
             descricao,
             categoria,
-            valor_corrigido,
+            f"R$ {valor_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
             forma_pagamento,
             data_gasto,
             data_registro
