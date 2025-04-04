@@ -9,6 +9,7 @@ from datetime import datetime
 import pytz
 import re
 from gastos import registrar_gasto
+from gerar_resumo import gerar_resumo
 
 # === INICIALIZAÇÃO ===
 load_dotenv()
@@ -204,6 +205,11 @@ async def whatsapp_webhook(request: Request):
         welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nFico feliz em te ver por aqui. Agora sim, podemos caminhar juntos — com clareza, propósito e leveza. 😄\n\nSou seu Conselheiro Financeiro pessoal. Tô aqui pra te ajudar a colocar ordem nas finanças sem deixar de lado o que realmente importa: Deus, sua família e sua missão.\n\nMe conta: o que tá tirando sua paz hoje na parte financeira?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
+
+    if "resumo" in incoming_msg.lower():
+        resumo = gerar_resumo(numero_usuario=from_number, periodo="diário")
+        send_message(from_number, resumo)
+        return {"status": "resumo enviado"}
 
     if detectar_gastos(incoming_msg):
         gastos = extrair_gastos(incoming_msg)
