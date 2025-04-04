@@ -65,7 +65,7 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
             numero_usuario,
             descricao,
             categoria,
-            f"R$ {valor_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+            round(float(valor), 2),
             forma_pagamento,
             data_gasto,
             data_registro
