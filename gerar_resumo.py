@@ -1,4 +1,3 @@
-# gerar_resumo.py
 import os
 import gspread
 from dotenv import load_dotenv
@@ -40,7 +39,13 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
             continue
 
         categoria = linha["CATEGORIA"]
-        valor = float(str(linha["VALOR (R$)"]).replace(",", "."))
+
+        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(" ", "").replace(",", ".")
+        try:
+            valor = float(valor_str)
+        except ValueError:
+            valor = 0.0
+
         forma = linha["FORMA DE PAGAMENTO"]
 
         resumo[categoria]["total"] += valor
@@ -58,5 +63,5 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     linhas.append(f"Total geral: R${total_geral:.2f}")
     return "\n".join(linhas)
 
-# Exemplo de uso:
+# Exemplo de teste local (só se quiser testar por fora)
 # print(gerar_resumo("+556292782150", periodo="diario"))
