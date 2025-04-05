@@ -4,7 +4,11 @@ import pinecone
 from dotenv import load_dotenv
 import tiktoken
 
-load_dotenv()
+load_dotenv(override=True)
+print("🧪 DEBUG Pinecone:")
+print("PINECONE_API_KEY:", os.getenv("PINECONE_API_KEY")[:5], "...")
+print("PINECONE_ENV:", os.getenv("PINECONE_ENV"))
+print("PINECONE_INDEX_NAME:", os.getenv("PINECONE_INDEX_NAME"))
 
 # Configuração das APIs
 openai.api_key = os.getenv("OPENAI_API_KEY")
