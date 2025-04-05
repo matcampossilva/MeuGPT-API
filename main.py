@@ -232,21 +232,37 @@ async def whatsapp_webhook(request: Request):
     with open(conversa_path, "a") as f:
         f.write(f"Usuário: {incoming_msg}\n")
 
+    # Lê e filtra o histórico para evitar ecoar mensagens introdutórias
+    with open(conversa_path, "r") as f:
+        linhas_conversa = f.readlines()
+
+    historico_filtrado = []
+    for linha in linhas_conversa:
+        if any(frase in linha.lower() for frase in [
+            "sou seu conselheiro financeiro",
+            "sou o meu conselheiro financeiro",
+            "perfeito,",
+            "tô aqui pra te ajudar",
+            "posso te ajudar com controle de gastos",
+            "por onde quer começar"
+        ]):
+            continue
+        historico_filtrado.append(linha)
+
+    historico = "".join(historico_filtrado).strip()
+
     prompt_base = open("prompt.txt", "r").read()
-    historico = open(conversa_path, "r").read()
+
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=3)
 
     full_prompt = f"""{prompt_base}
 
-# Informações pessoais do usuário:
-{contexto_pessoal}
+    # Conhecimento relevante:
+    {contexto_resgatado}
 
-# Conhecimento relevante:
-{contexto_resgatado}
-
-# Conversa recente:
-{historico}
-Conselheiro:"""
+    # Conversa recente:
+    {historico}
+    Conselheiro:"""
 
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
