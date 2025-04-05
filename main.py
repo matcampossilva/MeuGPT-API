@@ -151,25 +151,42 @@ async def whatsapp_webhook(request: Request):
         linhas = incoming_msg.split("\n")
         captured_name = None
         captured_email = None
+
         for linha in linhas:
+            linha = linha.strip()
             if not captured_email:
-                captured_email = extract_email(linha)
+                possible_email = extract_email(linha)
+                if possible_email:
+                    captured_email = possible_email
+                    continue
             if not captured_name and nome_valido(linha):
                 captured_name = linha
+
         if captured_name and not name:
             sheet.update_cell(row, 1, captured_name)
             name = captured_name
+
         if captured_email and not email:
             sheet.update_cell(row, 3, captured_email)
             email = captured_email
+
+        if not name and not email:
+            send_message(from_number,
+                "Olá! 👋🏼 Que bom ter você aqui.\n\n"
+                "Sou seu Conselheiro Financeiro pessoal, criado pelo Matheus Campos, CFP.\n"
+                "Para começarmos nossa jornada juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
+            return {"status": "aguardando nome e email"}
+
         if not name:
             send_message(from_number, "Faltou seu nome completo. ✍️")
             return {"status": "aguardando nome"}
+
         if not email:
-            send_message(from_number, "Agora o e-mail, por favor. 📧")
+            send_message(from_number, "Agora me manda seu e-mail, por favor. 📧")
             return {"status": "aguardando email"}
+
         primeiro_nome = name.split()[0]
-        welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nSou seu Conselheiro Financeiro pessoal. Vamos juntos organizar suas finanças sem esquecer do que importa: Deus, família e propósito.\n\nMe conta: o que tá tirando sua paz hoje na parte financeira?"""
+        welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nTô aqui pra te ajudar a organizar suas finanças e sua vida, sempre respeitando esta hierarquia: Deus, sua família e seu trabalho.\n\nPosso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar.\n\nPor onde quer começar?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
 
