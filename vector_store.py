@@ -1,33 +1,27 @@
 import os
+import pinecone
 import openai
-from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Inicializa o cliente OpenAI
+# Inicializa OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Configurações do Pinecone
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_env = os.getenv("PINECONE_ENV")  # Ex: "us-east-1"
+pinecone_env = os.getenv("PINECONE_ENV")
+pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 
-# Cria instância do cliente Pinecone
-pc = Pinecone(api_key=pinecone_api_key)
+# Inicializa Pinecone (versão antiga)
+pinecone.init(api_key=pinecone_api_key, environment=pinecone_env)
 
-# Nome do index
-index_name = "meu-conselheiro"
-
-# Criação do índice (se ainda não existir)
-if index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=index_name,
+# Verifica se o índice já existe, senão cria
+if pinecone_index_name not in pinecone.list_indexes():
+    pinecone.create_index(
+        name=pinecone_index_name,
         dimension=1536,
-        metric="cosine",
-        spec=ServerlessSpec(
-            cloud="aws",
-            region=pinecone_env  # us-east-1, etc.
-        )
+        metric="cosine"
     )
 
 print("✅ Pinecone configurado com sucesso.")
