@@ -5,10 +5,9 @@ from dotenv import load_dotenv
 import tiktoken
 
 load_dotenv(override=True)
-print("🧪 DEBUG Pinecone:")
-print("PINECONE_API_KEY:", os.getenv("PINECONE_API_KEY")[:5], "...")
-print("PINECONE_ENV:", os.getenv("PINECONE_ENV"))
-print("PINECONE_INDEX_NAME:", os.getenv("PINECONE_INDEX_NAME"))
+print("[DEBUG ENV] PINECONE_API_KEY =", os.getenv("PINECONE_API_KEY")[:5] + "...")
+print("[DEBUG ENV] PINECONE_ENV =", os.getenv("PINECONE_ENV"))
+print("[DEBUG ENV] PINECONE_INDEX_NAME =", os.getenv("PINECONE_INDEX_NAME"))
 
 # Configuração das APIs
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -17,8 +16,11 @@ pinecone_env = os.getenv("PINECONE_ENV")  # Ex: "us-east-1"
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 
 # Inicializa o Pinecone (versão antiga usa init)
-pinecone.init(api_key=pinecone_api_key, environment=pinecone_env)
-index = pinecone.Index(pinecone_index_name)
+pinecone.init(
+    api_key=os.getenv("PINECONE_API_KEY"),
+    environment=os.getenv("PINECONE_ENV")
+)
+index = pinecone.Index(os.getenv("PINECONE_INDEX_NAME"))
 
 # Tokenizer
 encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
