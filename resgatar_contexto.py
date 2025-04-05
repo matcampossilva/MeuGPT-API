@@ -1,32 +1,25 @@
 import os
 import openai
-from pinecone import Pinecone, Index
+from pinecone import Index
 from dotenv import load_dotenv
 import tiktoken
 
-# === LOAD VARIÁVEIS DE AMBIENTE ===
+# === VARIÁVEIS DE AMBIENTE ===
 load_dotenv(override=True)
 
-# DEBUG OPCIONAL (desativa depois de funcionar)
-print("🔍 PINECONE_API_KEY:", os.getenv("PINECONE_API_KEY")[:6], "...")
-print("🌍 PINECONE_ENV:", os.getenv("PINECONE_ENV"))
-print("📦 PINECONE_INDEX_NAME:", os.getenv("PINECONE_INDEX_NAME"))
-print("🔗 PINECONE_HOST:", os.getenv("PINECONE_HOST"))
-
-# === OPENAI SETUP ===
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# === PINECONE SETUP ===
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+# === INDEX SERVERLESS COM HOST EXPLÍCITO ===
 index = Index(
     name=os.getenv("PINECONE_INDEX_NAME"),
+    api_key=os.getenv("PINECONE_API_KEY"),
     host=os.getenv("PINECONE_HOST")
 )
 
 # === TOKENIZER ===
 encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
 
-# === GERA EMBEDDING ===
+# === EMBEDDING ===
 def gerar_embedding(texto):
     response = openai.Embedding.create(
         input=texto,
@@ -34,7 +27,7 @@ def gerar_embedding(texto):
     )
     return response['data'][0]['embedding']
 
-# === BUSCA NO PINECONE ===
+# === BUSCA ===
 def buscar_conhecimento_relevante(pergunta_usuario, top_k=3):
     embedding = gerar_embedding(pergunta_usuario)
 
