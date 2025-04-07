@@ -1,5 +1,6 @@
 import os
 import gspread
+import hashlib
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
@@ -44,8 +45,13 @@ def categorizar(descricao):
             return categoria
     return None
 
+# === GERA ID ÚNICO ===
+def gerar_id_unico(numero_usuario, descricao, valor, data_gasto):
+    base = f"{numero_usuario}-{descricao}-{valor}-{data_gasto}"
+    return hashlib.md5(base.encode()).hexdigest()
+
 # === REGISTRO DE GASTO ===
-def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento, data_gasto=None):
+def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento, data_gasto=None, categoria_manual=None):
     try:
         planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
         aba = planilha.worksheet("Gastos Diários")
@@ -55,9 +61,14 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
         data_registro = agora.strftime("%d/%m/%Y %H:%M:%S")
         data_gasto = data_gasto or agora.strftime("%d/%m/%Y")
 
-        categoria = categorizar(descricao)
-        if not categoria:
-            categoria = "A DEFINIR"
+        categoria = categoria_manual or categorizar(descricao) or "A DEFINIR"
+        id_unico = gerar_id_unico(numero_usuario, descricao, valor, data_gasto)
+
+        registros = aba.get_all_values()
+        for linha in registros[1:]:
+            if len(linha) >= 9 and linha[8].strip() == id_unico:
+                print("[IGNORADO] Gasto duplicado detectado.")
+                return {"status": "ignorado", "mensagem": "Gasto já registrado anteriormente.", "categoria": categoria}
 
         nova_linha = [
             nome_usuario,
@@ -67,7 +78,8 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
             float(valor),
             forma_pagamento,
             data_gasto,
-            data_registro
+            data_registro,
+            id_unico  # Nova coluna oculta para controle
         ]
 
         aba.append_row(nova_linha)

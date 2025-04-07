@@ -4,22 +4,18 @@ from pinecone import Index
 from dotenv import load_dotenv
 import tiktoken
 
-# === VARIÁVEIS DE AMBIENTE ===
 load_dotenv(override=True)
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# === INDEX SERVERLESS COM HOST EXPLÍCITO ===
 index = Index(
     name=os.getenv("PINECONE_INDEX_NAME"),
     api_key=os.getenv("PINECONE_API_KEY"),
     host=os.getenv("PINECONE_HOST")
 )
 
-# === TOKENIZER ===
 encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
 
-# === EMBEDDING ===
 def gerar_embedding(texto):
     response = openai.Embedding.create(
         input=texto,
@@ -27,20 +23,27 @@ def gerar_embedding(texto):
     )
     return response['data'][0]['embedding']
 
-# === BUSCA ===
 def buscar_conhecimento_relevante(pergunta_usuario, top_k=3):
-    embedding = gerar_embedding(pergunta_usuario)
+    try:
+        embedding = gerar_embedding(pergunta_usuario)
 
-    resultado = index.query(
-        vector=embedding,
-        top_k=top_k,
-        include_metadata=True
-    )
+        resultado = index.query(
+            vector=embedding,
+            top_k=top_k,
+            include_metadata=True
+        )
 
-    textos = []
-    for match in resultado['matches']:
-        texto = match['metadata'].get('text', '')
-        if texto:
-            textos.append(texto.strip())
+        textos = []
+        for match in resultado.get('matches', []):
+            texto = match['metadata'].get('text', '')
+            if texto:
+                textos.append(texto.strip())
 
-    return "\n\n".join(textos)
+        if not textos:
+            return "Nenhum conhecimento relevante foi encontrado no momento."
+
+        return "\n\n".join(textos)
+
+    except Exception as e:
+        print(f"[ERRO no Pinecone] {e}")
+        return "Contexto não disponível agora. Siga com a resposta normalmente."
