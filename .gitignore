@@ -1,21 +1,38 @@
-# Ignora variáveis de ambiente
+# 🔐 Variáveis de ambiente
 .env
+.env.*
 
-# Ignora arquivos e pastas temporárias do Python
+# 🐍 Cache e arquivos compilados Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
 
-# Ignora logs locais
-logs/__pycache__/
-logs/logs_erros.log
+# 📦 Ambientes virtuais
+venv/
+.venv/
 
-# Ignora arquivos específicos do macOS
-.DS_Store
+# 🧪 Arquivos de testes / temporários
+*.log
+*.tmp
+*.bak
+*.swp
 
-# Ignora arquivos de configuração de IDEs
+# 📊 Pastas internas do projeto que não devem subir
+logs/
+uploads/
+conversas/
+knowledge/
+
+# 💻 Configurações de IDEs
 .vscode/
 .idea/
 
-# Ignora arquivo sensível da credencial do Google (será adicionado no Render manualmente)
+# 🍏 Arquivos específicos do macOS
+.DS_Store
+
+# 🔒 Credenciais sensíveis
+secrets/
 secrets/credentials.json
-.env
+
+# 🧪 Outros arquivos desnecessários
+*.sqlite3

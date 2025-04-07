@@ -112,5 +112,31 @@ def verificar_alertas():
                 mensagem = gerar_alerta_personalizado(cat, total, limite_cat, faixa)
                 enviar_whatsapp(numero, mensagem)
 
+# === NOVA FUNÇÃO PARA DEFINIR LIMITE PERSONALIZADO ===
+def salvar_limite_usuario(numero, categoria, valor, tipo="mensal"):
+    aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Limites")
+    linhas = aba.get_all_records()
+    linha_existente = None
+
+    for i, linha in enumerate(linhas, start=2):  # começa na linha 2 por causa do cabeçalho
+        if linha["NÚMERO"].strip() == numero and linha["CATEGORIA"].strip().lower() == categoria.lower():
+            linha_existente = i
+            break
+
+    coluna = {
+        "diario": 3,
+        "semanal": 4,
+        "mensal": 5
+    }.get(tipo.lower(), 5)
+
+    if linha_existente:
+        aba.update_cell(linha_existente, coluna, valor)
+    else:
+        nova_linha = [numero, categoria, "", "", ""]
+        nova_linha[coluna - 1] = valor
+        aba.append_row(nova_linha)
+
+# === FIM DO BLOCO ===
+
 if __name__ == "__main__":
     verificar_alertas()

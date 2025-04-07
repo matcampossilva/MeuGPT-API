@@ -14,6 +14,7 @@ from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
+from definir_limite import salvar_limite_usuario
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 
@@ -143,6 +144,18 @@ async def whatsapp_webhook(request: Request):
     form = await request.form()
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
+    padrao_limite = re.search(r"(?:limite|orçamento|coloca|definir)\s*(?:de|pra|para)?\s*(\d+[,.]?\d*)\s*(?:em|para)?\s*(\w+)", incoming_msg, re.IGNORECASE)
+    if padrao_limite:
+        valor_str = padrao_limite.group(1).replace(",", ".")
+        categoria = padrao_limite.group(2).capitalize()
+        try:
+            valor = float(valor_str)
+            salvar_limite_usuario(from_number, categoria, valor, tipo="mensal")
+            send_message(from_number, f"✅ Limite mensal de R${valor:.2f} salvo para *{categoria}*.\nSe você passar, eu te aviso com carinho (ou sarcasmo).")
+            return {"status": "limite definido"}
+        except ValueError:
+            send_message(from_number, "Opa! Não entendi o valor que você quer definir. Pode mandar de novo?")
+            return {"status": "erro valor limite"}
 
     # === ⬇⬇ COMANDOS ESPECIAIS DO USUÁRIO (já funcionando no WhatsApp) ===
     if incoming_msg.startswith("/resumo"):
