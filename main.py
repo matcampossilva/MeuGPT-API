@@ -14,7 +14,7 @@ from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
-from avaliar_engajamento import avaliar_engajamento
+from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 
 load_dotenv()
