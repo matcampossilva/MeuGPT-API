@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import pytz
 from oauth2client.service_account import ServiceAccountCredentials
-from engajamento import registrar_estrela
 
 load_dotenv()
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
