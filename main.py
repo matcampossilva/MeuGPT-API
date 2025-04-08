@@ -11,6 +11,7 @@ import pytz
 import re
 import random
 from gastos import registrar_gasto
+from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
@@ -266,9 +267,9 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, resumo)
         return {"status": "resumo enviado"}
 
-    if os.path.exists(f"conversas/temp_gastos_{from_number}.txt"):
-        linhas_temp = open(f"conversas/temp_gastos_{from_number}.txt").readlines()
-        gastos_final = []
+    estado = carregar_estado(from_number)
+    if estado.get("ultimo_fluxo") == "aguardando_categorias":
+        gastos = estado.get("gastos_temp", [])
         categorias_personalizadas = {}
 
         for linha in incoming_msg.split("\n"):
@@ -278,23 +279,28 @@ async def whatsapp_webhook(request: Request):
                 categoria = partes[1].strip().capitalize()
                 categorias_personalizadas[descricao] = categoria
 
-        for linha in linhas_temp:
-            descricao, valor, forma = linha.strip().split("|")
-            categoria = categorias_personalizadas.get(descricao.lower(), "A DEFINIR")
+        gastos_final = []
+        for gasto in gastos:
+            descricao = gasto['descricao']
+            valor = gasto['valor']
+            forma = gasto['forma_pagamento']
+            categoria = categorias_personalizadas.get(descricao.lower(), None)
+
             resultado = registrar_gasto(name, from_number, descricao, float(valor), forma.strip(), categoria_manual=categoria)
             gastos_final.append(f"{descricao}: {resultado['categoria']}")
 
-        os.remove(f"conversas/temp_gastos_{from_number}.txt")
+        resetar_estado(from_number)
         send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
         return {"status": "gastos registrados com ajuste"}
 
     if detectar_gastos(incoming_msg):
         gastos = extrair_gastos(incoming_msg)
         if gastos:
-            with open(f"conversas/temp_gastos_{from_number}.txt", "w") as f:
-                for gasto in gastos:
-                    linha = f"{gasto['descricao']}|{gasto['valor']}|{gasto['forma_pagamento']}\n"
-                    f.write(linha)
+            estado = {
+                "ultimo_fluxo": "aguardando_categorias",
+                "gastos_temp": gastos
+            }
+            salvar_estado(from_number, estado)
 
             resumo = "Certo! Identifiquei os seguintes gastos:\n"
             for gasto in gastos:
