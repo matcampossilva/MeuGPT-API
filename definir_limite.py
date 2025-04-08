@@ -1,26 +1,16 @@
-import os
-import gspread
-from dotenv import load_dotenv
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-import pytz
-from collections import defaultdict
-from enviar_whatsapp import enviar_whatsapp
 import random
+from datetime import datetime
+from collections import defaultdict
+from dotenv import load_dotenv
+from enviar_whatsapp import enviar_whatsapp
+from planilhas import get_gastos_diarios, get_limites
 
-# === CONFIG ===
 load_dotenv()
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
 
 # === BUSCA LIMITES DEFINIDOS PELO USUÁRIO ===
 def buscar_limites_do_usuario(numero_usuario):
     try:
-        aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Limites")
+        aba = get_limites()
         linhas = aba.get_all_records()
         limites = defaultdict(dict)
 
@@ -64,9 +54,9 @@ def gerar_alerta_personalizado(categoria, total, limite, faixa):
 
 # === ALERTAS PERSONALIZADOS ===
 def verificar_alertas():
-    aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
+    aba = get_gastos_diarios()
     dados = aba.get_all_records()
-    hoje = datetime.now(pytz.timezone("America/Sao_Paulo")).date()
+    hoje = datetime.now().date()
 
     usuarios_gastos = defaultdict(lambda: defaultdict(float))
 
@@ -114,7 +104,7 @@ def verificar_alertas():
 
 # === NOVA FUNÇÃO PARA DEFINIR LIMITE PERSONALIZADO ===
 def salvar_limite_usuario(numero, categoria, valor, tipo="mensal"):
-    aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Limites")
+    aba = get_limites()
     linhas = aba.get_all_records()
     linha_existente = None
 
@@ -136,7 +126,6 @@ def salvar_limite_usuario(numero, categoria, valor, tipo="mensal"):
         nova_linha[coluna - 1] = valor
         aba.append_row(nova_linha)
 
-# === FIM DO BLOCO ===
-
+# === EXECUÇÃO DIRETA ===
 if __name__ == "__main__":
     verificar_alertas()
