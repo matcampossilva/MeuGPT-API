@@ -17,6 +17,7 @@ from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
 from definir_limite import salvar_limite_usuario
+from memoria_usuario import resumo_do_mes, verificar_limites
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
@@ -133,6 +134,21 @@ def precisa_direcionamento(msg):
     msg = msg.lower()
     return any(frase in msg for frase in frases_vagas)
 
+def quer_resumo_mensal(msg):
+    msg = msg.lower()
+    termos = [
+        "quanto gastei", 
+        "resumo do mês",
+        "gastos do mês", 
+        "como estão meus gastos",
+        "meu resumo financeiro",
+        "me mostra meus gastos",
+        "meus gastos recentes",
+        "gastando muito",
+        "gastei demais"
+    ]
+    return any(t in msg for t in termos)
+
 def quer_lista_comandos(texto):
     texto = texto.lower()
     termos = [
@@ -160,6 +176,13 @@ async def whatsapp_webhook(request: Request):
         )
         send_message(from_number, comandos)
         return {"status": "comandos enviados"}
+    
+    if quer_resumo_mensal(incoming_msg):
+        resumo = resumo_do_mes(from_number)
+        limites = verificar_limites(from_number)
+        send_message(from_number, resumo + "\n\n" + limites)
+        return {"status": "resumo mensal enviado"}
+
 
     # === ⬇⬇ COMANDOS ESPECIAIS DO USUÁRIO (já funcionando no WhatsApp) ===
     if incoming_msg.startswith("/resumo"):
