@@ -107,20 +107,25 @@ def is_boas_vindas(text):
     return any(sauda in text for sauda in saudacoes)
 
 def detectar_gastos(texto):
-    return any(moeda in texto for moeda in ["R$", ",00", ".00", "gastei", "comprei", "- débito", "- crédito", "pix"])
+    padrao = r"\d{1,3}(?:[\.,]\d{2})?\s*[-–—]\s*.+?\s*[-–—]\s*(crédito|débito|pix|boleto)"
+    return bool(re.search(padrao, texto, re.IGNORECASE))
 
 def extrair_gastos(texto):
     linhas = texto.split("\n")
     gastos = []
     for linha in linhas:
-        match = re.search(r"(\d{1,3}(?:[\.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(\w+)", linha.strip(), re.IGNORECASE)
+        match = re.match(r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(crédito|débito|pix|boleto)", linha.strip(), re.IGNORECASE)
         if match:
             valor_raw = match.group(1).replace(".", "").replace(",", ".")
-            descricao = match.group(2).strip().capitalize()
+            descricao = match.group(2).strip()
             forma = match.group(3).strip().capitalize()
             try:
                 valor = float(valor_raw)
-                gastos.append({"descricao": descricao, "valor": valor, "forma_pagamento": forma})
+                gastos.append({
+                    "descricao": descricao,
+                    "valor": valor,
+                    "forma_pagamento": forma
+                })
             except ValueError:
                 continue
     return gastos
@@ -274,6 +279,28 @@ async def whatsapp_webhook(request: Request):
         welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nTô aqui pra te ajudar a organizar suas finanças e sua vida, sempre respeitando esta hierarquia: Deus, sua família e seu trabalho.\n\nPosso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar.\n\nPor onde quer começar?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
+    
+    if detectar_gastos(incoming_msg):
+        gastos = extrair_gastos(incoming_msg)
+        if gastos:
+            estado = {
+                "ultimo_fluxo": "aguardando_categorias",
+                "gastos_temp": gastos
+            }
+            salvar_estado(from_number, estado)
+
+            resumo = "Certo! Identifiquei os seguintes gastos:\n"
+            for gasto in gastos:
+                resumo += f"- {gasto['descricao']}, R${gasto['valor']:.2f}, pago com {gasto['forma_pagamento']}.\n"
+            resumo += (
+                "\nSe quiser ajustar **categorias**, me diga agora, assim: \n"
+                "`Presente para esposa: Presentes`\n"
+                "`Frédéric: Clube`\n"
+                "Senão, sigo com o que identifiquei e registro já."
+            )
+
+            send_message(from_number, resumo)
+            return {"status": "aguardando confirmação de categorias"}
 
     if precisa_direcionamento(incoming_msg):
         respostas = [
@@ -315,28 +342,6 @@ async def whatsapp_webhook(request: Request):
         resetar_estado(from_number)
         send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
         return {"status": "gastos registrados com ajuste"}
-
-    if detectar_gastos(incoming_msg):
-        gastos = extrair_gastos(incoming_msg)
-        if gastos:
-            estado = {
-                "ultimo_fluxo": "aguardando_categorias",
-                "gastos_temp": gastos
-            }
-            salvar_estado(from_number, estado)
-
-            resumo = "Certo! Identifiquei os seguintes gastos:\n"
-            for gasto in gastos:
-                resumo += f"- {gasto['descricao']}, R${gasto['valor']:.2f}, pago com {gasto['forma_pagamento']}.\n"
-            resumo += (
-                "\nSe quiser ajustar **categorias**, me diga agora, assim: \n"
-                "`Presente para esposa: Presentes`\n"
-                "`Frédéric: Clube`\n"
-                "Senão, sigo com o que identifiquei e registro já."
-            )
-
-            send_message(from_number, resumo)
-            return {"status": "aguardando confirmação de categorias"}
 
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
