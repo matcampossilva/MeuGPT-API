@@ -15,6 +15,7 @@ from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
 from definir_limite import salvar_limite_usuario
+from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 
@@ -24,20 +25,12 @@ app = FastAPI()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
 
 # === PLANILHAS ===
 def get_user_status(user_number):
     try:
-        controle = gs.open_by_key(GOOGLE_SHEET_ID)
-        pagantes = controle.worksheet("Pagantes").col_values(2)
-        gratuitos = controle.worksheet("Gratuitos").col_values(2)
+        pagantes = get_pagantes().col_values(2)
+        gratuitos = get_gratuitos().col_values(2)
         if user_number in pagantes:
             return "Pagantes"
         elif user_number in gratuitos:
@@ -50,16 +43,15 @@ def get_user_status(user_number):
 
 def get_user_sheet(user_number):
     status = get_user_status(user_number)
-    controle = gs.open_by_key(GOOGLE_SHEET_ID)
     if status == "Pagantes":
-        return controle.worksheet("Pagantes")
+        return get_pagantes()
     elif status == "Gratuitos":
-        return controle.worksheet("Gratuitos")
+        return get_gratuitos()
     else:
         now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        sheet = controle.worksheet("Gratuitos")
-        sheet.append_row(["", user_number, "", now, 0, 0])
-        return sheet
+        aba = get_gratuitos()
+        aba.append_row(["", user_number, "", now, 0, 0])
+        return aba
 
 def nome_valido(text):
     if not text:
