@@ -1,21 +1,14 @@
 import os
-import gspread
 from dotenv import load_dotenv
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
 from collections import defaultdict
-from enviar_whatsapp import enviar_whatsapp
 import random
 
-# === CONFIG ===
-load_dotenv()
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
+from enviar_whatsapp import enviar_whatsapp
+from planilhas import get_gastos_diarios
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
+load_dotenv()
 
 # === FRASES COMENTÁRIOS ===
 def gerar_comentario(total):
@@ -49,8 +42,8 @@ def enviar_resumo_automatico(periodo="diario"):
     from gerar_resumo import gerar_resumo  # para reaproveitar
     from enviar_alertas import gerar_resumo_limites
 
-    aba_gastos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
-    registros = aba_gastos.get_all_records()
+    aba = get_gastos_diarios()
+    registros = aba.get_all_records()
 
     hoje = datetime.now(pytz.timezone("America/Sao_Paulo"))
     usuarios = defaultdict(lambda: defaultdict(float))
