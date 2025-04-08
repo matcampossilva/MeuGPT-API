@@ -9,6 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
 import re
+import random
 from gastos import registrar_gasto
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
@@ -250,16 +251,15 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
 
-if precisa_direcionamento(incoming_msg):
-    import random
-    respostas = [
+    if precisa_direcionamento(incoming_msg):
+        respostas = [
         "Verdade, posso te ajudar sim! 👊\n\nSe quiser começar pelos seus gastos, me manda o que foi, quanto custou, como pagou (crédito, débito, PIX…) e em que categoria encaixa (tipo Alimentação, Saúde…). Mas se a dúvida for outra, manda também. Eu te ajudo.",
         "Claro! Me conta: você quer registrar algum gasto, organizar sua rotina, resolver uma dívida, ou só precisa de direção? Me dá uma ideia e eu entro com o plano.",
         "Tô aqui pra isso! Podemos começar por um gasto recente, ou você pode me perguntar sobre qualquer parte da sua vida financeira (ou espiritual). Manda ver!",
         "Sim, posso te ajudar. 👀 Só preciso saber o que você precisa agora: anotar gastos? Falar sobre planejamento? Organização da vida? Joga aqui."
-    ]
-    send_message(from_number, random.choice(respostas))
-    return {"status": "resposta inicial direcionadora"}
+        ]
+        send_message(from_number, random.choice(respostas))
+        return {"status": "resposta inicial direcionadora"}
 
     if "resumo" in incoming_msg.lower():
         resumo = gerar_resumo(numero_usuario=from_number, periodo="diário")
