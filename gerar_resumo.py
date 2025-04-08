@@ -1,23 +1,15 @@
 import os
-import gspread
 from dotenv import load_dotenv
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
 from collections import defaultdict
+from planilhas import get_gastos_diarios
 
-# === CONFIG ===
 load_dotenv()
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
 
 # === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal"):
-    aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
+    aba = get_gastos_diarios()
     dados = aba.get_all_records()
 
     hoje = datetime.now(pytz.timezone("America/Sao_Paulo"))
