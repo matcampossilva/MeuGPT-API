@@ -426,6 +426,16 @@ async def whatsapp_webhook(request: Request):
 
     send_message(from_number, reply)
 
+    # === Detectar emoção e possível relação com aumento de gasto ===
+    from datetime import datetime
+    fuso = pytz.timezone("America/Sao_Paulo")
+    data_msg = datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
+    emocao = detectar_emocao(incoming_msg)
+    if emocao:
+        alerta = aumento_pos_emocao(from_number, emocao, data_msg)
+        if alerta:
+            send_message(from_number, alerta)
+
     mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
     if mensagem_estrela:
         send_message(from_number, mensagem_estrela)
