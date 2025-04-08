@@ -307,7 +307,7 @@ async def whatsapp_webhook(request: Request):
             )
 
             send_message(from_number, resumo)
-            return {"status": "aguardando confirmação de categorias"}
+            return {\"status\": \"aguardando confirmação de categorias\"}
 
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
