@@ -131,23 +131,33 @@ def precisa_direcionamento(msg):
     msg = msg.lower()
     return any(frase in msg for frase in frases_vagas)
 
+def quer_lista_comandos(texto):
+    texto = texto.lower()
+    termos = [
+        "quais comandos", "comandos disponíveis", "o que você faz",
+        "como usar", "me ajuda com comandos", "o que posso pedir",
+        "me manda os comandos", "comando", "menu", "como funciona"
+    ]
+    return any(t in texto for t in termos)
+
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
-    padrao_limite = re.search(r"(?:limite|orçamento|coloca|definir)\s*(?:de|pra|para)?\s*(\d+[,.]?\d*)\s*(?:em|para)?\s*(\w+)", incoming_msg, re.IGNORECASE)
-    if padrao_limite:
-        valor_str = padrao_limite.group(1).replace(",", ".")
-        categoria = padrao_limite.group(2).capitalize()
-        try:
-            valor = float(valor_str)
-            salvar_limite_usuario(from_number, categoria, valor, tipo="mensal")
-            send_message(from_number, f"✅ Limite mensal de R${valor:.2f} salvo para *{categoria}*.\nSe você passar, eu te aviso com carinho (ou sarcasmo).")
-            return {"status": "limite definido"}
-        except ValueError:
-            send_message(from_number, "Opa! Não entendi o valor que você quer definir. Pode mandar de novo?")
-            return {"status": "erro valor limite"}
+
+    if quer_lista_comandos(incoming_msg):
+        comandos = (
+            "📋 *Comandos disponíveis:*\n"
+            "/resumo – Ver seu resumo financeiro do dia\n"
+            "/limites – Mostrar seus limites por categoria\n"
+            "/relatorio – Análise completa dos seus gastos (em breve)\n"
+            "/ranking – Ver o ranking dos usuários\n"
+            "/minhas_estrelas – Ver suas estrelas acumuladas\n"
+            "/ajuda – Mostrar esta lista de comandos"
+        )
+        send_message(from_number, comandos)
+        return {"status": "comandos enviados"}
 
     # === ⬇⬇ COMANDOS ESPECIAIS DO USUÁRIO (já funcionando no WhatsApp) ===
     if incoming_msg.startswith("/resumo"):
@@ -166,17 +176,6 @@ async def whatsapp_webhook(request: Request):
         relatorio = gerar_relatorio(from_number)
         send_message(from_number, relatorio)
         return {"status": "relatorio enviado"}
-    
-    if incoming_msg.startswith("/ajuda"):
-        comandos = (
-            "📋 *Comandos disponíveis:*\n"
-            "/resumo – Ver seu resumo financeiro do dia\n"
-            "/limites – Mostrar seus limites por categoria\n"
-            "/relatorio – Análise completa dos seus gastos (em breve)\n"
-            "/ajuda – Mostrar esta lista de comandos"
-        )
-        send_message(from_number, comandos)
-        return {"status": "ajuda enviada"}
     
     if incoming_msg.startswith("/ranking"):
         from ranking import get_ranking_geral
