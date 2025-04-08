@@ -23,15 +23,22 @@ def gerar_embedding(texto):
     )
     return response['data'][0]['embedding']
 
-def buscar_conhecimento_relevante(pergunta_usuario, top_k=3):
+def buscar_conhecimento_relevante(pergunta_usuario, categoria=None, top_k=3):
     try:
         embedding = gerar_embedding(pergunta_usuario)
 
-        resultado = index.query(
-            vector=embedding,
-            top_k=top_k,
-            include_metadata=True
-        )
+        query_params = {
+            "vector": embedding,
+            "top_k": top_k,
+            "include_metadata": True
+        }
+
+        if categoria:
+            query_params["filter"] = {
+                "categoria": {"$eq": categoria}
+            }
+
+        resultado = index.query(**query_params)
 
         textos = []
         for match in resultado.get('matches', []):

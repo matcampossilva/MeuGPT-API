@@ -42,13 +42,15 @@ def embed_text(text):
     return response['data'][0]['embedding']
 
 def infer_tag(filename):
-    if "espiritualidade" in filename.lower():
+    nome = filename.lower()
+    if "espiritual" in nome:
         return "espiritualidade"
-    if "cfp" in filename.lower():
-        return "financas"
-    if "filosofia" in filename.lower():
+    elif "filosofia" in nome:
         return "filosofia"
-    return "geral"
+    elif "cfp" in nome or "financas" in nome or "financeiro" in nome:
+        return "financas"
+    else:
+        return "geral"
 
 print("📚 Iniciando ingestão...")
 files = read_files(knowledge_dir)
@@ -58,6 +60,8 @@ for filename, text in files:
     chunks = chunk_text_by_tokens(text)
     vectors = []
     tag = infer_tag(filename)
+    print(f"🗂️  Arquivo: {filename} | Categoria atribuída: {tag}")
+    
     for chunk in chunks:
         embedding = embed_text(chunk)
         vector = {
@@ -71,8 +75,9 @@ for filename, text in files:
             }
         }
         vectors.append(vector)
+    
     index.upsert(vectors=vectors)
     total_chunks += len(vectors)
-    print(f"✅ {filename} -> {len(vectors)} pedaços enviados com tag '{tag}'")
+    print(f"✅ {filename} -> {len(vectors)} pedaços enviados.")
 
 print(f"\n🎉 Ingestão concluída com sucesso. Total de pedaços enviados: {total_chunks}")
