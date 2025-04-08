@@ -1,20 +1,12 @@
 import os
-import gspread
 import hashlib
-from dotenv import load_dotenv
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import pytz
+from dotenv import load_dotenv
 
-# === CONFIG ===
+from planilhas import get_gastos_diarios
+
 load_dotenv()
-
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
 
 # === CATEGORIAS AUTOMÁTICAS ===
 CATEGORIAS_AUTOMATICAS = {
@@ -53,8 +45,7 @@ def gerar_id_unico(numero_usuario, descricao, valor, data_gasto):
 # === REGISTRO DE GASTO ===
 def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagamento, data_gasto=None, categoria_manual=None):
     try:
-        planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
-        aba = planilha.worksheet("Gastos Diários")
+        aba = get_gastos_diarios()
 
         fuso = pytz.timezone("America/Sao_Paulo")
         agora = datetime.now(fuso)
@@ -92,8 +83,7 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
 # === ALTERAR CATEGORIA ===
 def atualizar_categoria(numero_usuario, descricao, data_gasto, nova_categoria):
     try:
-        planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
-        aba = planilha.worksheet("Gastos Diários")
+        aba = get_gastos_diarios()
         registros = aba.get_all_values()
 
         for i, linha in enumerate(registros[1:], start=2):  # pula cabeçalho
