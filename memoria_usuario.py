@@ -65,4 +65,9 @@ def verificar_limites(numero_usuario):
                 if total > limite:
                     resposta += f"⚠️ *{categoria}* passou do limite (R$ {total:.2f} / R$ {limite:.2f})\n"
                 else:
-                    resposta += f"✅ *{categoria}* está dentro
+                    resposta += f"✅ *{categoria}* está dentro (R$ {total:.2f} / R$ {limite:.2f})\n"
+
+        return resposta or "Sem limites registrados."
+
+    except Exception as e:
+        return f"[Erro ao verificar limites] {str(e)}"
