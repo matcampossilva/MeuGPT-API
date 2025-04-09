@@ -233,8 +233,9 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number,
             "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌")
 
-    name = sheet.cell(row, 1).value.strip() if sheet.cell(row, 1).value else ""
-    email = sheet.cell(row, 3).value.strip() if sheet.cell(row, 3).value else ""
+    linha_usuario = sheet.row_values(row)
+    name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
+    email = linha_usuario[2].strip() if len(linha_usuario) > 2 else ""
 
     if passou_limite(sheet, row):
         send_message(from_number, "⚠️ Limite gratuito atingido. Acesse: https://seulinkpremium.com")
@@ -436,7 +437,10 @@ async def whatsapp_webhook(request: Request):
     armazenar_mensagem(from_number, "Conselheiro", reply)
 
     tokens = count_tokens(incoming_msg) + count_tokens(reply)
-    sheet.update_cell(row, 5, int(sheet.cell(row, 5).value or 0) + tokens)
+    valor_atual = linha_usuario[4] if len(linha_usuario) > 4 else 0
+    valor_atual = int(valor_atual) if valor_atual else 0
+    sheet.update_cell(row, 5, valor_atual + tokens)
+
     increment_interactions(sheet, row)
 
     send_message(from_number, reply)
