@@ -9,6 +9,7 @@ load_dotenv()
 
 # === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal"):
+    numero_usuario = numero_usuario.replace("whatsapp:", "").strip()
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
 

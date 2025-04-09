@@ -18,6 +18,7 @@ from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
 from definir_limite import salvar_limite_usuario
 from memoria_usuario import resumo_do_mes, verificar_limites
+from emocional import detectar_emocao, aumento_pos_emocao
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
