@@ -33,13 +33,18 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
             continue
 
         categoria = linha.get("CATEGORIA", "A DEFINIR").strip()
-        valor_str = str(linha.get("VALOR (R$)", "0")).replace("R$", "").replace(" ", "").replace(",", ".")
+        import re
+        valor_bruto = str(linha.get("VALOR (R$)", "0"))
+        valor_str = re.sub(r"[^\d,.-]", "", valor_bruto).replace(",", ".")
+
         forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
 
         try:
             valor = float(valor_str)
+            if valor < 0:
+                continue
         except ValueError:
-            valor = 0.0
+            continue
 
         resumo[categoria]["total"] += valor
         resumo[categoria]["formas"][forma] += valor

@@ -345,8 +345,14 @@ async def whatsapp_webhook(request: Request):
 
         resetar_estado(from_number)
         send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
-        return {"status": "gastos registrados com ajuste"}
 
+        # Gerar resumo diário automático
+        from gerar_resumo import gerar_resumo
+        resumo_automatico = gerar_resumo(numero_usuario=from_number, periodo="diario")
+        send_message(from_number, resumo_automatico)
+
+        return {"status": "gastos registrados e resumo enviado"}
+    
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
     with open(conversa_path, "a") as f:
