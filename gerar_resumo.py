@@ -13,8 +13,7 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
 
-    fuso = pytz.timezone("America/Sao_Paulo")
-    hoje = datetime.now(fuso)
+    hoje = datetime.now().astimezone(pytz.timezone("America/Sao_Paulo"))
 
     resumo = defaultdict(lambda: {"total": 0.0, "formas": defaultdict(float)})
     total_geral = 0.0
@@ -27,6 +26,9 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
             data = datetime.strptime(linha.get("DATA DO GASTO", ""), "%d/%m/%Y")
         except:
             continue
+
+        # DEBUG DE DATA — AGORA VEM, INFERNO
+        print(f"[DEBUG] data={data.date()} | hoje={hoje.date()}")
 
         if periodo == "diario" and data.date() != hoje.date():
             continue
@@ -45,13 +47,6 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
             continue
 
         forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
-
-        try:
-            valor = float(valor_str)
-            if valor < 0:
-                continue
-        except ValueError:
-            continue
 
         resumo[categoria]["total"] += valor
         resumo[categoria]["formas"][forma] += valor
