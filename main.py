@@ -334,7 +334,11 @@ async def whatsapp_webhook(request: Request):
             descricao = gasto['descricao']
             valor = gasto['valor']
             forma = gasto['forma_pagamento']
-            categoria = categorias_personalizadas.get(descricao.lower(), None)
+            categoria = None
+            for chave, valor in categorias_personalizadas.items():
+                if chave in descricao.lower():
+                    categoria = valor
+                    break
 
             resultado = registrar_gasto(name, from_number, descricao, float(valor), forma.strip(), categoria_manual=categoria)
             gastos_final.append(f"{descricao}: {resultado['categoria']}")

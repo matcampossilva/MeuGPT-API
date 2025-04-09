@@ -12,16 +12,18 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
 
-    hoje = datetime.now(pytz.timezone("America/Sao_Paulo"))
+    fuso = pytz.timezone("America/Sao_Paulo")
+    hoje = datetime.now(fuso)
+
     resumo = defaultdict(lambda: {"total": 0.0, "formas": defaultdict(float)})
     total_geral = 0.0
 
     for linha in dados:
-        if linha["NÚMERO"] != numero_usuario:
+        if linha.get("NÚMERO") != numero_usuario:
             continue
 
         try:
-            data = datetime.strptime(linha["DATA DO GASTO"], "%d/%m/%Y")
+            data = datetime.strptime(linha.get("DATA DO GASTO", ""), "%d/%m/%Y")
         except:
             continue
 
@@ -30,21 +32,23 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
         if periodo == "mensal" and (data.month != hoje.month or data.year != hoje.year):
             continue
 
-        categoria = linha["CATEGORIA"]
+        categoria = linha.get("CATEGORIA", "A DEFINIR").strip()
+        valor_str = str(linha.get("VALOR (R$)", "0")).replace("R$", "").replace(" ", "").replace(",", ".")
+        forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
 
-        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(" ", "").replace(",", ".")
         try:
             valor = float(valor_str)
         except ValueError:
             valor = 0.0
-
-        forma = linha["FORMA DE PAGAMENTO"]
 
         resumo[categoria]["total"] += valor
         resumo[categoria]["formas"][forma] += valor
         total_geral += valor
 
     # === FORMATAÇÃO DO TEXTO ===
+    if total_geral == 0.0:
+        return f"Resumo {periodo} dos seus gastos:\n\nTotal geral: R$0.00"
+
     linhas = [f"Resumo {periodo} dos seus gastos:", ""]
     for cat, dados in resumo.items():
         linhas.append(f"{cat}: R${dados['total']:.2f}")
@@ -54,6 +58,3 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
 
     linhas.append(f"Total geral: R${total_geral:.2f}")
     return "\n".join(linhas)
-
-# Exemplo de teste local (só se quiser testar por fora)
-# print(gerar_resumo("+556292782150", periodo="diario"))
