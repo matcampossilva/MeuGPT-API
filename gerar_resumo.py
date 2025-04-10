@@ -13,6 +13,7 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     dados = aba.get_all_records()
 
     hoje = datetime.now().astimezone(pytz.timezone("America/Sao_Paulo"))
+    print(f"[DEBUG] Hoje é {hoje.date()} no servidor")
 
     resumo = defaultdict(lambda: {"total": 0.0, "formas": defaultdict(float)})
     total_geral = 0.0
