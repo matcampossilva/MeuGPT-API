@@ -7,7 +7,6 @@ from planilhas import get_gastos_diarios
 
 load_dotenv()
 
-# === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal"):
     numero_usuario = numero_usuario.replace("whatsapp:", "").strip()
     aba = get_gastos_diarios()
@@ -19,15 +18,16 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     total_geral = 0.0
 
     for linha in dados:
-        if linha.get("NÚMERO") != numero_usuario:
+        if linha.get("NÚMERO", "").strip() != numero_usuario:
             continue
 
         try:
-            data = datetime.strptime(linha.get("DATA DO GASTO", ""), "%d/%m/%Y")
-        except:
+            data_str = linha.get("DATA DO GASTO", "")
+            data = datetime.strptime(data_str, "%d/%m/%Y")
+        except Exception as e:
+            print(f"[ERRO] Data inválida: {linha.get('DATA DO GASTO')} | {e}")
             continue
 
-        # DEBUG DE DATA — AGORA VEM, INFERNO
         print(f"[DEBUG] data={data.date()} | hoje={hoje.date()}")
 
         if periodo == "diario" and data.date() != hoje.date():
@@ -36,14 +36,14 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
             continue
 
         categoria = linha.get("CATEGORIA", "A DEFINIR").strip()
-        valor_raw = linha.get("VALOR (R$)", 0)
+        valor_bruto = str(linha.get("VALOR (R$)", "0")).replace("R$", "").replace(",", ".").strip()
 
         try:
-            valor = float(str(valor_raw).replace("R$", "").replace(",", ".").strip())
+            valor = float(valor_bruto)
             if valor < 0:
                 continue
-        except Exception:
-            print(f"[ERRO] Valor inválido: {valor_raw}")
+        except Exception as e:
+            print(f"[ERRO] Valor inválido: {linha.get('VALOR (R$)')} | {e}")
             continue
 
         forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
@@ -52,7 +52,6 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
         resumo[categoria]["formas"][forma] += valor
         total_geral += valor
 
-    # === FORMATAÇÃO DO TEXTO ===
     if total_geral == 0.0:
         return f"Resumo {periodo} dos seus gastos:\n\nTotal geral: R$0.00"
 
