@@ -115,7 +115,7 @@ def extrair_gastos(texto):
     linhas = texto.split("\n")
     gastos = []
     for linha in linhas:
-        match = re.match(r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(crédito|débito|pix|boleto)", linha.strip(), re.IGNORECASE)
+        match = re.match(r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(crédito|débito|pix|boleto)\s*[-–—]?\s*(.*)?", linha.strip(), re.IGNORECASE)
         if match:
             valor_raw = match.group(1).replace(".", "").replace(",", ".")
             descricao = match.group(2).strip()
@@ -125,7 +125,8 @@ def extrair_gastos(texto):
                 gastos.append({
                     "descricao": descricao,
                     "valor": valor,
-                    "forma_pagamento": forma
+                    "forma_pagamento": forma,
+                    "categoria": categoria.strip().capitalize() if categoria else None
                 })
             except ValueError:
                 continue
@@ -338,7 +339,8 @@ async def whatsapp_webhook(request: Request):
             if ":" in linha:
                 partes = linha.split(":")
                 descricao = partes[0].strip().lower()
-                categoria = partes[1].strip().capitalize()
+                # Usa categoria já registrada no objeto (se tiver)
+                categoria = gasto.get("categoria")
                 categorias_personalizadas[descricao] = categoria
 
         # Se o usuário só disse "Pode seguir", sem redefinir categorias
@@ -351,9 +353,16 @@ async def whatsapp_webhook(request: Request):
             valor = gasto['valor']
             forma = gasto['forma_pagamento']
 
+            # 1. Usa a categoria embutida (vinda da extração)
+            categoria = gasto.get("categoria")
+
+            # 2. Se o usuário personalizou agora, isso sobrescreve
             chave_descricao = descricao.lower()
             categoria_bruta = categorias_personalizadas.get(chave_descricao)
-            categoria = categoria_bruta.capitalize() if categoria_bruta else None
+            if not categoria and categoria_bruta:
+                categoria = categoria_bruta.capitalize()
+
+            categoria = categoria or None
 
             resultado = registrar_gasto(name, from_number, descricao, float(valor), forma.strip(), categoria_manual=categoria)
             gastos_final.append(f"{descricao.capitalize()}: {resultado['categoria']}")
