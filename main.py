@@ -10,7 +10,7 @@ from datetime import datetime
 import pytz
 import re
 import random
-from gastos import registrar_gasto
+from gastos import registrar_gasto, categorizar
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
