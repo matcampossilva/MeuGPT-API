@@ -115,22 +115,29 @@ def extrair_gastos(texto):
     linhas = texto.split("\n")
     gastos = []
     for linha in linhas:
-        match = re.match(r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(crédito|débito|pix|boleto)\s*[-–—]?\s*(.*)?", linha.strip(), re.IGNORECASE)
+        match = re.match(
+            r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(.*?)\s*[-–—]\s*(crédito|débito|pix|boleto)\s*[-–—]?\s*(.*)?",
+            linha.strip(),
+            re.IGNORECASE
+        )
         if match:
             valor_raw = match.group(1).replace(".", "").replace(",", ".")
             descricao = match.group(2).strip()
             forma = match.group(3).strip().capitalize()
+            categoria = match.group(4).strip().capitalize() if match.group(4) else None
+
             try:
                 valor = float(valor_raw)
                 gastos.append({
                     "descricao": descricao,
                     "valor": valor,
                     "forma_pagamento": forma,
-                    "categoria": categoria.strip().capitalize() if categoria else None
+                    "categoria": categoria
                 })
             except ValueError:
                 continue
     return gastos
+
 
 def precisa_direcionamento(msg):
     frases_vagas = [
