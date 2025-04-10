@@ -285,10 +285,18 @@ async def whatsapp_webhook(request: Request):
     if detectar_gastos(incoming_msg):
         gastos = extrair_gastos(incoming_msg)
         if gastos:
+            categorias_sugeridas = {}
+            for gasto in gastos:
+                descricao = gasto["descricao"].strip().lower()
+                categoria_sug = categorizar(descricao) or "A DEFINIR"
+                categorias_sugeridas[descricao] = categoria_sug
+
             estado = {
                 "ultimo_fluxo": "aguardando_categorias",
-                "gastos_temp": gastos
+                "gastos_temp": gastos,
+                "categorias_sugeridas": categorias_sugeridas
             }
+
             salvar_estado(from_number, estado)
 
             resumo = "Certo! Identifiquei os seguintes gastos:\n"
@@ -322,6 +330,8 @@ async def whatsapp_webhook(request: Request):
     estado = carregar_estado(from_number)
     if estado.get("ultimo_fluxo") == "aguardando_categorias":
         gastos = estado.get("gastos_temp", [])
+        categorias_sugeridas = estado.get("categorias_sugeridas", {})
+
         categorias_personalizadas = {}
 
         for linha in incoming_msg.split("\n"):
@@ -331,13 +341,16 @@ async def whatsapp_webhook(request: Request):
                 categoria = partes[1].strip().capitalize()
                 categorias_personalizadas[descricao] = categoria
 
+        # Se o usuário só disse "Pode seguir", sem redefinir categorias
+        if not categorias_personalizadas and gastos:
+            categorias_personalizadas = categorias_sugeridas
+
         gastos_final = []
         for gasto in gastos:
             descricao = gasto['descricao'].strip()
             valor = gasto['valor']
             forma = gasto['forma_pagamento']
 
-            # Corrige para comparação precisa
             chave_descricao = descricao.lower()
             categoria_bruta = categorias_personalizadas.get(chave_descricao)
             categoria = categoria_bruta.capitalize() if categoria_bruta else None
@@ -348,12 +361,7 @@ async def whatsapp_webhook(request: Request):
         resetar_estado(from_number)
         send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
 
-        # Gerar resumo diário automático
-        from gerar_resumo import gerar_resumo
-        resumo_automatico = gerar_resumo(numero_usuario=from_number, periodo="diario")
-        send_message(from_number, resumo_automatico)
-
-        return {"status": "gastos registrados e resumo enviado"}
+        return {"status": "gastos registrados com ajuste"}
     
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
