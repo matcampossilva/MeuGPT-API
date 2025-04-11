@@ -19,7 +19,7 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     total_geral = 0.0
 
     for linha in dados:
-        if linha.get("NÚMERO", "").strip() != numero_usuario:
+        if str(linha.get("NÚMERO", "")).strip() != numero_usuario:
             continue
 
         try:
