@@ -19,6 +19,10 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
     total_geral = 0.0
 
     for linha in dados:
+        print(f"[DEBUG] Linha bruta: {linha}")
+        print(f"[DEBUG] NÚMERO: {linha.get('NÚMERO')} == {numero_usuario}")
+        print(f"[DEBUG] DATA DO GASTO: {linha.get('DATA DO GASTO')}")
+
         if str(linha.get("NÚMERO", "")).strip() != numero_usuario:
             continue
 
