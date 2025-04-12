@@ -468,6 +468,8 @@ async def whatsapp_webhook(request: Request):
 
     increment_interactions(sheet, row)
 
+    primeiro_nome = name.split()[0] if name else "irmão"
+    reply = reply.replace("[Nome]", primeiro_nome)
     send_message(from_number, reply)
 
     # === Detectar emoção e possível relação com aumento de gasto ===
