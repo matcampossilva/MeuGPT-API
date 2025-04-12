@@ -454,6 +454,13 @@ async def whatsapp_webhook(request: Request):
     )
 
     reply = response["choices"][0]["message"]["content"].strip()
+    # Substitui [Nome] pelo nome real salvo na planilha
+    if "[Nome]" in reply:
+        if name and name.strip():
+            primeiro_nome = name.split()[0]
+            reply = reply.replace("[Nome]", primeiro_nome)
+        else:
+            reply = reply.replace("[Nome]", "")  # Remove placeholder sem inventar apelido
 
     with open(conversa_path, "a") as f:
         f.write(f"Conselheiro: {reply}\n")
@@ -468,8 +475,6 @@ async def whatsapp_webhook(request: Request):
 
     increment_interactions(sheet, row)
 
-    primeiro_nome = name.split()[0] if name else "irmão"
-    reply = reply.replace("[Nome]", primeiro_nome)
     send_message(from_number, reply)
 
     # === Detectar emoção e possível relação com aumento de gasto ===
