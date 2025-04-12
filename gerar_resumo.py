@@ -7,6 +7,7 @@ from planilhas import get_gastos_diarios
 
 load_dotenv()
 
+# === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal"):
     numero_usuario = numero_usuario.replace("whatsapp:", "").strip()
     aba = get_gastos_diarios()
@@ -41,22 +42,24 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
             continue
 
         categoria = linha.get("CATEGORIA", "A DEFINIR").strip()
-        valor_bruto = str(linha.get("VALOR (R$)", "0")).replace("R$", "").replace(",", ".").strip()
+        forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
+        valor_raw = linha.get("VALOR (R$)", 0)
 
         try:
-            valor = float(valor_bruto)
+            valor_str = str(valor_raw).replace("R$", "").replace(",", ".").strip()
+            valor = float(valor_str)
+            print(f"[DEBUG] valor_str={valor_str} | valor={valor}")
             if valor < 0:
                 continue
         except Exception as e:
-            print(f"[ERRO] Valor inválido: {linha.get('VALOR (R$)')} | {e}")
+            print(f"[ERRO] Valor inválido: {valor_raw} | {e}")
             continue
-
-        forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
 
         resumo[categoria]["total"] += valor
         resumo[categoria]["formas"][forma] += valor
         total_geral += valor
 
+    # === FORMATAÇÃO DO TEXTO ===
     if total_geral == 0.0:
         return f"Resumo {periodo} dos seus gastos:\n\nTotal geral: R$0.00"
 
