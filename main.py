@@ -200,7 +200,7 @@ async def whatsapp_webhook(request: Request):
 
     # === ⬇⬇ COMANDOS ESPECIAIS DO USUÁRIO (já funcionando no WhatsApp) ===
     if incoming_msg.startswith("/resumo"):
-        resumo = gerar_resumo(numero_usuario=from_number, periodo="diario")
+        resumo = gerar_resumo(from_number, periodo="diario")
         send_message(from_number, resumo)
         return {"status": "resumo enviado"}
 
@@ -331,7 +331,7 @@ async def whatsapp_webhook(request: Request):
         return {"status": "resposta inicial direcionadora"}
 
     if "resumo" in incoming_msg.lower():
-        resumo = gerar_resumo(numero_usuario=from_number, periodo="diário")
+        resumo = gerar_resumo(from_number, periodo="diario")
         send_message(from_number, resumo)
         return {"status": "resumo enviado"}
 
