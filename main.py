@@ -299,7 +299,7 @@ async def whatsapp_webhook(request: Request):
         primeiro_nome = name.split()[0]
         welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nTô aqui pra te ajudar a organizar suas finanças e sua vida, sempre respeitando esta hierarquia: Deus, sua família e seu trabalho.\n\nPosso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar.\n\nPor onde quer começar?"""
         send_message(from_number, welcome_msg)
-        return {"status": "cadastro completo"}
+        # Fluxo continua para responder já na mesma mensagem
     
     if detectar_gastos(incoming_msg):
         gastos = extrair_gastos(incoming_msg)
