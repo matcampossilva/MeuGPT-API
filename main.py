@@ -387,8 +387,16 @@ async def whatsapp_webhook(request: Request):
     
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
-    with open(conversa_path, "a") as f:
-        f.write(f"Conselheiro: {reply.replace('[Nome]', primeiro_nome)}\n")
+   # Só grava se 'reply' já foi gerado (evita erro antes da resposta da IA)
+    if 'reply' in locals():
+        if "[Nome]" in reply:
+            if name and name.strip():
+                primeiro_nome = name.split()[0]
+                reply = reply.replace("[Nome]", primeiro_nome)
+            else:
+                reply = reply.replace("[Nome]", "")
+        with open(conversa_path, "a") as f:
+            f.write(f"Conselheiro: {reply}\n")
 
     with open(conversa_path, "r") as f:
         linhas_conversa = f.readlines()
