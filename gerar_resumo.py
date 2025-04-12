@@ -8,7 +8,7 @@ from planilhas import get_gastos_diarios
 load_dotenv()
 
 # === GERA RESUMO ===
-def gerar_resumo(numero_usuario, periodo="mensal"):
+def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
     numero_usuario = numero_usuario.replace("whatsapp:", "").strip()
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
@@ -38,6 +38,9 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
 
         if periodo == "diario" and data.date() != hoje.date():
             continue
+        if periodo == "custom" and data_personalizada and data.date() != data_personalizada:
+            continue
+
         if periodo == "mensal" and (data.month != hoje.month or data.year != hoje.year):
             continue
 
@@ -46,8 +49,7 @@ def gerar_resumo(numero_usuario, periodo="mensal"):
         valor_raw = linha.get("VALOR (R$)", 0)
 
         try:
-            valor_str = str(valor_raw).replace("R$", "").replace(",", ".").strip()
-            valor = float(valor_str)
+            valor = float(valor_raw)
             print(f"[DEBUG] valor_str={valor_str} | valor={valor}")
             if valor < 0:
                 continue

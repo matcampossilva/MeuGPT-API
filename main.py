@@ -13,6 +13,7 @@ import random
 from gastos import registrar_gasto, categorizar
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
+from datetime import timedelta
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
@@ -196,7 +197,17 @@ async def whatsapp_webhook(request: Request):
         limites = verificar_limites(from_number)
         send_message(from_number, resumo + "\n\n" + limites)
         return {"status": "resumo mensal enviado"}
+    
+    if any(t in incoming_msg.lower() for t in ["resumo do dia", "resumo de hoje", "quanto gastei hoje"]):
+        resumo = gerar_resumo(from_number, periodo="diario")
+        send_message(from_number, resumo)
+        return {"status": "resumo hoje enviado"}
 
+    if any(t in incoming_msg.lower() for t in ["resumo de ontem", "quanto gastei ontem"]):
+        ontem = datetime.now(pytz.timezone("America/Sao_Paulo")) - timedelta(days=1)
+        resumo = gerar_resumo(from_number, periodo="custom", data_personalizada=ontem.date())
+        send_message(from_number, resumo)
+        return {"status": "resumo ontem enviado"}
 
     # === ⬇⬇ COMANDOS ESPECIAIS DO USUÁRIO (já funcionando no WhatsApp) ===
     if incoming_msg.startswith("/resumo"):
@@ -330,11 +341,6 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, random.choice(respostas))
         return {"status": "resposta inicial direcionadora"}
 
-    if "resumo" in incoming_msg.lower():
-        resumo = gerar_resumo(from_number, periodo="diario")
-        send_message(from_number, resumo)
-        return {"status": "resumo enviado"}
-
     estado = carregar_estado(from_number)
     if estado.get("ultimo_fluxo") == "aguardando_categorias":
         gastos = estado.get("gastos_temp", [])
@@ -382,7 +388,7 @@ async def whatsapp_webhook(request: Request):
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
     with open(conversa_path, "a") as f:
-        f.write(f"Usuário: {incoming_msg}\n")
+        f.write(f"Conselheiro: {reply.replace('[Nome]', primeiro_nome)}\n")
 
     with open(conversa_path, "r") as f:
         linhas_conversa = f.readlines()
