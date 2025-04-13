@@ -71,10 +71,10 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
 
     linhas = [f"Resumo {periodo} dos seus gastos:", ""]
     for cat, dados in resumo.items():
-        linhas.append(f"{cat}: R${dados['total']:.2f}")
+        linhas.append(f"{cat}: R${dados['total']:.2f}".replace(".", ","))
         for forma, val in dados["formas"].items():
-            linhas.append(f"  - {forma}: R${val:.2f}")
+            linhas.append(f"  - {forma}: R${val:.2f}".replace(".", ","))
         linhas.append("")
 
-    linhas.append(f"Total geral: R${total_geral:.2f}")
+    linhas.append(f"Total geral: R${total_geral:.2f}".replace(".", ","))
     return "\n".join(linhas)

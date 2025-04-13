@@ -198,7 +198,11 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, resumo + "\n\n" + limites)
         return {"status": "resumo mensal enviado"}
     
-    if any(t in incoming_msg.lower() for t in ["resumo do dia", "resumo de hoje", "quanto gastei hoje"]):
+    if any(t in incoming_msg.lower() for t in [
+        "resumo do dia", "resumo de hoje", "quanto gastei hoje",
+        "novo resumo", "resumo agora", "resumo atualizado",
+        "quero o resumo", "meu resumo", "resumo aqui"
+    ]):
         resumo = gerar_resumo(from_number, periodo="diario")
         send_message(from_number, resumo)
         return {"status": "resumo hoje enviado"}
