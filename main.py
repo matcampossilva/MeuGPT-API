@@ -180,6 +180,8 @@ async def whatsapp_webhook(request: Request):
     from_number = format_number(form["From"])
     estado = carregar_estado(from_number)
     ultimo_fluxo = estado.get("ultimo_fluxo")
+    status_usuario = get_user_status(from_number)
+    sheet_usuario = get_user_sheet(from_number)
 
     if quer_lista_comandos(incoming_msg):
         comandos = (
@@ -251,8 +253,8 @@ async def whatsapp_webhook(request: Request):
     if not os.path.exists("conversas"):
         os.makedirs("conversas")
 
-    status = get_user_status(from_number)
-    sheet = get_user_sheet(from_number)
+    status = status_usuario
+    sheet = sheet_usuario
     values = sheet.col_values(2)
     row = values.index(from_number) + 1 if from_number in values else None
    
