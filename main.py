@@ -387,6 +387,16 @@ async def whatsapp_webhook(request: Request):
     
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
+    if not os.path.exists("conversas"):
+        os.makedirs("conversas")
+
+    if not os.path.isfile(conversa_path):
+        with open(conversa_path, "w") as f:
+            f.write("")
+
+    with open(conversa_path, "r") as f:
+        linhas_conversa = f.readlines()
+
    # Só grava se 'reply' já foi gerado (evita erro antes da resposta da IA)
     if 'reply' in locals():
         if "[Nome]" in reply:
@@ -397,9 +407,6 @@ async def whatsapp_webhook(request: Request):
                 reply = reply.replace("[Nome]", "")
         with open(conversa_path, "a") as f:
             f.write(f"Conselheiro: {reply}\n")
-
-    with open(conversa_path, "r") as f:
-        linhas_conversa = f.readlines()
 
     historico_filtrado = [
         linha for linha in linhas_conversa
