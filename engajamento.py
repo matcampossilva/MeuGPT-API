@@ -76,3 +76,7 @@ def avaliar_engajamento(numero, texto):
 # === EXEMPLO ===
 if __name__ == "__main__":
     print(avaliar_engajamento("+5562999022021", "Hoje não gastei nada, só ajudei um mendigo com 10 reais."))
+
+def registrar_estrela(numero, motivo):
+    # função provisória vazia para evitar erro
+    print(f"Estrela registrada para {numero} pelo motivo: {motivo}")

@@ -309,6 +309,20 @@ async def whatsapp_webhook(request: Request):
         return {"status": "cadastro completo"}
         # Fluxo continua para responder já na mesma mensagem
     
+    if "esqueci" in incoming_msg.lower() and detectar_gastos(incoming_msg):
+        estado_anterior = carregar_estado(from_number)
+        if estado_anterior and estado_anterior.get("gastos_temp"):
+            gastos_novos = extrair_gastos(incoming_msg)
+            if gastos_novos:
+                gastos_anteriores = estado_anterior["gastos_temp"]
+                gastos_totais = gastos_anteriores + gastos_novos
+
+                estado_anterior["gastos_temp"] = gastos_totais
+                salvar_estado(from_number, estado_anterior)
+
+                send_message(from_number, "Novos gastos adicionados! Deseja ajustar categorias ou posso seguir?")
+                return {"status": "novos gastos adicionados"}
+
     if detectar_gastos(incoming_msg):
         gastos = extrair_gastos(incoming_msg)
         if gastos:
