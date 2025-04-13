@@ -324,6 +324,29 @@ async def whatsapp_webhook(request: Request):
 
                 send_message(from_number, "Novos gastos adicionados! Deseja ajustar categorias ou posso seguir?")
                 return {"status": "novos gastos adicionados"}
+            
+    elif "pode seguir" in incoming_msg.lower():
+        estado = carregar_estado(from_number)
+        if estado.get("gastos_temp"):
+            gastos = estado["gastos_temp"]
+            categorias_sugeridas = estado.get("categorias_sugeridas", {})
+            gastos_final = []
+
+            for gasto in gastos:
+                descricao = gasto['descricao'].capitalize()
+                valor = gasto['valor']
+                forma = gasto['forma_pagamento']
+
+                chave_descricao = descricao.lower()
+                categoria = gasto.get("categoria") or categorias_sugeridas.get(chave_descricao) or "A DEFINIR"
+
+                resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
+                valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
+
+            resetar_estado(from_number)
+            send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
+            return {"status": "gastos registrados com ajuste"}
 
     if detectar_gastos(incoming_msg):
         gastos = extrair_gastos(incoming_msg)
