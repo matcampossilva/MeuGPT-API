@@ -42,7 +42,6 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
             continue
         if periodo == "custom" and data_personalizada and data.date() != data_personalizada:
             continue
-
         if periodo == "mensal" and (data.month != hoje.month or data.year != hoje.year):
             continue
 
@@ -53,7 +52,6 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         try:
             valor_str = str(valor_raw).replace("R$ ", "").replace("R$", "").replace(",", ".").strip()
             valor = float(valor_str)
-
             print(f"[DEBUG] valor_str={valor_str} | valor={valor}")
             if valor < 0:
                 continue
@@ -67,14 +65,17 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
 
     # === FORMATAÇÃO DO TEXTO ===
     if total_geral == 0.0:
-        return f"Resumo {periodo} dos seus gastos:\n\nTotal geral: R$0.00"
+        return f"Resumo {periodo} dos seus gastos:\n\nTotal geral: R$0,00"
+
+    def formatar_valor(valor):
+        return f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     linhas = [f"Resumo {periodo} dos seus gastos:", ""]
     for cat, dados in resumo.items():
-        linhas.append(f"{cat}: R${dados['total']:.2f}".replace(".", ","))
+        linhas.append(f"{cat}: {formatar_valor(dados['total'])}")
         for forma, val in dados["formas"].items():
-            linhas.append(f"  - {forma}: R${val:.2f}".replace(".", ","))
+            linhas.append(f"  - {forma}: {formatar_valor(val)}")
         linhas.append("")
 
-    linhas.append(f"Total geral: R${total_geral:.2f}".replace(".", ","))
+    linhas.append(f"Total geral: {formatar_valor(total_geral)}")
     return "\n".join(linhas)

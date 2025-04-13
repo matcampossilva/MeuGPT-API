@@ -368,11 +368,13 @@ async def whatsapp_webhook(request: Request):
         if not categorias_personalizadas and gastos:
             categorias_personalizadas = categorias_sugeridas
 
-        gastos_final = []
+        gastos_formatados = []
         for gasto in gastos:
-            descricao = gasto['descricao'].strip()
+            descricao = gasto['descricao'].capitalize()
             valor = gasto['valor']
-            forma = gasto['forma_pagamento']
+            categoria = resultado['categoria']
+            valor_formatado = f"R${valor:,.2f}".replace(".", ",").replace(",", ".", 1)
+            gastos_formatados.append(f"{descricao} ({valor_formatado}): {categoria}")
 
             # 1. Usa a categoria embutida (vinda da extração)
             categoria = gasto.get("categoria")
@@ -389,7 +391,7 @@ async def whatsapp_webhook(request: Request):
             gastos_final.append(f"{descricao.capitalize()}: {resultado['categoria']}")
 
         resetar_estado(from_number)
-        send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
+        send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_formatados))
 
         return {"status": "gastos registrados com ajuste"}
     
