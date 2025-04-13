@@ -320,6 +320,7 @@ async def whatsapp_webhook(request: Request):
                 gastos_totais = gastos_anteriores + gastos_novos
 
                 estado_anterior["gastos_temp"] = gastos_totais
+                estado_anterior["ultimo_fluxo"] = "aguardando_categorias"
                 salvar_estado(from_number, estado_anterior)
 
                 send_message(from_number, "Novos gastos adicionados! Deseja ajustar categorias ou posso seguir?")
