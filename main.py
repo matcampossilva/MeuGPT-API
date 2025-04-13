@@ -204,7 +204,7 @@ async def whatsapp_webhook(request: Request):
         "resumo do dia", "resumo de hoje", "quanto gastei hoje",
         "novo resumo", "resumo agora", "resumo atualizado",
         "quero o resumo", "meu resumo", "resumo aqui"
-    ]) or ultimo_fluxo == "aguardando_categorias":
+    ]):
 
         resumo = gerar_resumo(from_number, periodo="diario")
         send_message(from_number, resumo)
@@ -368,33 +368,24 @@ async def whatsapp_webhook(request: Request):
         if not categorias_personalizadas and gastos:
             categorias_personalizadas = categorias_sugeridas
 
-        gastos_formatados = []
+        gastos_final = []
         for gasto in gastos:
             descricao = gasto['descricao'].capitalize()
-            valor = float(str(gasto['valor']).replace(".", "").replace(",", "."))
-            categoria = resultado['categoria']
-            valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            gastos_formatados.append(f"{descricao} ({valor_formatado}): {categoria}")
-
-            # 1. Usa a categoria embutida (vinda da extração)
-            categoria = gasto.get("categoria")
-
-            # 2. Se o usuário personalizou agora, isso sobrescreve
+            valor = gasto['valor']  # já está correto aqui, não precisa converter de novo
+            forma = gasto['forma_pagamento']
+    
             chave_descricao = descricao.lower()
-            categoria_bruta = categorias_personalizadas.get(chave_descricao)
-            if not categoria and categoria_bruta:
-                categoria = categoria_bruta.capitalize()
-
-            categoria = categoria or None
-
-            resultado = registrar_gasto(name, from_number, descricao, float(valor), forma.strip(), categoria_manual=categoria)
-            gastos_final.append(f"{descricao.capitalize()}: {resultado['categoria']}")
+            categoria = gasto.get("categoria") or categorias_personalizadas.get(chave_descricao) or "A DEFINIR"
+    
+            resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
+            valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
 
         resetar_estado(from_number)
-        send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_formatados))
+        send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
 
         return {"status": "gastos registrados com ajuste"}
-    
+
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
     if not os.path.exists("conversas"):
