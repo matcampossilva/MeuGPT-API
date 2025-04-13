@@ -24,7 +24,11 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         print(f"[DEBUG] NÚMERO: {linha.get('NÚMERO')} == {numero_usuario}")
         print(f"[DEBUG] DATA DO GASTO: {linha.get('DATA DO GASTO')}")
 
-        if str(linha.get("NÚMERO", "")).strip() != numero_usuario:
+        numero_linha = str(linha.get("NÚMERO", "")).strip().replace("+", "").replace("whatsapp:", "")
+        numero_requisicao = numero_usuario.replace("+", "").replace("whatsapp:", "").strip()
+        if numero_linha != numero_requisicao:
+            continue
+
             continue
 
         try:
