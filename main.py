@@ -371,9 +371,9 @@ async def whatsapp_webhook(request: Request):
         gastos_formatados = []
         for gasto in gastos:
             descricao = gasto['descricao'].capitalize()
-            valor = gasto['valor']
+            valor = float(str(gasto['valor']).replace(".", "").replace(",", "."))
             categoria = resultado['categoria']
-            valor_formatado = f"R${valor:,.2f}".replace(".", ",").replace(",", ".", 1)
+            valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             gastos_formatados.append(f"{descricao} ({valor_formatado}): {categoria}")
 
             # 1. Usa a categoria embutida (vinda da extração)
