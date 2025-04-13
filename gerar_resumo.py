@@ -29,8 +29,6 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         if numero_linha != numero_requisicao:
             continue
 
-            continue
-
         try:
             data_str = linha.get("DATA DO GASTO", "")
             data = datetime.strptime(data_str, "%d/%m/%Y")
@@ -53,7 +51,9 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         valor_raw = linha.get("VALOR (R$)", 0)
 
         try:
-            valor = float(valor_raw)
+            valor_str = str(valor_raw).replace("R$ ", "").replace("R$", "").replace(",", ".").strip()
+            valor = float(valor_str)
+
             print(f"[DEBUG] valor_str={valor_str} | valor={valor}")
             if valor < 0:
                 continue
