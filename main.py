@@ -178,6 +178,8 @@ async def whatsapp_webhook(request: Request):
     form = await request.form()
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
+    estado = carregar_estado(from_number)
+    ultimo_fluxo = estado.get("ultimo_fluxo")
 
     if quer_lista_comandos(incoming_msg):
         comandos = (
@@ -202,7 +204,8 @@ async def whatsapp_webhook(request: Request):
         "resumo do dia", "resumo de hoje", "quanto gastei hoje",
         "novo resumo", "resumo agora", "resumo atualizado",
         "quero o resumo", "meu resumo", "resumo aqui"
-    ]):
+    ]) or ultimo_fluxo == "aguardando_categorias":
+
         resumo = gerar_resumo(from_number, periodo="diario")
         send_message(from_number, resumo)
         return {"status": "resumo hoje enviado"}
@@ -445,6 +448,11 @@ async def whatsapp_webhook(request: Request):
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=3, categoria=categoria_detectada)
 
     mensagens = [{"role": "system", "content": prompt_base}]
+    if ultimo_fluxo:
+        mensagens.append({
+            "role": "user",
+            "content": f"O usuário está no fluxo: {ultimo_fluxo}. Responda de forma coerente com isso."
+        })
     if contexto_resgatado:
         mensagens.append({"role": "user", "content": f"Conhecimento relevante:\n{contexto_resgatado}"})
 
