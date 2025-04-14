@@ -257,7 +257,7 @@ async def whatsapp_webhook(request: Request):
     sheet = sheet_usuario
     values = sheet.col_values(2)
     row = values.index(from_number) + 1 if from_number in values else None
-   
+
     if verificar_upgrade_automatico(from_number):
         send_message(from_number,
             "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌")
@@ -294,7 +294,7 @@ async def whatsapp_webhook(request: Request):
             email = captured_email
 
         if not name and not email:
-            send_message(from_number, "Olá! 👋🏼 Que bom ter você aqui.\n\nSou seu Conselheiro Financeiro pessoal, criado pelo Matheus Campos, CFP.\nPara começarmos nossa jornada juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
+            send_message(from_number, "Olá! 👋🏼 Que bom ter você aqui.\n\nSou seu Conselheiro Financeiro pessoal, criado pelo Matheus Campos, CFP®.\nPara começarmos nossa jornada juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?")
             return {"status": "aguardando nome e email"}
 
         if not name:
@@ -309,76 +309,22 @@ async def whatsapp_webhook(request: Request):
         welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nTô aqui pra te ajudar a organizar suas finanças e sua vida, sempre respeitando esta hierarquia: Deus, sua família e seu trabalho.\n\nPosso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar.\n\nPor onde quer começar?"""
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
-        # Fluxo continua para responder já na mesma mensagem
     
-    if "esqueci" in incoming_msg.lower() and detectar_gastos(incoming_msg):
-        estado_anterior = carregar_estado(from_number)
-
-        gastos_novos = extrair_gastos(incoming_msg)
-        if not gastos_novos:
-            send_message(from_number, "Não encontrei novos gastos para adicionar.")
-            return {"status": "sem novos gastos"}
-
-        gastos_final = []
-        for gasto in gastos_novos:
-            descricao = gasto['descricao'].capitalize()
-            valor = gasto['valor']
-            forma = gasto['forma_pagamento']
-            categoria = categorizar(descricao.lower()) or "A DEFINIR"
-
-            resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
-            valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
-
-        if estado_anterior and estado_anterior.get("gastos_temp"):
-            estado_anterior["gastos_temp"] += gastos_novos
-        else:
-            estado_anterior = {
-                "gastos_temp": gastos_novos,
-                "categorias_sugeridas": {},
-            }
-
-        estado_anterior["ultimo_fluxo"] = "aguardando_categorias"
-        salvar_estado(from_number, estado_anterior)
-
-        send_message(from_number, "Novos gastos registrados com sucesso:\n" + "\n".join(gastos_final))
-        return {"status": "novos gastos registrados diretamente"}
-
-    elif "pode seguir" in incoming_msg.lower():
-        estado = carregar_estado(from_number)
-        if estado.get("gastos_temp"):
-            gastos = estado["gastos_temp"]
-            categorias_sugeridas = estado.get("categorias_sugeridas", {})
-            gastos_final = []
-
-            for gasto in gastos:
-                descricao = gasto['descricao'].capitalize()
-                valor = gasto['valor']
-                forma = gasto['forma_pagamento']
-
-                chave_descricao = descricao.lower()
-                categoria = gasto.get("categoria") or categorias_sugeridas.get(chave_descricao) or "A DEFINIR"
-
-                resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
-                valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-                gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
-
-            estado["gastos_temp"] = []
-            salvar_estado(from_number, estado)
-            send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
-            return {"status": "gastos registrados com ajuste"}
-
     if detectar_gastos(incoming_msg):
         estado_anterior = carregar_estado(from_number)
         gastos_novos = extrair_gastos(incoming_msg)
 
         if estado_anterior and estado_anterior.get("gastos_temp"):
+            # Já existem gastos anteriores no estado, somar
             gastos_totais = estado_anterior["gastos_temp"] + gastos_novos
         else:
+            # Primeiros gastos do dia
             gastos_totais = gastos_novos
             estado_anterior = {}
 
-        categorias_sugeridas = {}
+        categorias_sugeridas = estado_anterior.get("categorias_sugeridas", {})
+
+        # Atualiza sugestões com base nos novos gastos
         for gasto in gastos_novos:
             descricao = gasto["descricao"].strip().lower()
             categoria_sug = categorizar(descricao) or "A DEFINIR"
@@ -407,48 +353,28 @@ async def whatsapp_webhook(request: Request):
 
         return {"status": "gastos novos acumulados"}
 
-    if precisa_direcionamento(incoming_msg):
-        respostas = [
-            "Verdade, posso te ajudar sim! 👊\n\nSe quiser começar pelos seus gastos, me manda o que foi, quanto custou, como pagou (crédito, débito, PIX…) e em que categoria encaixa (tipo Alimentação, Saúde…). Mas se a dúvida for outra, manda também. Eu te ajudo.",
-            "Claro! Me conta: você quer registrar algum gasto, organizar sua rotina, resolver uma dívida, ou só precisa de direção? Me dá uma ideia e eu entro com o plano.",
-            "Tô aqui pra isso! Podemos começar por um gasto recente, ou você pode me perguntar sobre qualquer parte da sua vida financeira (ou espiritual). Manda ver!",
-            "Sim, posso te ajudar. 👀 Só preciso saber o que você precisa agora: anotar gastos? Falar sobre planejamento? Organização da vida? Joga aqui."
-        ]
-        send_message(from_number, random.choice(respostas))
-        return {"status": "resposta inicial direcionadora"}
+    elif "pode seguir" in incoming_msg.lower():
+        estado = carregar_estado(from_number)
+        if estado.get("gastos_temp"):
+            gastos = estado["gastos_temp"]
+            categorias_sugeridas = estado.get("categorias_sugeridas", {})
+            gastos_final = []
 
-    estado = carregar_estado(from_number)
-    if estado.get("ultimo_fluxo") == "aguardando_categorias":
-        gastos = estado.get("gastos_temp", [])
-        categorias_sugeridas = estado.get("categorias_sugeridas", {})
+            for gasto in gastos:
+                descricao = gasto['descricao'].capitalize()
+                valor = gasto['valor']
+                forma = gasto['forma_pagamento']
 
-        categorias_personalizadas = {}
+                chave_descricao = descricao.lower()
+                categoria = gasto.get("categoria") or categorias_sugeridas.get(chave_descricao) or "A DEFINIR"
 
-        for linha in incoming_msg.split("\n"):
-            if ":" in linha:
-                partes = linha.split(":")
-                descricao = partes[0].strip().lower()
-                categoria = partes[1].strip().capitalize()
-                categorias_personalizadas[descricao] = categoria
+                resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
+                valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
 
-        if not categorias_personalizadas and gastos:
-            categorias_personalizadas = categorias_sugeridas
-
-        gastos_final = []
-        for gasto in gastos:
-            descricao = gasto['descricao'].capitalize()
-            valor = gasto['valor']
-            forma = gasto['forma_pagamento']
-            chave_descricao = descricao.lower()
-            categoria = categorias_personalizadas.get(chave_descricao) or gasto.get("categoria") or categorias_sugeridas.get(chave_descricao) or "A DEFINIR"
-
-            resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
-            valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
-
-        resetar_estado(from_number)
-        send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
-        return {"status": "gastos registrados com ajuste"}
+            resetar_estado(from_number)
+            send_message(from_number, "Gastos registrados:\n" + "\n".join(gastos_final))
+            return {"status": "gastos registrados com ajuste"}
 
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
