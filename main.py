@@ -111,6 +111,13 @@ def detectar_gastos(texto):
     padrao = r"\d{1,3}(?:[\.,]\d{2})?\s*[-–—]\s*.+?\s*[-–—]\s*(crédito|débito|pix|boleto)"
     return bool(re.search(padrao, texto, re.IGNORECASE))
 
+def detectar_gastos_com_categoria_direta(texto):
+    return (
+        ("gastei" in texto.lower() or "gasto" in texto.lower())
+        and "categoria" in texto.lower()
+        and any(m in texto.lower() for m in ["crédito", "débito", "pix", "boleto"])
+    )
+
 def extrair_gastos(texto):
     linhas = texto.split("\n")
     gastos = []
@@ -374,6 +381,52 @@ async def whatsapp_webhook(request: Request):
 
         send_message(from_number, mensagem.strip())
         return {"status": "gastos processados"}
+    
+    if detectar_gastos_com_categoria_direta(incoming_msg):
+        linhas = re.split(r"\n|,| e ", incoming_msg.lower())
+        gastos_identificados = []
+
+        for linha in linhas:
+            match = re.search(r"(\d+(?:[.,]\d{2})?)\s*(com)?\s*(.+?)\s*\((crédito|débito|pix|boleto)\)", linha.strip())
+            if match:
+                valor_raw = match.group(1).replace(",", ".")
+                descricao = match.group(3).strip().capitalize()
+                forma = match.group(4).capitalize()
+                try:
+                    valor = float(valor_raw)
+                    gastos_identificados.append({
+                        "descricao": descricao,
+                        "valor": valor,
+                        "forma_pagamento": forma
+                    })
+                except:
+                    continue
+
+        categoria_match = re.search(r"categoria[:\-]?\s*(\w+)", incoming_msg.lower())
+        categoria = categoria_match.group(1).capitalize() if categoria_match else "A DEFINIR"
+
+        fuso = pytz.timezone("America/Sao_Paulo")
+        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
+
+        linhas_confirmadas = []
+        for gasto in gastos_identificados:
+            resultado = registrar_gasto(
+                nome_usuario=name,
+                numero_usuario=from_number,
+                descricao=gasto["descricao"],
+                valor=gasto["valor"],
+                forma_pagamento=gasto["forma_pagamento"],
+                data_gasto=hoje,
+                categoria_manual=categoria
+            )
+            valor_formatado = f"R${gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            linhas_confirmadas.append(f"{gasto['descricao']} ({valor_formatado}) – {categoria}")
+
+        if linhas_confirmadas:
+            send_message(from_number, "Perfeito! Anotei seus gastos:\n\n" + "\n".join(linhas_confirmadas))
+        else:
+            send_message(from_number, "Hmm... não consegui entender os valores informados. Tenta mandar de novo com esse formato:\n\nEx: 30,00 com Uber (crédito). Categoria: transporte")
+        return {"status": "gastos diretos com categoria processados"}
 
     elif "pode seguir" in incoming_msg.lower():
         estado = carregar_estado(from_number)
