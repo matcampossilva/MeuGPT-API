@@ -213,7 +213,7 @@ async def whatsapp_webhook(request: Request):
         return {"status": "resumo hoje enviado"}
 
     if any(t in incoming_msg.lower() for t in ["resumo de ontem", "quanto gastei ontem"]):
-        ontem = datetime.now(pytz.timezone("America/Sao_Paulo")) - timedelta(days=1)
+        ontem = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")) - timedelta(days=1)
         resumo = gerar_resumo(from_number, periodo="custom", data_personalizada=ontem.date())
         send_message(from_number, resumo)
         return {"status": "resumo ontem enviado"}
@@ -381,7 +381,7 @@ async def whatsapp_webhook(request: Request):
                     categoria_manual=categoria
                 )
 
-                valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
 
             resetar_estado(from_number)
@@ -509,7 +509,7 @@ async def whatsapp_webhook(request: Request):
     # === Detectar emoção e possível relação com aumento de gasto ===
     import datetime
     fuso = pytz.timezone("America/Sao_Paulo")
-    data_msg = datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
+    data_msg = datetime.datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
     emocao = detectar_emocao(incoming_msg)
     if emocao:
         alerta = aumento_pos_emocao(from_number, emocao, data_msg)
