@@ -383,33 +383,34 @@ async def whatsapp_webhook(request: Request):
         return {"status": "gastos processados"}
     
     if detectar_gastos_com_categoria_direta(incoming_msg):
+        linhas = re.split(r"\n|,| e ", incoming_msg.lower())
         gastos_identificados = []
-        pattern = r"(\d{1,3}(?:[.,]\d{2})?)\s*(?:com)?\s*(.*?)\s*\((crédito|débito|pix|boleto)\)"
-        matches = re.findall(pattern, incoming_msg.lower())
 
-        for match in matches:
-            valor_raw, descricao, forma = match
-            try:
-                valor = float(
-                    re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", ".")
-                )
-                gastos_identificados.append({
-                    "descricao": descricao.strip().capitalize(),
-                    "valor": valor,
-                    "forma_pagamento": forma.capitalize()
-                })
-            except Exception as e:
-                print(f"[ERRO AO CONVERTER VALOR LIVRE] {e}")
-                continue
+        for linha in linhas:
+            match = re.search(r"(.+?)\s*-\s*(\d+(?:[.,]\d{2})?)\s*-\s*(crédito|débito|pix|boleto)(?:\s*-\s*(.+))?", linha.strip())
+            if match:
+                descricao = match.group(1).strip().capitalize()
+                valor_raw = match.group(2).replace(".", "").replace(",", ".")
+                forma = match.group(3).capitalize()
+                categoria_manual = match.group(4).strip().capitalize() if match.group(4) else None
 
-        categoria_match = re.search(r"categoria[:\-]?\s*(\w+)", incoming_msg.lower())
-        categoria = categoria_match.group(1).capitalize() if categoria_match else "A DEFINIR"
+                try:
+                    valor = float(valor_raw)
+                    gastos_identificados.append({
+                        "descricao": descricao,
+                        "valor": valor,
+                        "forma_pagamento": forma,
+                        "categoria": categoria_manual
+                    })
+                except:
+                    continue
 
         fuso = pytz.timezone("America/Sao_Paulo")
         hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
 
         linhas_confirmadas = []
         for gasto in gastos_identificados:
+            categoria = gasto["categoria"] or categorizar(gasto["descricao"]) or "A DEFINIR"
             resultado = registrar_gasto(
                 nome_usuario=name,
                 numero_usuario=from_number,
@@ -423,11 +424,19 @@ async def whatsapp_webhook(request: Request):
             linhas_confirmadas.append(f"{gasto['descricao']} ({valor_formatado}) – {categoria}")
 
         if linhas_confirmadas:
-            send_message(from_number, "Perfeito! Anotei seus gastos:\n\n" + "\n".join(linhas_confirmadas))
+            send_message(from_number, "✅ Gastos registrados:\n\n" + "\n".join(linhas_confirmadas))
         else:
-            send_message(from_number, "Hmm... não consegui entender os valores informados. Tenta mandar de novo com esse formato:\n\nEx: 30,00 com Uber (crédito). Categoria: transporte")
-        return {"status": "gastos diretos com categoria processados"}
+            send_message(from_number,
+                "❌ Não consegui entender os gastos. Use o formato:\n"
+                "Descrição - Valor - Forma de pagamento - (Categoria opcional)\n\n"
+                "📌 Exemplo:\n"
+                "Uber - 20,00 - crédito\n"
+                "Combustível - 300,00 - débito\n"
+                "Padaria - 15,00 - pix - Alimentação"
+            )
 
+        return {"status": "gastos diretos com categoria processados"}
+    
     elif "pode seguir" in incoming_msg.lower():
         estado = carregar_estado(from_number)
         if estado.get("gastos_temp"):
