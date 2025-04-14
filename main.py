@@ -361,7 +361,7 @@ async def whatsapp_webhook(request: Request):
             gastos_final = []
 
             fuso = pytz.timezone("America/Sao_Paulo")
-            hoje = datetime.now(fuso).strftime("%d/%m/%Y")
+            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
 
             for gasto in gastos:
                 descricao = gasto['descricao'].capitalize()
@@ -507,7 +507,7 @@ async def whatsapp_webhook(request: Request):
     send_message(from_number, reply)
 
     # === Detectar emoção e possível relação com aumento de gasto ===
-    from datetime import datetime
+    import datetime
     fuso = pytz.timezone("America/Sao_Paulo")
     data_msg = datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
     emocao = detectar_emocao(incoming_msg)
