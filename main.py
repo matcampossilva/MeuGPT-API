@@ -393,7 +393,7 @@ async def whatsapp_webhook(request: Request):
                 descricao = match.group(3).strip().capitalize()
                 forma = match.group(4).capitalize()
                 try:
-                    valor = float(valor_raw)
+                    valor_raw = re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", ".")
                     gastos_identificados.append({
                         "descricao": descricao,
                         "valor": valor,
