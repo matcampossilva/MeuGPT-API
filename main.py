@@ -6,14 +6,13 @@ from twilio.rest import Client
 from dotenv import load_dotenv
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
 import pytz
+import datetime
 import re
 import random
 from gastos import registrar_gasto, categorizar
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
-from datetime import timedelta
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
@@ -213,7 +212,7 @@ async def whatsapp_webhook(request: Request):
         return {"status": "resumo hoje enviado"}
 
     if any(t in incoming_msg.lower() for t in ["resumo de ontem", "quanto gastei ontem"]):
-        ontem = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")) - timedelta(days=1)
+        ontem = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")) - datetime.timedelta(days=1)
         resumo = gerar_resumo(from_number, periodo="custom", data_personalizada=ontem.date())
         send_message(from_number, resumo)
         return {"status": "resumo ontem enviado"}
@@ -507,7 +506,6 @@ async def whatsapp_webhook(request: Request):
     send_message(from_number, reply)
 
     # === Detectar emoção e possível relação com aumento de gasto ===
-    import datetime
     fuso = pytz.timezone("America/Sao_Paulo")
     data_msg = datetime.datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
     emocao = detectar_emocao(incoming_msg)
