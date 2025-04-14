@@ -360,6 +360,9 @@ async def whatsapp_webhook(request: Request):
             categorias_sugeridas = estado.get("categorias_sugeridas", {})
             gastos_final = []
 
+            fuso = pytz.timezone("America/Sao_Paulo")
+            hoje = datetime.now(fuso).strftime("%d/%m/%Y")
+
             for gasto in gastos:
                 descricao = gasto['descricao'].capitalize()
                 valor = gasto['valor']
@@ -368,7 +371,16 @@ async def whatsapp_webhook(request: Request):
                 chave_descricao = descricao.lower()
                 categoria = gasto.get("categoria") or categorias_sugeridas.get(chave_descricao) or "A DEFINIR"
 
-                resultado = registrar_gasto(name, from_number, descricao, valor, forma, categoria_manual=categoria)
+                resultado = registrar_gasto(
+                    nome_usuario=name,
+                    numero_usuario=from_number,
+                    descricao=descricao,
+                    valor=valor,
+                    forma_pagamento=forma,
+                    data_gasto=hoje,
+                    categoria_manual=categoria
+                )
+
                 valor_formatado = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
                 gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
 
