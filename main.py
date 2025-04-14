@@ -310,47 +310,70 @@ async def whatsapp_webhook(request: Request):
         return {"status": "cadastro completo"}
     
     if detectar_gastos(incoming_msg):
-        estado_anterior = carregar_estado(from_number)
         gastos_novos = extrair_gastos(incoming_msg)
+        gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
+        gastos_completos = [g for g in gastos_novos if g.get("categoria")]
 
-        if estado_anterior and estado_anterior.get("gastos_temp"):
-            # Já existem gastos anteriores no estado, somar
-            gastos_totais = estado_anterior["gastos_temp"] + gastos_novos
-        else:
-            # Primeiros gastos do dia
-            gastos_totais = gastos_novos
-            estado_anterior = {}
+        fuso = pytz.timezone("America/Sao_Paulo")
+        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
 
-        categorias_sugeridas = estado_anterior.get("categorias_sugeridas", {})
+        gastos_registrados = []
+        for gasto in gastos_completos:
+            descricao = gasto["descricao"].capitalize()
+            valor = gasto["valor"]
+            forma = gasto["forma_pagamento"]
+            categoria = gasto["categoria"]
 
-        # Atualiza sugestões com base nos novos gastos
-        for gasto in gastos_novos:
-            descricao = gasto["descricao"].strip().lower()
-            categoria_sug = categorizar(descricao) or "A DEFINIR"
-            categorias_sugeridas[descricao] = categoria_sug
+            resultado = registrar_gasto(
+                nome_usuario=name,
+                numero_usuario=from_number,
+                descricao=descricao,
+                valor=valor,
+                forma_pagamento=forma,
+                data_gasto=hoje,
+                categoria_manual=categoria
+            )
 
-        estado_anterior.update({
-            "ultimo_fluxo": "aguardando_categorias",
-            "gastos_temp": gastos_totais,
-            "categorias_sugeridas": categorias_sugeridas
-        })
+            valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
 
-        salvar_estado(from_number, estado_anterior)
+        mensagem = ""
+        if gastos_registrados:
+            mensagem += "*Gastos registrados:*\n" + "\n".join(gastos_registrados)
 
-        lista_gastos = "\n".join(
-            [f"{g['descricao']}, R${g['valor']}, pago com {g['forma_pagamento']}." for g in gastos_novos]
-        )
+        if gastos_sem_categoria:
+            estado_anterior = carregar_estado(from_number) or {}
+            categorias_sugeridas = estado_anterior.get("categorias_sugeridas", {})
 
-        send_message(
-            from_number,
-            f"Certo! Identifiquei os seguintes novos gastos:\n\n{lista_gastos}\n\n"
-            "Se quiser ajustar *categorias*, me envie agora as correções no formato:\n"
-            "[descrição]: [categoria desejada]\n\n"
-            "Exemplo: supermercado: alimentação\n\n"
-            "Senão, sigo com o que identifiquei e registro já."
-        )
+            for gasto in gastos_sem_categoria:
+                descricao = gasto["descricao"].strip().lower()
+                categoria_sug = categorizar(descricao) or "A DEFINIR"
+                categorias_sugeridas[descricao] = categoria_sug
 
-        return {"status": "gastos novos acumulados"}
+            estado_anterior.update({
+                "ultimo_fluxo": "aguardando_categorias",
+                "gastos_temp": gastos_sem_categoria,
+                "categorias_sugeridas": categorias_sugeridas
+            })
+
+            salvar_estado(from_number, estado_anterior)
+
+            lista_gastos = "\n".join(
+                [f"{g['descricao'].capitalize()}, R${g['valor']}, pago com {g['forma_pagamento']}." for g in gastos_sem_categoria]
+            )
+
+            mensagem += (
+                "\n\n" +
+                "Certo! Identifiquei os seguintes novos gastos sem categoria:\n\n" +
+                lista_gastos +
+                "\n\nSe quiser ajustar *categorias*, me envie agora as correções no formato:\n" +
+                "[descrição]: [categoria desejada]\n\n" +
+                "Exemplo: supermercado: alimentação\n\n" +
+                "Senão, sigo com o que identifiquei e registro já."
+            )
+
+        send_message(from_number, mensagem.strip())
+        return {"status": "gastos processados"}
 
     elif "pode seguir" in incoming_msg.lower():
         estado = carregar_estado(from_number)
