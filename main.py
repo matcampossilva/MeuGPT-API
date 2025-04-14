@@ -383,24 +383,24 @@ async def whatsapp_webhook(request: Request):
         return {"status": "gastos processados"}
     
     if detectar_gastos_com_categoria_direta(incoming_msg):
-        linhas = re.split(r"\n|,| e ", incoming_msg.lower())
         gastos_identificados = []
+        pattern = r"(\d{1,3}(?:[.,]\d{2})?)\s*(?:com)?\s*(.*?)\s*\((crédito|débito|pix|boleto)\)"
+        matches = re.findall(pattern, incoming_msg.lower())
 
-        for linha in linhas:
-            match = re.search(r"(\d+(?:[.,]\d{2})?)\s*(com)?\s*(.+?)\s*\((crédito|débito|pix|boleto)\)", linha.strip())
-            if match:
-                valor_raw = match.group(1).replace(".", "").replace(",", ".")
-                descricao = match.group(3).strip().capitalize()
-                forma = match.group(4).capitalize()
-                try:
-                    valor_raw = re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", ".")
-                    gastos_identificados.append({
-                        "descricao": descricao,
-                        "valor": valor,
-                        "forma_pagamento": forma
-                    })
-                except:
-                    continue
+        for match in matches:
+            valor_raw, descricao, forma = match
+            try:
+                valor = float(
+                    re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", ".")
+                )
+                gastos_identificados.append({
+                    "descricao": descricao.strip().capitalize(),
+                    "valor": valor,
+                    "forma_pagamento": forma.capitalize()
+                })
+            except Exception as e:
+                print(f"[ERRO AO CONVERTER VALOR LIVRE] {e}")
+                continue
 
         categoria_match = re.search(r"categoria[:\-]?\s*(\w+)", incoming_msg.lower())
         categoria = categoria_match.group(1).capitalize() if categoria_match else "A DEFINIR"
