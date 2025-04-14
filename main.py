@@ -389,7 +389,7 @@ async def whatsapp_webhook(request: Request):
         for linha in linhas:
             match = re.search(r"(\d+(?:[.,]\d{2})?)\s*(com)?\s*(.+?)\s*\((crédito|débito|pix|boleto)\)", linha.strip())
             if match:
-                valor_raw = match.group(1).replace(",", ".")
+                valor_raw = match.group(1).replace(".", "").replace(",", ".")
                 descricao = match.group(3).strip().capitalize()
                 forma = match.group(4).capitalize()
                 try:
