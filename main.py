@@ -342,20 +342,7 @@ async def whatsapp_webhook(request: Request):
         gastos_completos = [g for g in gastos_novos if g.get("categoria")]
 
         fuso = pytz.timezone("America/Sao_Paulo")
-        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-
-        if not re.search(r"\d{1,3}(?:[.,]\d{2})", incoming_msg):
-            send_message(from_number, 
-                "Perfeito! Para registrar seus gastos corretamente, siga este formato:\n\n"
-                "📌 [Descrição] - [Valor] - [Forma de pagamento]\n"
-                "Exemplos:\n"
-                "• Uber - 20,00 - crédito\n"
-                "• Combustível - 300,00 - débito\n\n"
-                "Você pode mandar vários gastos juntos, um por linha.\n"
-                "A categoria será detectada automaticamente ou solicitada depois.\n\n"
-                "Agora me envie seus gastos no formato acima. 😊"
-            )
-            return {"status": "aguardando gastos no formato correto"}        
+        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")        
 
         gastos_registrados = []
         for gasto in gastos_completos:
