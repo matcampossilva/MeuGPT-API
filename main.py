@@ -125,6 +125,7 @@ def detectar_gastos_com_categoria_direta(texto):
 def extrair_gastos(texto):
     linhas = texto.split("\n")
     gastos = []
+
     for linha in linhas:
         match = re.match(
             r"\s*(.*?)\s*[-|—]\s*(\d{1,3}(?:[.,]\d{2})?)\s*[-|—]\s*(crédito|débito|pix|boleto)(?:\s*[-|—]\s*(.*))?",
@@ -138,7 +139,7 @@ def extrair_gastos(texto):
             categoria = match.group(4).strip().capitalize() if match.group(4) else None
 
             try:
-                valor = float(valor_raw.replace("R$", "").replace(".", "").replace(",", "."))
+                valor = float(valor_raw.replace(".", "").replace(",", "."))
                 gastos.append({
                     "descricao": descricao,
                     "valor": valor,
@@ -146,7 +147,9 @@ def extrair_gastos(texto):
                     "categoria": categoria
                 })
             except ValueError:
+                print(f"[ERRO] Valor inválido na linha: {linha}")
                 continue
+
     return gastos
 
 def precisa_direcionamento(msg):
@@ -278,6 +281,19 @@ async def whatsapp_webhook(request: Request):
     if passou_limite(sheet, row):
         send_message(from_number, "⚠️ Limite gratuito atingido. Acesse: https://seulinkpremium.com")
         return {"status": "limite atingido"}
+    
+    if any(p in incoming_msg.lower() for p in ["registrar gasto", "registrar meus gastos", "posso registrar", "lançar gasto", "lançar despesa", "adicionar gasto"]):
+        send_message(from_number,
+            "Claro! Para registrar seus gastos corretamente, siga este formato:\n\n"
+            "📌 *Descrição - Valor - Forma de pagamento - Categoria (opcional)*\n\n"
+            "Exemplos:\n"
+            "• Uber - 20,00 - crédito\n"
+            "• Combustível - 300,00 - débito\n"
+            "• Farmácia - 50,00 - pix - Saúde\n\n"
+            "Você pode mandar vários gastos, um por linha.\n"
+            "Se não informar a categoria, vou identificar automaticamente. 😉"
+        )
+        return {"status": "orientacao registro de gastos enviada"}
 
     if not name or not email:
         linhas = incoming_msg.split("\n")
