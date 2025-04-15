@@ -78,6 +78,10 @@ def count_tokens(text):
     return len(text.split())
 
 def send_message(to, body):
+    if not body or not body.strip():
+        print(f"[ERRO] Tentativa de enviar mensagem vazia para {to}. Ignorado.")
+        return
+
     client.messages.create(
         body=body,
         messaging_service_sid=MESSAGING_SERVICE_SID,
