@@ -627,6 +627,10 @@ async def whatsapp_webhook(request: Request):
     if mensagem_estrela:
         send_message(from_number, mensagem_estrela)
 
+    if not reply or not reply.strip():
+        send_message(from_number, "❌ Não consegui entender seus gastos. Por favor, use este formato:\n\n📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\nExemplo:\n• Uber – 20,00 – crédito\n• Farmácia – 50,00 – pix – Saúde")
+        print("[DEBUG] Nenhuma resposta foi gerada, enviando fallback.")
+
     return {"status": "mensagem enviada"}
 
 @app.get("/health")
