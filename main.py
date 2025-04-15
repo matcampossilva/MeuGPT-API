@@ -401,57 +401,62 @@ async def whatsapp_webhook(request: Request):
     if detectar_gastos_com_categoria_direta(incoming_msg):
         gastos_identificados = []
 
-        # Permite: "Uber - 20,00 - crédito" ou "20,00 com Uber (crédito)"
-        pattern = r"(.*?)-\s*(\d+(?:[.,]\d{2})?)\s*-\s*(crédito|débito|pix|boleto)"
-        matches = re.findall(pattern, incoming_msg.lower())
+        # Tenta primeiro: Descrição – Valor – Forma – Categoria (opcional)
+        pattern1 = r"(.*?)\s*[-|–|—]\s*(\d+(?:[.,]\d{2})?)\s*[-|–|—]\s*(crédito|débito|pix|boleto)(?:\s*[-|–|—]\s*(.*))?"
+        matches = re.findall(pattern1, incoming_msg, re.IGNORECASE)
 
-        for match in matches:
-            descricao, valor_raw, forma = match
-            try:
-                valor = float(
-                    re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", ".")
-                )
-                gastos_identificados.append({
-                    "descricao": descricao.strip().capitalize(),
-                    "valor": valor,
-                    "forma_pagamento": forma.capitalize()
-                })
-            except Exception as e:
-                print(f"[ERRO AO CONVERTER VALOR LIVRE] {e}")
-                continue
+        # Se falhar, tenta: Valor – Descrição – Forma – Categoria (opcional)
+        if not matches:
+            pattern2 = r"(\d+(?:[.,]\d{2})?)\s*[-|–|—]\s*(.*?)\s*[-|–|—]\s*(crédito|débito|pix|boleto)(?:\s*[-|–|—]\s*(.*))?"
+            matches = re.findall(pattern2, incoming_msg, re.IGNORECASE)
 
-        if not gastos_identificados:
+        if not matches:
             send_message(from_number,
                 "❌ Não consegui entender os gastos. Use o formato:\n"
-                "Descrição - Valor - Forma de pagamento\n\n"
-                "📌 Exemplos:\n"
-                "Uber - 20,00 - crédito\n"
-                "Combustível - 300,00 - débito\n"
-                "Farmácia - 75,00 - pix"
+                "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
+                "Exemplos:\n"
+                "• Uber – 20,00 – crédito\n"
+                "• Combustível – 300,00 – débito\n"
+                "• Farmácia – 50,00 – pix – Saúde\n\n"
+                "Você pode mandar vários gastos, um por linha."
             )
-            return {"status": "erro ao interpretar gastos diretos"}
+            return {"status": "formato inválido para gastos diretos"}
 
         fuso = pytz.timezone("America/Sao_Paulo")
         hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-
         linhas_confirmadas = []
-        for gasto in gastos_identificados:
-            categoria = categorizar(gasto["descricao"]) or "A DEFINIR"
-            resultado = registrar_gasto(
-                nome_usuario=name,
-                numero_usuario=from_number,
-                descricao=gasto["descricao"],
-                valor=gasto["valor"],
-                forma_pagamento=gasto["forma_pagamento"],
-                data_gasto=hoje,
-                categoria_manual=categoria
-            )
-            valor_formatado = f"R${gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            linhas_confirmadas.append(f"{gasto['descricao']} ({valor_formatado}) – {categoria}")
 
-        send_message(from_number, "✅ Gastos registrados:\n\n" + "\n".join(linhas_confirmadas))
+        for match in matches:
+            # Identifica a ordem automaticamente
+            if re.match(r"\d", match[0]):  # Começa com valor
+                valor_raw, descricao, forma, categoria_raw = match
+            else:  # Começa com descrição
+                descricao, valor_raw, forma, categoria_raw = match
+
+            try:
+                valor = float(re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", "."))
+                categoria = categoria_raw.strip().capitalize() if categoria_raw else categorizar(descricao) or "A DEFINIR"
+
+                resultado = registrar_gasto(
+                    nome_usuario=name,
+                    numero_usuario=from_number,
+                    descricao=descricao.strip().capitalize(),
+                    valor=valor,
+                    forma_pagamento=forma.strip().capitalize(),
+                    data_gasto=hoje,
+                    categoria_manual=categoria
+                )
+
+                valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                linhas_confirmadas.append(f"{descricao.strip().capitalize()} ({valor_formatado}) – {categoria}")
+
+            except Exception as e:
+                print(f"[ERRO AO CONVERTER VALOR] {e}")
+                continue
+
+        send_message(from_number, "✅ *Gastos registrados:*\n\n" + "\n".join(linhas_confirmadas))
         return {"status": "gastos diretos com categoria processados"}
-    
+
     elif "pode seguir" in incoming_msg.lower():
         estado = carregar_estado(from_number)
         if estado.get("gastos_temp"):
