@@ -50,8 +50,11 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         valor_raw = linha.get("VALOR (R$)", 0)
 
         try:
-            valor_str = str(valor_raw).replace("R$ ", "").replace("R$", "").replace(",", ".").strip()
-            valor = float(valor_str)
+            if isinstance(valor_raw, (int, float)):
+                valor = float(valor_raw)
+            else:
+                valor_str = str(valor_raw).replace("R$", "").replace("R$ ", "").replace(".", "").replace(",", ".").strip()
+                valor = float(valor_str)
             print(f"[DEBUG] valor_str={valor_str} | valor={valor}")
             if valor < 0:
                 continue
