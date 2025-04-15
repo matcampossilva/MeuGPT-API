@@ -116,11 +116,7 @@ def detectar_gastos(texto):
     return bool(re.search(padrao, texto, re.IGNORECASE))
 
 def detectar_gastos_com_categoria_direta(texto):
-    return (
-        ("gastei" in texto.lower() or "gasto" in texto.lower())
-        and "categoria" in texto.lower()
-        and any(m in texto.lower() for m in ["crédito", "débito", "pix", "boleto"])
-    )
+    return any(m in texto.lower() for m in ["crédito", "débito", "pix", "boleto"])
 
 def extrair_gastos(texto):
     linhas = texto.split("\n")
