@@ -132,7 +132,7 @@ def extrair_gastos(texto):
 
     for linha in linhas:
         match = re.match(
-            r"\s*(.*?)\s*[-|—]\s*(\d{1,3}(?:[.,]\d{2})?)\s*[-|—]\s*(crédito|débito|pix|boleto)(?:\s*[-|—]\s*(.*))?",
+            r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]?\s*(.*?)\s*[-–—]?\s*(crédito|débito|pix|boleto)\s*[-–—]?\s*(.*)?",
             linha.strip(),
             re.IGNORECASE
         )
