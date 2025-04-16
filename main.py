@@ -191,7 +191,6 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
     estado = carregar_estado(from_number)
-    ultimo_fluxo = estado.get("ultimo_fluxo")
     status_usuario = get_user_status(from_number)
     sheet_usuario = get_user_sheet(from_number)
 
@@ -207,6 +206,77 @@ async def whatsapp_webhook(request: Request):
         )
         send_message(from_number, comandos)
         return {"status": "comandos enviados"}
+    
+    linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
+    name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
+
+    if estado.get("ultimo_fluxo") == "registro_gastos_continuo" and detectar_gastos(incoming_msg):
+        gastos_novos = extrair_gastos(incoming_msg)
+        gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
+        gastos_completos = [g for g in gastos_novos if g.get("categoria")]
+
+        fuso = pytz.timezone("America/Sao_Paulo")
+        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
+
+        gastos_registrados = []
+        for gasto in gastos_completos:
+            descricao = gasto["descricao"].capitalize()
+            valor = gasto["valor"]
+            forma = gasto["forma_pagamento"]
+            categoria = gasto["categoria"]
+
+            resultado = registrar_gasto(
+                nome_usuario=name,
+                numero_usuario=from_number,
+                descricao=descricao,
+                valor=valor,
+                forma_pagamento=forma,
+                data_gasto=hoje,
+                categoria_manual=categoria
+            )
+
+            valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
+
+        mensagem = ""
+        if gastos_registrados:
+            mensagem += "*Gastos registrados:*\n" + "\n".join(gastos_registrados)
+
+        if gastos_sem_categoria:
+            estado_anterior = carregar_estado(from_number) or {}
+            categorias_sugeridas = estado_anterior.get("categorias_sugeridas", {})
+
+            for gasto in gastos_sem_categoria:
+                descricao = gasto["descricao"].strip().lower()
+                categoria_sug = categorizar(descricao) or "A DEFINIR"
+                categorias_sugeridas[descricao] = categoria_sug
+
+            estado_anterior.update({
+                "ultimo_fluxo": "aguardando_categorias",
+                "gastos_temp": gastos_sem_categoria,
+                "categorias_sugeridas": categorias_sugeridas
+            })
+
+            salvar_estado(from_number, estado_anterior)
+
+            lista_gastos = "\n".join(
+                [f"{g['descricao'].capitalize()}, R${g['valor']}, pago com {g['forma_pagamento']}." for g in gastos_sem_categoria]
+            )
+
+            mensagem += (
+                "\n\n"
+                "Certo! Identifiquei os seguintes novos gastos sem categoria:\n\n" +
+                lista_gastos +
+                "\n\nSe quiser ajustar *categorias*, me envie agora as correções no formato:\n"
+                "[descrição]: [categoria desejada]\n\n"
+                "Exemplo: supermercado: alimentação\n\n"
+                "Senão, sigo com o que identifiquei e registro já."
+            )
+
+        send_message(from_number, mensagem.strip())
+        return {"status": "gastos processados via fluxo contínuo"}
+    
+    ultimo_fluxo = estado.get("ultimo_fluxo")
     
     if quer_resumo_mensal(incoming_msg):
         resumo = resumo_do_mes(from_number)
@@ -293,6 +363,7 @@ async def whatsapp_webhook(request: Request):
             "Você pode mandar vários gastos, um por linha.\n"
             "Se não informar a categoria, vou identificar automaticamente. 😉"
         )
+        salvar_estado(from_number, {"ultimo_fluxo": "registro_gastos_continuo"})
         return {"status": "orientacao registro de gastos enviada"}
 
     if not name or not email:
@@ -584,11 +655,16 @@ async def whatsapp_webhook(request: Request):
 
     mensagens.append({"role": "user", "content": incoming_msg})
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-16k",
-        messages=mensagens,
-        temperature=0.7,
-    )
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo-16k",
+            messages=mensagens,
+            temperature=0.7,
+        )
+        reply = response["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[ERRO OpenAI] {e}")
+        reply = "⚠️ Tive um problema ao responder agora. Pode me mandar a mensagem de novo?"
 
     reply = response["choices"][0]["message"]["content"].strip()
     # Substitui [Nome] pelo nome real salvo na planilha
