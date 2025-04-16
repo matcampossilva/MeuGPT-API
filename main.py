@@ -52,7 +52,7 @@ def get_user_sheet(user_number):
     elif status == "Gratuitos":
         return get_gratuitos()
     else:
-        now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+        now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
         aba = get_gratuitos()
         aba.append_row(["", user_number, "", now, 0, 0])
         return aba
