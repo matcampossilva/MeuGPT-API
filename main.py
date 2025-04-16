@@ -112,7 +112,7 @@ def is_boas_vindas(text):
     return any(sauda in text for sauda in saudacoes)
 
 def detectar_gastos(texto):
-    padrao = r"\d{1,3}(?:[\.,]\d{2})?\s*[-–—]\s*.+?\s*[-–—]\s*(crédito|débito|pix|boleto)"
+    padrao = r".{3,}[-–—]\s*\d+(?:[.,]\d{2})?\s*[-–—]\s*(crédito|débito|pix|boleto)"
     return bool(re.search(padrao, texto, re.IGNORECASE))
 
 def detectar_gastos_com_categoria_direta(texto):
@@ -546,6 +546,29 @@ async def whatsapp_webhook(request: Request):
 
         send_message(from_number, "✅ *Gastos registrados:*\n\n" + "\n".join(linhas_confirmadas))
         return {"status": "gastos diretos com categoria processados"}
+
+    if incoming_msg.lower().startswith("corrigir gasto:"):
+        try:
+            partes = incoming_msg.split("corrigir gasto:")[1].strip()
+            gasto = extrair_gastos(partes)[0]
+            descricao = gasto["descricao"].capitalize()
+            valor = gasto["valor"]
+            forma = gasto["forma_pagamento"]
+
+            fuso = pytz.timezone("America/Sao_Paulo")
+            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
+
+            sucesso = atualizar_categoria(from_number, descricao, hoje, gasto.get("categoria", "A DEFINIR"))
+
+            if sucesso:
+                send_message(from_number, f"Gasto corrigido: {descricao} (R${valor:.2f}) – {gasto.get('categoria', 'A DEFINIR')}")
+                return {"status": "gasto corrigido"}
+            else:
+                send_message(from_number, f"❌ Não encontrei o gasto '{descricao}' registrado em {hoje}.")
+                return {"status": "gasto não encontrado"}
+        except Exception as e:
+            send_message(from_number, "Erro ao tentar corrigir o gasto. Tente novamente com o formato:\n\ncorrigir gasto: descrição – valor – forma – categoria")
+            return {"status": "erro na correção"}           
 
     elif "pode seguir" in incoming_msg.lower():
         estado = carregar_estado(from_number)
