@@ -216,6 +216,9 @@ async def whatsapp_webhook(request: Request):
 
     if estado.get("ultimo_fluxo") == "registro_gastos_continuo" and detectar_gastos(incoming_msg):
         gastos_novos = extrair_gastos(incoming_msg)
+        if not gastos_novos:
+            send_message(from_number, "❌ Não consegui entender os gastos. Verifique se estão no formato:\n\n*Descrição - Valor - Forma - Categoria (opcional)*\n\nExemplo:\nUber - 20,00 - crédito\nFarmácia - 50,00 - pix - Saúde")
+            return {"status": "nenhum gasto extraído"}
         gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
         gastos_completos = [g for g in gastos_novos if g.get("categoria")]
 
