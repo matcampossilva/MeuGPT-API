@@ -117,6 +117,10 @@ def detectar_gastos(texto):
 
 def detectar_gastos_com_categoria_direta(texto):
     linhas = texto.strip().split("\n")
+    # Normaliza hífens e travessões
+    texto = texto.replace("–", "-").replace("—", "-").replace("−", "-")
+    linhas = texto.split("\n")
+
     for linha in linhas:
         if re.search(r"[-–—]", linha) and re.search(r"\d{1,3}(?:[.,]\d{2})", linha) and any(p in linha.lower() for p in ["crédito", "débito", "pix", "boleto"]):
             return True
@@ -273,7 +277,11 @@ async def whatsapp_webhook(request: Request):
                 "Senão, sigo com o que identifiquei e registro já."
             )
 
-        send_message(from_number, mensagem.strip())
+        mensagem_final = mensagem.strip()
+        if mensagem_final:
+            send_message(from_number, mensagem_final)
+        else:
+            send_message(from_number, "❌ Não consegui registrar nenhum gasto. Verifique o formato e tente novamente.")
         return {"status": "gastos processados via fluxo contínuo"}
     
     ultimo_fluxo = estado.get("ultimo_fluxo")
