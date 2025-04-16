@@ -217,8 +217,18 @@ async def whatsapp_webhook(request: Request):
     if estado.get("ultimo_fluxo") == "registro_gastos_continuo" and detectar_gastos(incoming_msg):
         gastos_novos = extrair_gastos(incoming_msg)
         if not gastos_novos:
-            send_message(from_number, "❌ Não consegui entender os gastos. Verifique se estão no formato:\n\n*Descrição - Valor - Forma - Categoria (opcional)*\n\nExemplo:\nUber - 20,00 - crédito\nFarmácia - 50,00 - pix - Saúde")
+            send_message(
+                from_number,
+                "❌ Não consegui entender os gastos. Use este formato:\n\n"
+                "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
+                "*Exemplos válidos:*\n"
+                "• Uber – 20,00 – crédito\n"
+                "• Combustível – 300,00 – débito\n"
+                "• Farmácia – 50,00 – pix – Saúde\n\n"
+                "📌 Você pode mandar *vários gastos*, um por linha."
+            )
             return {"status": "nenhum gasto extraído"}
+
         gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
         gastos_completos = [g for g in gastos_novos if g.get("categoria")]
 
@@ -232,7 +242,7 @@ async def whatsapp_webhook(request: Request):
             forma = gasto["forma_pagamento"]
             categoria = gasto["categoria"]
 
-            resultado = registrar_gasto(
+            registrar_gasto(
                 nome_usuario=name,
                 numero_usuario=from_number,
                 descricao=descricao,
@@ -247,7 +257,7 @@ async def whatsapp_webhook(request: Request):
 
         mensagem = ""
         if gastos_registrados:
-            mensagem += "*Gastos registrados:*\n" + "\n".join(gastos_registrados)
+            mensagem += "✅ *Gastos registrados:*\n" + "\n".join(gastos_registrados)
 
         if gastos_sem_categoria:
             estado_anterior = carregar_estado(from_number) or {}
@@ -272,19 +282,14 @@ async def whatsapp_webhook(request: Request):
 
             mensagem += (
                 "\n\n"
-                "Certo! Identifiquei os seguintes novos gastos sem categoria:\n\n" +
+                "Certo! Encontrei alguns gastos sem categoria:\n\n" +
                 lista_gastos +
-                "\n\nSe quiser ajustar *categorias*, me envie agora as correções no formato:\n"
-                "[descrição]: [categoria desejada]\n\n"
-                "Exemplo: supermercado: alimentação\n\n"
-                "Senão, sigo com o que identifiquei e registro já."
+                "\n\nResponda agora indicando a categoria desejada com este formato:\n"
+                "[descrição]: [categoria]\n\n"
+                "*Exemplo:* supermercado: alimentação"
             )
 
-        mensagem_final = mensagem.strip()
-        if mensagem_final:
-            send_message(from_number, mensagem_final)
-        else:
-            send_message(from_number, "❌ Não consegui registrar nenhum gasto. Verifique o formato e tente novamente.")
+        send_message(from_number, mensagem.strip())
         return {"status": "gastos processados via fluxo contínuo"}
     
     ultimo_fluxo = estado.get("ultimo_fluxo")
