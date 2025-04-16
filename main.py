@@ -418,13 +418,17 @@ async def whatsapp_webhook(request: Request):
         return {"status": "cadastro completo"}
     
     if detectar_gastos(incoming_msg):
-    
         gastos_novos = extrair_gastos(incoming_msg)
+
+        if not gastos_novos:
+            send_message(from_number, "❌ Não consegui entender os gastos. Verifique se estão no formato:\n\n*Descrição – Valor – Forma de pagamento – Categoria (opcional)*")
+            return {"status": "nenhum gasto extraído"}
+
         gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
         gastos_completos = [g for g in gastos_novos if g.get("categoria")]
 
         fuso = pytz.timezone("America/Sao_Paulo")
-        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")        
+        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
 
         gastos_registrados = []
         for gasto in gastos_completos:
@@ -472,12 +476,12 @@ async def whatsapp_webhook(request: Request):
             )
 
             mensagem += (
-                "\n\n" +
+                "\n\n"
                 "Certo! Identifiquei os seguintes novos gastos sem categoria:\n\n" +
                 lista_gastos +
-                "\n\nSe quiser ajustar *categorias*, me envie agora as correções no formato:\n" +
-                "[descrição]: [categoria desejada]\n\n" +
-                "Exemplo: supermercado: alimentação\n\n" +
+                "\n\nSe quiser ajustar *categorias*, me envie agora as correções no formato:\n"
+                "[descrição]: [categoria desejada]\n\n"
+                "Exemplo: supermercado: alimentação\n\n"
                 "Senão, sigo com o que identifiquei e registro já."
             )
 
