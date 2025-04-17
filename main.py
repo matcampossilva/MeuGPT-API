@@ -674,14 +674,33 @@ async def whatsapp_webhook(request: Request):
 
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=3, categoria=categoria_detectada)
 
-    mensagens = [{"role": "system", "content": prompt_base}]
+    mensagens = [
+        {"role": "system", "content": prompt_base}
+    ]
+
+    # Salva a última emoção do usuário, se tiver
     if ultimo_fluxo:
         mensagens.append({
             "role": "user",
-            "content": f"O usuário está no fluxo: {ultimo_fluxo}. Responda de forma coerente com isso."
+            "content": f"O usuário está no fluxo atual: {ultimo_fluxo}."
         })
+
+    # Adiciona conhecimento relevante apenas se for necessário
     if contexto_resgatado:
-        mensagens.append({"role": "user", "content": f"Conhecimento relevante:\n{contexto_resgatado}"})
+        mensagens.append({
+            "role": "user",
+            "content": f"Considere esse conhecimento como apoio ao seu aconselhamento:\n{contexto_resgatado}"
+        })
+
+    # Últimas 3 interações do histórico real da conversa (máximo)
+    for linha in historico_filtrado[-6:]:
+        if "Usuário:" in linha:
+            mensagens.append({"role": "user", "content": linha.replace("Usuário:", "").strip()})
+        elif "Conselheiro:" in linha:
+            mensagens.append({"role": "assistant", "content": linha.replace("Conselheiro:", "").strip()})
+
+    # Mensagem atual do usuário
+    mensagens.append({"role": "user", "content": incoming_msg})
 
     # === INTEGRAÇÃO COM INDICADORES ECONÔMICOS ===
     from indicadores import get_indicadores  # deixe esse import no topo do arquivo, se ainda não estiver
