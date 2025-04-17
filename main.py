@@ -10,7 +10,7 @@ import pytz
 import datetime
 import re
 import random
-from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria
+from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria, parsear_gastos_em_lote
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
@@ -132,32 +132,10 @@ def detectar_gastos_com_categoria_direta(texto):
     return False
 
 def extrair_gastos(texto):
-    linhas = texto.split("\n")
-    gastos = []
+    gastos, erros = parsear_gastos_em_lote(texto)
 
-    for linha in linhas:
-        match = re.match(
-            r"\s*(\d+(?:[.,]\d{2})?)\s*[-–—]?\s*(.*?)\s*[-–—]?\s*(crédito|débito|pix|boleto)\s*[-–—]?\s*(.*)?",
-            linha.strip(),
-            re.IGNORECASE
-        )
-        if match:
-            descricao = match.group(1).strip().capitalize()
-            valor_raw = match.group(2)
-            forma = match.group(3).strip().capitalize()
-            categoria = match.group(4).strip().capitalize() if match.group(4) else None
-
-            try:
-                valor = float(valor_raw.replace(".", "").replace(",", "."))
-                gastos.append({
-                    "descricao": descricao,
-                    "valor": valor,
-                    "forma_pagamento": forma,
-                    "categoria": categoria
-                })
-            except ValueError:
-                print(f"[ERRO] Valor inválido na linha: {linha}")
-                continue
+    if erros:
+        print("[ERRO PARSE]:", erros)
 
     return gastos
 
@@ -775,8 +753,17 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagem_estrela)
 
     if not reply or not reply.strip():
-        send_message(from_number, "❌ Não consegui entender seus gastos. Por favor, use este formato:\n\n📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\nExemplo:\n• Uber – 20,00 – crédito\n• Farmácia – 50,00 – pix – Saúde")
-        print("[DEBUG] Nenhuma resposta foi gerada, enviando fallback.")
+        send_message(
+            from_number,
+            "❌ Não consegui entender o que você quis dizer.\n\n"
+            "Se estiver tentando registrar gastos, use o formato:\n\n"
+            "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
+            "*Exemplos válidos:*\n"
+            "• Uber – 20,00 – crédito\n"
+            "• Combustível – 300,00 – débito\n"
+            "• Farmácia – 50,00 – pix – Saúde\n\n"
+            "📎 Pode mandar *vários gastos de uma vez*, um por linha. Eu aguento."
+        )
 
     return {"status": "mensagem enviada"}
 

@@ -125,3 +125,42 @@ def corrigir_gasto(user_number, descricao, valor, forma, categoria, data_hoje):
             planilha.update_cell(idx+1, 6, forma)  # FORMA
             return True
     return False
+import re
+
+def parsear_gastos_em_lote(texto):
+    """
+    Recebe uma string com várias linhas no formato:
+    Descrição – Valor – Forma de pagamento – Categoria (opcional)
+    Retorna uma lista de dicionários com os campos extraídos ou uma lista de erros.
+    """
+    linhas = texto.strip().split('\n')
+    gastos = []
+    erros = []
+
+    for linha in linhas:
+        partes = [p.strip() for p in re.split(r'[-–]', linha)]
+
+        if len(partes) < 3:
+            erros.append(f"Linha inválida: '{linha}'. Formato esperado: Descrição – Valor – Forma – Categoria (opcional)")
+            continue
+
+        descricao = partes[0]
+        valor_str = partes[1].replace("R$", "").replace(",", ".").strip()
+        forma_pagamento = partes[2].capitalize()
+
+        categoria = partes[3].capitalize() if len(partes) > 3 else None
+
+        try:
+            valor = float(valor_str)
+        except ValueError:
+            erros.append(f"Linha inválida: '{linha}'. Valor '{valor_str}' não é numérico.")
+            continue
+
+        gastos.append({
+            "descricao": descricao,
+            "valor": valor,
+            "forma_pagamento": forma_pagamento,
+            "categoria": categoria
+        })
+
+    return gastos, erros
