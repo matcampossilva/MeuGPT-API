@@ -10,7 +10,7 @@ import pytz
 import datetime
 import re
 import random
-from gastos import registrar_gasto, categorizar
+from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
@@ -159,6 +159,10 @@ def extrair_gastos(texto):
                 continue
 
     return gastos
+
+def quer_corrigir_gasto(msg):
+    termos = ["corrigir", "corrigir gasto", "consertar", "ajustar", "tá errado", "trocar valor"]
+    return any(t in msg.lower() for t in termos) and detectar_gastos(msg)
 
 def precisa_direcionamento(msg):
     frases_vagas = [
@@ -426,6 +430,7 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, welcome_msg)
         return {"status": "cadastro completo"}
     
+# === REGISTRO DE GASTOS PADRÃO ===
     if detectar_gastos(incoming_msg):
         gastos_novos = extrair_gastos(incoming_msg)
 
@@ -496,6 +501,47 @@ async def whatsapp_webhook(request: Request):
 
         send_message(from_number, mensagem.strip())
         return {"status": "gastos processados"}
+    
+# === CORREÇÃO DE GASTO ===
+    if quer_corrigir_gasto(incoming_msg):
+        try:
+            partes = re.sub(r"(?i)corrigir gasto:|corrigir|ajustar|trocar", "", incoming_msg).strip()
+            match = re.match(
+                r"(.*?)\s*[-–—]\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(crédito|débito|pix|boleto)\s*(?:[-–—]\s*(.*))?",
+                partes, re.IGNORECASE
+            )
+
+            if not match:
+                salvar_estado(from_number, {"ultimo_fluxo": "correcao_em_andamento"})
+                send_message(from_number,
+                    "⚠️ Parece que você quer corrigir um gasto, mas não entendi o que exatamente.")
+                send_message(from_number,
+                    "Exemplo: Almoço – 45,00 – crédito – Alimentação ou algo parecido.")
+                return {"status": "aguardando detalhes de correção"}
+
+            descricao = match.group(1).strip().capitalize()
+            valor_raw = match.group(2)
+            forma = match.group(3).strip().capitalize()
+            categoria = match.group(4).strip().capitalize() if match.group(4) else "A DEFINIR"
+
+            valor = float(re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", "."))
+
+            fuso = pytz.timezone("America/Sao_Paulo")
+            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
+
+            sucesso = atualizar_categoria(from_number, descricao, hoje, categoria)
+
+            if sucesso:
+                send_message(from_number, f"✅ Gasto corrigido: {descricao} (R${valor:.2f}) – {categoria}")
+                return {"status": "gasto corrigido"}
+            else:
+                send_message(from_number, f"❌ Não encontrei o gasto '{descricao}' registrado em {hoje}.")
+                return {"status": "gasto não encontrado"}
+
+        except Exception as e:
+            print(f"[ERRO CORREÇÃO] {e}")
+            send_message(from_number, "Erro ao tentar corrigir o gasto. Tente novamente com o formato:\n\n*Almoço – 45,00 – crédito – Alimentação*")
+            return {"status": "erro na correção"}
     
     if detectar_gastos_com_categoria_direta(incoming_msg):
         gastos_identificados = []

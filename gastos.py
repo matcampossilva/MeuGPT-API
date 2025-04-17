@@ -105,3 +105,23 @@ def atualizar_categoria(numero_usuario, descricao, data_gasto, nova_categoria):
     except Exception as e:
         print(f"[ERRO ao atualizar categoria] {e}")
         return False
+
+# === CORREÇÃO DE GASTO ===
+def corrigir_gasto(user_number, descricao, valor, forma, categoria, data_hoje):
+    from planilhas import get_user_sheet
+
+    planilha = get_user_sheet(user_number)
+    linhas = planilha.get_all_values()
+
+    for idx, linha in enumerate(linhas):
+        if (
+            linha[1] == user_number and
+            linha[2].strip().lower() == descricao.lower() and
+            data_hoje in linha[6]
+        ):
+            planilha.update_cell(idx+1, 3, descricao)  # DESCRIÇÃO
+            planilha.update_cell(idx+1, 4, categoria)  # CATEGORIA
+            planilha.update_cell(idx+1, 5, f"R$ {valor:.2f}".replace(".", ","))  # VALOR
+            planilha.update_cell(idx+1, 6, forma)  # FORMA
+            return True
+    return False
