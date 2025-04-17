@@ -30,6 +30,10 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 
+# Função de leitura do prompt.txt para contexto inicial
+with open("prompt.txt", "r") as f:
+    prompt_base = f.read().strip()
+
 # === PLANILHAS ===
 def get_user_status(user_number):
     try:
