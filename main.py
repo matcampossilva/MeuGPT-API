@@ -34,7 +34,7 @@ MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 with open("prompt.txt", "r") as f:
     prompt_base = f.read().strip()
     def estilo_msg(texto):
-        expressoes_goianas = ["Uai!", "Tem base?", "Num é?", "Bão demais!", "Ô beleza!"]
+        expressoes_goianas = ["Uai!", "Tem base?", "Bom demais!"]
         fechamento_personalizado = random.choice([
             "Vamos juntos! 🚀",
             "Conte comigo! 🤝",
@@ -708,9 +708,36 @@ async def whatsapp_webhook(request: Request):
 
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=3, categoria=categoria_detectada)
 
+    # Lê o prompt atualizado do arquivo prompt.txt
+    with open("prompt.txt", "r") as arquivo_prompt:
+        prompt_base = arquivo_prompt.read().strip()
+
+    # Agora inclui sempre o prompt como contexto inicial correto
     mensagens = [
-        {"role": "system", "content": prompt_base}
+        {"role": "system", "content": prompt_base},
+        {"role": "user", "content": incoming_msg}
     ]
+
+    # Acrescenta o contexto resgatado se disponível
+    if contexto_resgatado:
+        mensagens.insert(1, {
+            "role": "system",
+            "content": f"Considere este conhecimento como apoio ao seu aconselhamento:\n{contexto_resgatado}"
+        })
+
+    # Acrescenta estado anterior do fluxo se existir
+    if ultimo_fluxo:
+        mensagens.insert(1, {
+            "role": "system",
+            "content": f"O usuário está no fluxo atual: {ultimo_fluxo}."
+        })
+
+    # Acrescenta históricos filtrados (no máximo 3 últimas interações)
+    for linha in historico_filtrado[-6:]:
+        if "Usuário:" in linha:
+            mensagens.append({"role": "user", "content": linha.replace("Usuário:", "").strip()})
+        elif "Conselheiro:" in linha:
+            mensagens.append({"role": "assistant", "content": linha.replace("Conselheiro:", "").strip()})
 
     # Salva a última emoção do usuário, se tiver
     if ultimo_fluxo:
@@ -763,7 +790,7 @@ async def whatsapp_webhook(request: Request):
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-16k",
+            model="gpt-4-turbo",
             messages=mensagens,
             temperature=0.7,
         )
@@ -773,13 +800,22 @@ async def whatsapp_webhook(request: Request):
         reply = "⚠️ Tive um problema ao responder agora. Pode me mandar a mensagem de novo?"
 
     reply = response["choices"][0]["message"]["content"].strip()
-    # Substitui [Nome] pelo nome real salvo na planilha
+
+    # Remover prefixos inadequados como "Ô beleza!" ou "Ô beleza! Olá!"
+    reply = re.sub(r'^(ô beleza|uai|tem base)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
+
+    # Substituição correta do placeholder [Nome]
     if "[Nome]" in reply:
-        if name and name.strip():
-            primeiro_nome = name.split()[0]
-            reply = reply.replace("[Nome]", primeiro_nome)
-        else:
-            reply = reply.replace("[Nome]", "")  # Remove placeholder sem inventar apelido
+        primeiro_nome = name.split()[0] if name else ""
+        reply = reply.replace("[Nome]", primeiro_nome)
+
+    # Acrescenta automaticamente o disclaimer em assuntos sensíveis
+    assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "divórcio", "separação", "terapia", "crise"]
+    if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
+        disclaimer = (
+            "⚠️ Lembre-se: Este GPT não substitui acompanhamento profissional especializado em saúde física, emocional, orientação espiritual direta ou consultoria financeira personalizada."
+        )
+        reply = f"{reply}\n\n{disclaimer}"
 
     with open(conversa_path, "a") as f:
         f.write(f"Conselheiro: {reply}\n")
