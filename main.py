@@ -38,9 +38,8 @@ with open("prompt.txt", "r") as f:
         fechamento_personalizado = random.choice([
             "Vamos juntos! 🚀",
             "Conte comigo! 🤝",
-            "Deus no comando! 🙏🏼",
             "Sigamos firmes! 💪🏼",
-            "Tô contigo! 😉"
+            "Tô com você! 😉"
         ])
         return f"{random.choice(expressoes_goianas)} {texto}\n\n{fechamento_personalizado}"
 
@@ -198,7 +197,7 @@ async def whatsapp_webhook(request: Request):
     # Mensagem padrão para cumprimentos rápidos
     if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
         resposta_curta = (
-            "Olá! Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
+            "Olá! 👋🏼 Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
             "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
             "Me conta uma coisa: Qual é seu maior objetivo financeiro hoje? 🚀"
         )
