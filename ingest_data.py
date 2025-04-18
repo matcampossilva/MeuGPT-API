@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import openai
-from pinecone import Pinecone, ServerlessSpec
+import pinecone
 from uuid import uuid4
 import tiktoken
 
@@ -12,16 +12,17 @@ pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
 pinecone_env = os.getenv("PINECONE_ENV")
 
-# Inicialização correta para Pinecone 6.0.2
-pc = Pinecone(api_key=pinecone_api_key)
+# Inicialização correta da versão 6.x do Pinecone
+pc = pinecone.Pinecone(api_key=pinecone_api_key)
 
-# Verifica se o índice existe, senão cria
-if pinecone_index_name not in pc.list_indexes().names():
+# Verificar e criar índice se necessário
+existing_indexes = [index_info['name'] for index_info in pc.list_indexes()]
+if pinecone_index_name not in existing_indexes:
     pc.create_index(
         name=pinecone_index_name,
         dimension=1536,
         metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region=pinecone_env)
+        spec=pinecone.ServerlessSpec(cloud="aws", region=pinecone_env)
     )
 
 index = pc.Index(pinecone_index_name)
