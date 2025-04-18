@@ -39,7 +39,7 @@ with open("prompt.txt", "r") as f:
             "Vamos juntos! 🚀",
             "Conte comigo! 🤝",
             "Sigamos firmes! 💪🏼",
-            "Tô com você! 😉"
+            "Tô com você! 🫡"
         ])
         return f"{random.choice(expressoes_goianas)} {texto}\n\n{fechamento_personalizado}"
 
@@ -197,9 +197,9 @@ async def whatsapp_webhook(request: Request):
     # Mensagem padrão para cumprimentos rápidos
     if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
         resposta_curta = (
-            "Olá! 👋🏼 Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
-            "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
-            "Me conta uma coisa: Qual é seu maior objetivo financeiro hoje? 🚀"
+            "Olá! 👋🏼 Sou o seu Conselheiro Financeiro criado pelo Matheus Campos, CFP®."
+            "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro."
+            "Me conta uma coisa: por onde quer começar? 🚀"
         )
         send_message(from_number, estilo_msg(resposta_curta))
         return {"status": "saudação inicial enviada"}
@@ -207,8 +207,8 @@ async def whatsapp_webhook(request: Request):
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
         resposta_funcionalidades = (
-            "Posso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar. "
-            "Por onde quer começar? 😉"
+            "Posso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp, solução de dívidas, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar. "
+            "Por onde quer começar? 🤨"
         )
         send_message(from_number, estilo_msg(resposta_funcionalidades))
         return {"status": "funcionalidades informadas"}
@@ -422,9 +422,9 @@ async def whatsapp_webhook(request: Request):
 
         if not name and not email:
             msg_boas_vindas = (
-                "Olá! 👋🏼 Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
+                "Olá! 👋🏼 Sou o seu Conselheiro Financeiro criado pelo Matheus Campos, CFP®."
                 "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
-                "Antes de começarmos, me diga seu nome completo e e-mail, por favor? 😊"
+                "Antes de começarmos, me diga seu nome completo e e-mail, por favor? 🫡"
             )
             send_message(from_number, estilo_msg(msg_boas_vindas))
             return {"status": "aguardando nome e email"}
@@ -441,7 +441,7 @@ async def whatsapp_webhook(request: Request):
         welcome_msg = (
             f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
             "Agora que já nos conhecemos melhor, bora organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
-            "Controle de gastos, resumos automáticos, alertas inteligentes no WhatsApp, orientações de investimento ou vida espiritual... por onde quer começar?"
+            "Controle de gastos, resumos automáticos, alertas inteligentes no WhatsApp, solução de dívidas, orientações de investimento ou vida espiritual... por onde quer começar?"
         )
         send_message(from_number, estilo_msg(welcome_msg))
         return {"status": "cadastro completo"}
@@ -800,8 +800,8 @@ async def whatsapp_webhook(request: Request):
 
     reply = response["choices"][0]["message"]["content"].strip()
 
-    # Remover prefixos inadequados como "Ô beleza!" ou "Ô beleza! Olá!"
-    reply = re.sub(r'^(ô beleza|uai|tem base)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
+    # Remover prefixos inadequados como "Ô beleza!" ou "Bom demais! Olá!"
+    reply = re.sub(r'^(uai|tem base|bom demais)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
 
     # Substituição correta do placeholder [Nome]
     if "[Nome]" in reply:
