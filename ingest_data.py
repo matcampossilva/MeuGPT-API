@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import openai
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 from uuid import uuid4
 import tiktoken
 
@@ -9,12 +9,22 @@ load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_env = os.getenv("PINECONE_ENV")
 pinecone_index_name = os.getenv("PINECONE_INDEX_NAME")
+pinecone_env = os.getenv("PINECONE_ENV")
 
-# Inicialização padrão garantidamente compatível
-pinecone.init(api_key=pinecone_api_key, environment=pinecone_env)
-index = pinecone.Index(pinecone_index_name)
+# Inicialização correta para Pinecone 6.0.2
+pc = Pinecone(api_key=pinecone_api_key)
+
+# Verifica se o índice existe, senão cria
+if pinecone_index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=pinecone_index_name,
+        dimension=1536,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region=pinecone_env)
+    )
+
+index = pc.Index(pinecone_index_name)
 
 knowledge_dir = "knowledge"
 encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
