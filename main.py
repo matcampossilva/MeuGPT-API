@@ -34,7 +34,15 @@ MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 with open("prompt.txt", "r") as f:
     prompt_base = f.read().strip()
     def estilo_msg(texto):
-        return f"{texto}\n\n{random.choice(['Vamos em frente.', 'Tô contigo.', 'Te ajudo com isso, fica tranquilo.', 'Segue comigo.'])}"
+        expressoes_goianas = ["Uai!", "Tem base?", "Num é?", "Bão demais!", "Ô beleza!"]
+        fechamento_personalizado = random.choice([
+            "Vamos juntos! 🚀",
+            "Conte comigo! 🤝",
+            "Deus no comando! 🙏🏼",
+            "Sigamos firmes! 💪🏼",
+            "Tô contigo! 😉"
+        ])
+        return f"{random.choice(expressoes_goianas)} {texto}\n\n{fechamento_personalizado}"
 
 # === PLANILHAS ===
 def get_user_status(user_number):
@@ -186,6 +194,25 @@ async def whatsapp_webhook(request: Request):
     estado = carregar_estado(from_number)
     status_usuario = get_user_status(from_number)
     sheet_usuario = get_user_sheet(from_number)
+
+    # Mensagem padrão para cumprimentos rápidos
+    if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
+        resposta_curta = (
+            "Olá! Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
+            "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
+            "Me conta uma coisa: Qual é seu maior objetivo financeiro hoje? 🚀"
+        )
+        send_message(from_number, estilo_msg(resposta_curta))
+        return {"status": "saudação inicial enviada"}
+    
+    # Mensagem padrão sobre funcionalidades
+    if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
+        resposta_funcionalidades = (
+            "Posso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar. "
+            "Por onde quer começar? 😉"
+        )
+        send_message(from_number, estilo_msg(resposta_funcionalidades))
+        return {"status": "funcionalidades informadas"}
 
     if quer_lista_comandos(incoming_msg):
         comandos = (
@@ -395,7 +422,12 @@ async def whatsapp_webhook(request: Request):
             email = captured_email
 
         if not name and not email:
-            send_message(from_number, estilo_msg("Olá! 👋🏼 Que bom ter você aqui.\n\nSou seu Conselheiro Financeiro pessoal, criado pelo Matheus Campos, CFP®.\nPara começarmos nossa jornada juntos, preciso apenas do seu nome e e-mail, por favor. Pode me mandar?"))
+            msg_boas_vindas = (
+                "Olá! 👋🏼 Sou o Meu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
+                "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
+                "Antes de começarmos, me diga seu nome completo e e-mail, por favor? 😊"
+            )
+            send_message(from_number, estilo_msg(msg_boas_vindas))
             return {"status": "aguardando nome e email"}
 
         if not name:
@@ -407,7 +439,11 @@ async def whatsapp_webhook(request: Request):
             return {"status": "aguardando email"}
 
         primeiro_nome = name.split()[0]
-        welcome_msg = f"""Perfeito, {primeiro_nome}! 👊\n\nTô aqui pra te ajudar a organizar suas finanças e sua vida, sempre respeitando esta hierarquia: Deus, sua família e seu trabalho.\n\nPosso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp e email, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar.\n\nPor onde quer começar?"""
+        welcome_msg = (
+            f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
+            "Agora que já nos conhecemos melhor, bora organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
+            "Controle de gastos, resumos automáticos, alertas inteligentes no WhatsApp, orientações de investimento ou vida espiritual... por onde quer começar?"
+        )
         send_message(from_number, estilo_msg(welcome_msg))
         return {"status": "cadastro completo"}
     
@@ -540,13 +576,11 @@ async def whatsapp_webhook(request: Request):
 
         if not matches:
             send_message(from_number, estilo_msg(
-                "❌ Não consegui entender os gastos. Use o formato:\n"
-                "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
-                "Exemplos:\n"
-                "• Uber – 20,00 – crédito\n"
-                "• Combustível – 300,00 – débito\n"
-                "• Farmácia – 50,00 – pix – Saúde\n\n"
-                "Você pode mandar vários gastos, um por linha."
+                "Ops! 🤔 Parece que não consegui entender seus gastos direito.\n\n"
+                "Me ajuda mandando assim, por favor:\n\n"
+                "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\n"
+                "Exemplo:\n• Uber – 20,00 – crédito\n• Farmácia – 50,00 – pix – Saúde\n\n"
+                "Pode enviar vários, um por linha. 😉"
             ))
             return {"status": "formato inválido para gastos diretos"}
 
@@ -760,6 +794,13 @@ async def whatsapp_webhook(request: Request):
 
     increment_interactions(sheet, row)
 
+    # Disclaimer para mensagens sensíveis
+    assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "terapia"]
+    if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
+        disclaimer = (
+            "⚠️ Lembre-se: Este GPT não substitui acompanhamento profissional especializado em saúde física, emocional, orientação espiritual direta ou consultoria financeira personalizada."
+        )
+        reply = f"{reply}\n\n{disclaimer}"
     send_message(from_number, estilo_msg(reply))
 
     # === Detectar emoção e possível relação com aumento de gasto ===
