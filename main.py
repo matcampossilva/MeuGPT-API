@@ -705,61 +705,35 @@ async def whatsapp_webhook(request: Request):
             categoria_detectada = categoria
             break
 
-    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=3, categoria=categoria_detectada)
-
     # Lê o prompt atualizado do arquivo prompt.txt
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
 
-    # Agora inclui sempre o prompt como contexto inicial correto
-    mensagens = [
-        {"role": "system", "content": prompt_base},
-        {"role": "user", "content": incoming_msg}
-    ]
+    # Mensagem base do prompt (garante instruções claras)
+    mensagens = [{"role": "system", "content": prompt_base}]
 
-    # Acrescenta o contexto resgatado se disponível
+    # Contexto relevante da sua pasta knowledge (vetorização)
+    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=6, categoria=categoria_detectada)
     if contexto_resgatado:
-        mensagens.insert(1, {
+        mensagens.append({
             "role": "system",
-            "content": f"Considere este conhecimento como apoio ao seu aconselhamento:\n{contexto_resgatado}"
+            "content": f"Utilize este conhecimento detalhadamente ao responder:\n{contexto_resgatado}"
         })
 
     # Acrescenta estado anterior do fluxo se existir
     if ultimo_fluxo:
-        mensagens.insert(1, {
+        mensagens.append({
             "role": "system",
             "content": f"O usuário está no fluxo atual: {ultimo_fluxo}."
         })
 
-    # Acrescenta históricos filtrados (no máximo 3 últimas interações)
+    # Acrescenta histórico das últimas interações filtradas (máximo 6 linhas para manter contexto recente)
     for linha in historico_filtrado[-6:]:
-        if "Usuário:" in linha:
-            mensagens.append({"role": "user", "content": linha.replace("Usuário:", "").strip()})
-        elif "Conselheiro:" in linha:
-            mensagens.append({"role": "assistant", "content": linha.replace("Conselheiro:", "").strip()})
+        role = "user" if "Usuário:" in linha else "assistant"
+        conteudo = linha.split(":", 1)[1].strip()
+        mensagens.append({"role": role, "content": conteudo})
 
-    # Salva a última emoção do usuário, se tiver
-    if ultimo_fluxo:
-        mensagens.append({
-            "role": "user",
-            "content": f"O usuário está no fluxo atual: {ultimo_fluxo}."
-        })
-
-    # Adiciona conhecimento relevante apenas se for necessário
-    if contexto_resgatado:
-        mensagens.append({
-            "role": "user",
-            "content": f"Considere esse conhecimento como apoio ao seu aconselhamento:\n{contexto_resgatado}"
-        })
-
-    # Últimas 3 interações do histórico real da conversa (máximo)
-    for linha in historico_filtrado[-6:]:
-        if "Usuário:" in linha:
-            mensagens.append({"role": "user", "content": linha.replace("Usuário:", "").strip()})
-        elif "Conselheiro:" in linha:
-            mensagens.append({"role": "assistant", "content": linha.replace("Conselheiro:", "").strip()})
-
-    # Mensagem atual do usuário
+    # Pergunta atual do usuário (reforça no final)
     mensagens.append({"role": "user", "content": incoming_msg})
 
     # === INTEGRAÇÃO COM INDICADORES ECONÔMICOS ===
