@@ -16,7 +16,7 @@ from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
 from definir_limite import salvar_limite_usuario
-from memoria_usuario import resumo_do_mes, verificar_limites
+from memoria_usuario import resumo_do_mes, verificar_limites, contexto_principal_usuario
 from emocional import detectar_emocao, aumento_pos_emocao
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
@@ -317,7 +317,9 @@ async def whatsapp_webhook(request: Request):
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 else ""
 
     if passou_limite(sheet_usuario, sheet_usuario.col_values(2).index(from_number) + 1):
-        send_message(from_number, mensagens.estilo_msg(mensagens.alerta_limite_gratuito(), leve=False))
+        contexto_usuario = contexto_principal_usuario(from_number)
+        mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
+        send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
         return {"status": "limite atingido"}
 
     # === REGISTRO DE GASTOS PADRÃO ===

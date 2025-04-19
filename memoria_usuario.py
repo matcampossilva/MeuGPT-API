@@ -71,3 +71,19 @@ def verificar_limites(numero_usuario):
 
     except Exception as e:
         return f"[Erro ao verificar limites] {str(e)}"
+
+def contexto_principal_usuario(numero_usuario):
+    historico = resumo_do_mes(numero_usuario).lower()
+    
+    if any(palavra in historico for palavra in ["casamento", "esposa", "marido", "cônjuge", "matrimônio"]):
+        return "casamento"
+    elif any(palavra in historico for palavra in ["dívida", "dívidas", "devendo", "juros", "negativado"]):
+        return "dívidas"
+    elif any(palavra in historico for palavra in ["oração", "espiritualidade", "fé", "Deus", "moral", "pecado"]):
+        return "liberdade_espiritual"
+    elif any(palavra in historico for palavra in ["controle", "gasto", "gastos", "orçamento", "despesa", "despesas"]):
+        return "controle_gastos"
+    elif any(palavra in historico for palavra in ["decisão", "decisões", "investimento", "financiamento", "empréstimo", "consultoria"]):
+        return "decisoes_financeiras"
+    else:
+        return "geral"

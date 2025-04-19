@@ -27,13 +27,47 @@ def cadastro_completo(primeiro_nome):
         "Controle de gastos, resumos automáticos, solução de dívidas, investimentos ou vida espiritual ou familiar... por onde quer começar?"
     )
 
-def alerta_limite_gratuito():
-    return (
-        "⚠️ Eita, seu limite gratuito acabou de bater no teto! 😬\n\n"
-        "Vamos parar de brincar com suas finanças e entrar pro clube dos adultos responsáveis? "
-        "Libere agora o acesso premium e tenha controle total das suas finanças, alertas personalizados e orientação VIP pra alcançar seus objetivos. 🚀💳\n\n"
-        "👉🏼 Acesse aqui: https://seulinkpremium.com"
-    )
+def alerta_limite_gratuito(contexto='geral'):
+    mensagens_contextuais = {
+        "casamento": (
+            "⚠️ Você chegou ao fim da versão gratuita.\n\n"
+            "Pergunte-se agora: você prefere um casamento harmonioso ou continuar lidando com estresse financeiro que desgasta até as melhores relações?\n\n"
+            "O Premium elimina conflitos financeiros no casamento pela raiz, garantindo estratégias claras e personalizadas que alinham suas finanças aos objetivos conjugais.\n\n"
+            "👉🏼 Ative agora e proteja seu casamento: https://seulinkpremium.com"
+        ),
+        "dívidas": (
+            "⚠️ Seu limite gratuito terminou.\n\n"
+            "Pergunte-se agora: você realmente vai continuar pagando juros e financiando o lucro dos bancos, ou prefere assumir o controle definitivo das suas dívidas?\n\n"
+            "Com o Premium, você tem planos concretos e personalizados para eliminar dívidas de uma vez por todas.\n\n"
+            "👉🏼 Livre-se das dívidas agora: https://seulinkpremium.com"
+        ),
+        "controle_gastos": (
+            "⚠️ Seu período gratuito acabou.\n\n"
+            "Pergunte-se agora: quer continuar vivendo de suposições financeiras no escuro ou finalmente ter clareza absoluta e controle real sobre cada centavo que você gasta?\n\n"
+            "Com o Premium, você passa a tomar decisões financeiras com total precisão, organização e segurança.\n\n"
+            "👉🏼 Garanta controle absoluto aqui: https://seulinkpremium.com"
+        ),
+        "decisoes_financeiras": (
+            "⚠️ Você esgotou seu limite gratuito.\n\n"
+            "Pergunte-se agora: quantas decisões financeiras erradas você ainda pode se dar ao luxo de cometer?\n\n"
+            "O acesso Premium oferece respostas certeiras e objetivas para suas decisões financeiras diárias e estratégicas.\n\n"
+            "👉🏼 Tome decisões inteligentes agora: https://seulinkpremium.com"
+        ),
+        "liberdade_espiritual": (
+            "⚠️ Seu período gratuito chegou ao fim.\n\n"
+            "Pergunte-se agora: você quer que seu dinheiro sirva aos seus valores mais profundos ou prefere continuar refém da pressão financeira?\n\n"
+            "No Premium, dinheiro e espiritualidade trabalham juntos, dando clareza, liberdade e paz verdadeira para sua vida.\n\n"
+            "👉🏼 Conquiste liberdade real agora: https://seulinkpremium.com"
+        ),
+        "geral": (
+            "⚠️ Eita, seu limite gratuito acabou de bater no teto! 😬\n\n"
+            "Vamos parar de brincar com suas finanças e entrar pro clube dos adultos responsáveis? "
+            "Libere agora o acesso premium e tenha controle total das suas finanças, alertas personalizados e orientação VIP pra alcançar seus objetivos. 🚀💳\n\n"
+            "👉🏼 Acesse aqui: https://seulinkpremium.com"
+        )
+    }
+
+    return mensagens_contextuais.get(contexto, mensagens_contextuais["geral"])
 
 def registro_gastos_orientacao():
     return (
