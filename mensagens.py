@@ -1,5 +1,3 @@
-# mensagens.py
-
 import random
 
 def saudacao_inicial():
