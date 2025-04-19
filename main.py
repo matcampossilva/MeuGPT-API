@@ -312,9 +312,26 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagens.estilo_msg(
             "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌"))
 
-    linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
-    name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
-    email = linha_usuario[2].strip() if len(linha_usuario) > 2 else ""
+    linha_index = sheet_usuario.col_values(2).index(from_number) + 1
+    linha_usuario = sheet_usuario.row_values(linha_index)
+
+    name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0].strip() else None
+    email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
+
+    if not name or not email:
+        nome_capturado = nome_valido(incoming_msg)
+        email_capturado = extract_email(incoming_msg)
+
+        if nome_capturado and email_capturado:
+            primeiro_nome = incoming_msg.split()[0]
+            sheet_usuario.update_cell(linha_index, 1, incoming_msg.title())
+            sheet_usuario.update_cell(linha_index, 3, email_capturado.lower())
+            send_message(from_number, mensagens.estilo_msg(mensagens.cadastro_completo(primeiro_nome)))
+            return {"status": "nome e email registrados"}
+
+        elif not nome_capturado or not email_capturado:
+            send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
+            return {"status": "solicitou nome e email"}
 
     if passou_limite(sheet_usuario, sheet_usuario.col_values(2).index(from_number) + 1):
         contexto_usuario = contexto_principal_usuario(from_number)

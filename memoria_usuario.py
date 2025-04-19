@@ -37,9 +37,10 @@ def resumo_do_mes(numero_usuario, mes=None, ano=None):
 
     contagem = Counter(categorias)
     mais_frequentes = contagem.most_common(3)
-    resumo = f"📅 *Resumo de {mes}/{ano}*\n"
+    resumo = f"📅 *Resumo das suas finanças em {mes}/{ano}:*\n"
     resumo += f"Total gasto: R$ {total:.2f}\n"
     resumo += "Categorias mais frequentes:\n"
+
     for cat, qtd in mais_frequentes:
         resumo += f"- {cat} ({qtd}x)\n"
 

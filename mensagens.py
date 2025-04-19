@@ -27,12 +27,15 @@ def cadastro_completo(primeiro_nome):
         "Controle de gastos, resumos automáticos, solução de dívidas, investimentos ou vida espiritual ou familiar... por onde quer começar?"
     )
 
+def solicitacao_cadastro():
+    return saudacao_inicial()
+
 def alerta_limite_gratuito(contexto='geral'):
     mensagens_contextuais = {
         "casamento": (
             "⚠️ Você chegou ao fim da versão gratuita.\n\n"
-            "Pergunte-se agora: você prefere um casamento harmonioso ou continuar lidando com estresse financeiro que desgasta até as melhores relações?\n\n"
-            "O Premium elimina conflitos financeiros no casamento pela raiz, garantindo estratégias claras e personalizadas que alinham suas finanças aos objetivos conjugais.\n\n"
+            "Pergunte-se agora: Quer paz no casamento ou prefere continuar brigando por dinheiro? 🥲\n\n"
+            "No Premium você tem estratégias personalizadas para acabar com estresse financeiro no seu relacionamento.\n\n"
             "👉🏼 Ative agora e proteja seu casamento: https://seulinkpremium.com"
         ),
         "dívidas": (
