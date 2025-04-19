@@ -66,7 +66,7 @@ def humor_acido_alerta():
         "Feliz no simples? 🛥️",
         "Ô Leônidas, cê tem que parar de arrumar essas confusão, meu! 🫣",
         "Essa semana tenha o mindset de um boleto. Porque um boleto sempre vence. Vamo pra cima! 🚀",
-        "Passa vontade não, passa o cartãozinho. 👹",
+        "Uai, passa vontade não, passa o cartãozinho. 👹",
         "Sinceramente, vou me abster de comentários porque sou da igreja. 🤝",
         "Compra, pô. É seu lazer. 👹",
         "Judas foi falso, mas você, hein... 😒"
@@ -86,8 +86,4 @@ def estilo_msg(texto, leve=True):
         "Sigamos firmes! 💪🏼",
         "Tô com você! 🫡"
     ])
-    prefixo = ""
-    if leve:
-        expressoes_goianas = ["Uai!", "Tem base?", "Bom demais!"]
-        prefixo = f"{random.choice(expressoes_goianas)} "
-    return f"{prefixo}{texto}\n\n{fechamento_personalizado}"
+    return f"{texto}\n\n{fechamento_personalizado}"
