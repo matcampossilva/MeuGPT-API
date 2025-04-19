@@ -325,7 +325,7 @@ async def whatsapp_webhook(request: Request):
         gastos_novos = extrair_gastos(incoming_msg)
 
         if not gastos_novos:
-            send_message(from_number, estilo_msg(
+            send_message(from_number, mensagens.estilo_msg(
                 "❌ Não consegui entender os gastos. Confira se estão no formato correto:\n\n"
                 "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\n"
                 "*Exemplos válidos:*\n"
@@ -445,17 +445,17 @@ async def whatsapp_webhook(request: Request):
 
     historico_relevante = historico_filtrado[-4:]
 
-    mensagens = [{"role": "system", "content": prompt_base}]
+    mensagens_gpt = [{"role": "system", "content": prompt_base}]
 
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
     if contexto_resgatado:
-        mensagens.append({
+        mensagens_gpt.append({
             "role": "system",
             "content": f"Considere as informações a seguir ao responder:\n{contexto_resgatado}"
         })
 
     if ultimo_fluxo:
-        mensagens.append({
+        mensagens_gpt.append({
             "role": "system",
             "content": f"O usuário está no seguinte fluxo: {ultimo_fluxo}."
         })
@@ -463,9 +463,9 @@ async def whatsapp_webhook(request: Request):
     for linha in historico_relevante:
         role = "user" if "Usuário:" in linha else "assistant"
         conteudo = linha.split(":", 1)[1].strip()
-        mensagens.append({"role": role, "content": conteudo})
+        mensagens_gpt.append({"role": role, "content": conteudo})
 
-    mensagens.append({"role": "user", "content": incoming_msg})
+    mensagens_gpt.append({"role": "user", "content": incoming_msg})
 
     termos_macro = ["empréstimo", "juros", "selic", "ipca", "cdi", "inflação", "investimento", "cenário econômico"]
     if any(palavra in incoming_msg.lower() for palavra in termos_macro):
@@ -476,7 +476,7 @@ async def whatsapp_webhook(request: Request):
             f"IPCA (inflação): {indicadores.get('ipca', 'indisponível')}%",
             f"Ibovespa: {indicadores.get('ibovespa', 'indisponível')}"
         ])
-        mensagens.append({
+        mensagens_gpt.append({
             "role": "user",
             "content": f"Indicadores econômicos atuais:\n{texto_indicadores}"
         })
@@ -484,7 +484,7 @@ async def whatsapp_webhook(request: Request):
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
-            messages=mensagens,
+            messages=mensagens_gpt,
             temperature=0.7,
         )
         reply = response["choices"][0]["message"]["content"].strip()
