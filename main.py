@@ -443,22 +443,24 @@ async def whatsapp_webhook(request: Request):
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
 
+    historico_relevante = historico_filtrado[-4:]
+
     mensagens = [{"role": "system", "content": prompt_base}]
 
-    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=6, categoria=categoria_detectada)
+    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
     if contexto_resgatado:
         mensagens.append({
             "role": "system",
-            "content": f"Utilize este conhecimento detalhadamente ao responder:\n{contexto_resgatado}"
+            "content": f"Considere as informações a seguir ao responder:\n{contexto_resgatado}"
         })
 
     if ultimo_fluxo:
         mensagens.append({
             "role": "system",
-            "content": f"O usuário está no fluxo atual: {ultimo_fluxo}."
+            "content": f"O usuário está no seguinte fluxo: {ultimo_fluxo}."
         })
 
-    for linha in historico_filtrado[-6:]:
+    for linha in historico_relevante:
         role = "user" if "Usuário:" in linha else "assistant"
         conteudo = linha.split(":", 1)[1].strip()
         mensagens.append({"role": role, "content": conteudo})

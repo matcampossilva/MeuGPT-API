@@ -23,34 +23,23 @@ def gerar_embedding(texto):
     )
     return response['data'][0]['embedding']
 
-def buscar_conhecimento_relevante(pergunta_usuario, categoria=None, top_k=3):
+def buscar_conhecimento_relevante(pergunta_usuario, categoria=None, top_k=4):
     try:
         embedding = gerar_embedding(pergunta_usuario)
 
-        query_params = {
-            "vector": embedding,
-            "top_k": top_k,
-            "include_metadata": True
-        }
+        filtro = {"categoria": {"$eq": categoria}} if categoria else {}
 
-        if categoria:
-            query_params["filter"] = {
-                "categoria": {"$eq": categoria}
-            }
+        resultado = index.query(
+            vector=embedding,
+            top_k=top_k,
+            include_metadata=True,
+            filter=filtro
+        )
 
-        resultado = index.query(**query_params)
+        textos = [match['metadata']['text'].strip() for match in resultado['matches'] if 'text' in match['metadata']]
 
-        textos = []
-        for match in resultado.get('matches', []):
-            texto = match['metadata'].get('text', '')
-            if texto:
-                textos.append(texto.strip())
-
-        if not textos:
-            return "Nenhum conhecimento relevante foi encontrado no momento."
-
-        return "\n\n".join(textos)
+        return "\n\n".join(textos) if textos else ""
 
     except Exception as e:
-        print(f"[ERRO no Pinecone] {e}")
-        return "Contexto não disponível agora. Siga com a resposta normalmente."
+        print(f"[ERRO Pinecone] {e}")
+        return ""
