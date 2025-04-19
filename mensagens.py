@@ -86,3 +86,8 @@ def estilo_msg(texto, leve=True):
         "Sigamos firmes! 💪🏼",
         "Tô com você! 🫡"
     ])
+    prefixo = ""
+    if leve:
+        expressoes_goianas = ["Uai!", "Tem base?", "Bom demais!"]
+        prefixo = f"{random.choice(expressoes_goianas)} "
+    return f"{prefixo}{texto}\n\n{fechamento_personalizado}"
