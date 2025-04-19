@@ -9,7 +9,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 import datetime
 import re
-import random
 from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria, parsear_gastos_em_lote
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado
 from gerar_resumo import gerar_resumo
@@ -22,6 +21,7 @@ from emocional import detectar_emocao, aumento_pos_emocao
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
+import mensagens  # Novo módulo com mensagens padrão centralizadas
 
 load_dotenv()
 app = FastAPI()
@@ -33,15 +33,6 @@ MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 # Função de leitura do prompt.txt para contexto inicial
 with open("prompt.txt", "r") as f:
     prompt_base = f.read().strip()
-    def estilo_msg(texto):
-        expressoes_goianas = ["Uai!", "Tem base?", "Bom demais!"]
-        fechamento_personalizado = random.choice([
-            "Vamos juntos! 🚀",
-            "Conte comigo! 🤝",
-            "Sigamos firmes! 💪🏼",
-            "Tô com você! 🫡"
-        ])
-        return f"{random.choice(expressoes_goianas)} {texto}\n\n{fechamento_personalizado}"
 
 # === PLANILHAS ===
 def get_user_status(user_number):
@@ -196,21 +187,14 @@ async def whatsapp_webhook(request: Request):
 
     # Mensagem padrão para cumprimentos rápidos
     if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
-        resposta_curta = (
-            "Olá! 👋🏼 Sou o seu Conselheiro Financeiro criado pelo Matheus Campos, CFP®."
-            "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro."
-            "Me conta uma coisa: por onde quer começar? 🚀"
-        )
-        send_message(from_number, estilo_msg(resposta_curta))
+        resposta_curta = mensagens.saudacao_inicial()
+        send_message(from_number, mensagens.estilo_msg(resposta_curta))
         return {"status": "saudação inicial enviada"}
-    
+
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
-        resposta_funcionalidades = (
-            "Posso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp, solução de dívidas, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar. "
-            "Por onde quer começar? 🤨"
-        )
-        send_message(from_number, estilo_msg(resposta_funcionalidades))
+        resposta_funcionalidades = mensagens.funcionalidades()
+        send_message(from_number, mensagens.estilo_msg(resposta_funcionalidades))
         return {"status": "funcionalidades informadas"}
 
     if quer_lista_comandos(incoming_msg):
@@ -223,9 +207,9 @@ async def whatsapp_webhook(request: Request):
             "/minhas_estrelas – Ver suas estrelas acumuladas\n"
             "/ajuda – Mostrar esta lista de comandos"
         )
-        send_message(from_number, estilo_msg(comandos))
+        send_message(from_number, mensagens.estilo_msg(comandos))
         return {"status": "comandos enviados"}
-    
+
     linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
 
@@ -233,15 +217,9 @@ async def whatsapp_webhook(request: Request):
         gastos_novos = extrair_gastos(incoming_msg)
         if not gastos_novos:
             send_message(
-                from_number, estilo_msg(
-                "❌ Não consegui entender os gastos. Use este formato:\n\n"
-                "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
-                "*Exemplos válidos:*\n"
-                "• Uber – 20,00 – crédito\n"
-                "• Combustível – 300,00 – débito\n"
-                "• Farmácia – 50,00 – pix – Saúde\n\n"
-                "📌 Você pode mandar *vários gastos*, um por linha."
-            ))
+                from_number,
+                mensagens.estilo_msg(mensagens.erro_formato_gastos())
+            )
             return {"status": "nenhum gasto extraído"}
 
         gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
@@ -304,154 +282,58 @@ async def whatsapp_webhook(request: Request):
                 "*Exemplo:* supermercado: alimentação"
             )
 
-        send_message(from_number, estilo_msg(mensagem.strip()))
+        send_message(from_number, mensagens.estilo_msg(mensagem.strip()))
         return {"status": "gastos processados via fluxo contínuo"}
-    
+
     ultimo_fluxo = estado.get("ultimo_fluxo")
-    
+
     if quer_resumo_mensal(incoming_msg):
         resumo = resumo_do_mes(from_number)
         limites = verificar_limites(from_number)
-        send_message(from_number, estilo_msg(resumo + "\n\n" + limites))
+        send_message(from_number, mensagens.estilo_msg(resumo + "\n\n" + limites))
         return {"status": "resumo mensal enviado"}
-    
+
     if any(t in incoming_msg.lower() for t in [
         "resumo do dia", "resumo de hoje", "quanto gastei hoje",
         "novo resumo", "resumo agora", "resumo atualizado",
         "quero o resumo", "meu resumo", "resumo aqui"
     ]):
-
         resumo = gerar_resumo(from_number, periodo="diario")
-        send_message(from_number, estilo_msg(resumo))
+        send_message(from_number, mensagens.estilo_msg(resumo))
         return {"status": "resumo hoje enviado"}
 
     if any(t in incoming_msg.lower() for t in ["resumo de ontem", "quanto gastei ontem"]):
         ontem = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")) - datetime.timedelta(days=1)
         resumo = gerar_resumo(from_number, periodo="custom", data_personalizada=ontem.date())
-        send_message(from_number, estilo_msg(resumo))
+        send_message(from_number, mensagens.estilo_msg(resumo))
         return {"status": "resumo ontem enviado"}
 
-    # === ⬇⬇ COMANDOS ESPECIAIS DO USUÁRIO (já funcionando no WhatsApp) ===
-    if incoming_msg.startswith("/resumo"):
-        resumo = gerar_resumo(from_number, periodo="diario")
-        send_message(from_number, estilo_msg(resumo))
-        return {"status": "resumo enviado"}
-
-    if incoming_msg.startswith("/limites"):
-        from enviar_alertas import gerar_resumo_limites
-        limites = gerar_resumo_limites(from_number)
-        send_message(from_number, estilo_msg(limites))
-        return {"status": "limites enviados"}
-
-    if incoming_msg.startswith("/relatorio"):
-        from relatorio_formatado import gerar_relatorio
-        relatorio = gerar_relatorio(from_number)
-        send_message(from_number, estilo_msg(relatorio))
-        return {"status": "relatorio enviado"}
-    
-    if incoming_msg.startswith("/ranking"):
-        from ranking import get_ranking_geral
-        ranking = get_ranking_geral()
-        send_message(from_number, estilo_msg(ranking))
-        return {"status": "ranking enviado"}
-
-    if incoming_msg.startswith("/minhas_estrelas"):
-        from ranking import get_ranking_usuario
-        estrelas = get_ranking_usuario(from_number)
-        send_message(from_number, estilo_msg(estrelas))
-        return {"status": "estrelas enviadas"}
-
-    # === ⬆⬆ FIM DOS COMANDOS ESPECIAIS ===
-
-    if not os.path.exists("conversas"):
-        os.makedirs("conversas")
-
-    status = status_usuario
-    sheet = sheet_usuario
-    values = sheet.col_values(2)
-    row = values.index(from_number) + 1 if from_number in values else None
-
     if verificar_upgrade_automatico(from_number):
-        send_message(from_number, estilo_msg(
+        send_message(from_number, mensagens.estilo_msg(
             "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌"))
 
-    linha_usuario = sheet.row_values(row)
+    linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 else ""
 
-    if passou_limite(sheet, row):
-        send_message(from_number, estilo_msg("⚠️ Limite gratuito atingido. Acesse: https://seulinkpremium.com"))
+    if passou_limite(sheet_usuario, sheet_usuario.col_values(2).index(from_number) + 1):
+        send_message(from_number, mensagens.estilo_msg(mensagens.alerta_limite_gratuito(), leve=False))
         return {"status": "limite atingido"}
-    
-    if any(p in incoming_msg.lower() for p in ["registrar gasto", "registrar meus gastos", "posso registrar", "lançar gasto", "lançar despesa", "adicionar gasto"]):
-        send_message(from_number, estilo_msg(
-            "Claro! Para registrar seus gastos corretamente, siga este formato:\n\n"
-            "📌 *Descrição - Valor - Forma de pagamento - Categoria (opcional)*\n\n"
-            "*Exemplos:*\n"
-            "• Uber - 20,00 - crédito\n"
-            "• Combustível - 300,00 - débito\n"
-            "• Farmácia - 50,00 - pix - Saúde\n\n"
-            "Você pode mandar *vários gastos*, um por linha.\n"
-            "Se não informar a categoria, vou identificar automaticamente. 😉"
-        ))
-        salvar_estado(from_number, {"ultimo_fluxo": "registro_gastos_continuo"})
-        return {"status": "orientacao registro de gastos enviada"}
 
-    if not name or not email:
-        linhas = incoming_msg.split("\n")
-        captured_name = None
-        captured_email = None
-
-        for linha in linhas:
-            linha = linha.strip()
-            if not captured_email:
-                possible_email = extract_email(linha)
-                if possible_email:
-                    captured_email = possible_email
-                    continue
-            if not captured_name and nome_valido(linha):
-                captured_name = linha
-
-        if captured_name and not name:
-            sheet.update_cell(row, 1, captured_name)
-            name = captured_name
-
-        if captured_email and not email:
-            sheet.update_cell(row, 3, captured_email)
-            email = captured_email
-
-        if not name and not email:
-            msg_boas_vindas = (
-                "Olá! 👋🏼 Sou o seu Conselheiro Financeiro criado pelo Matheus Campos, CFP®."
-                "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
-                "Antes de começarmos, me diga seu nome completo e e-mail, por favor? 🫡"
-            )
-            send_message(from_number, estilo_msg(msg_boas_vindas))
-            return {"status": "aguardando nome e email"}
-
-        if not name:
-            send_message(from_number, estilo_msg(estilo_msg("Faltou seu nome completo. ✍️")))
-            return {"status": "aguardando nome"}
-
-        if not email:
-            send_message(from_number, estilo_msg(estilo_msg("Agora me manda seu e-mail, por favor. 📧")))
-            return {"status": "aguardando email"}
-
-        primeiro_nome = name.split()[0]
-        welcome_msg = (
-            f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
-            "Agora que já nos conhecemos melhor, bora organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
-            "Controle de gastos, resumos automáticos, alertas inteligentes no WhatsApp, solução de dívidas, orientações de investimento ou vida espiritual... por onde quer começar?"
-        )
-        send_message(from_number, estilo_msg(welcome_msg))
-        return {"status": "cadastro completo"}
-    
-# === REGISTRO DE GASTOS PADRÃO ===
+    # === REGISTRO DE GASTOS PADRÃO ===
     if detectar_gastos(incoming_msg):
         gastos_novos = extrair_gastos(incoming_msg)
 
         if not gastos_novos:
-            send_message(from_number, estilo_msg("❌ Não consegui entender os gastos. Verifique se estão no formato:\n\n*Descrição – Valor – Forma de pagamento – Categoria (opcional)*"))
+            send_message(from_number, estilo_msg(
+                "❌ Não consegui entender os gastos. Confira se estão no formato correto:\n\n"
+                "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\n"
+                "*Exemplos válidos:*\n"
+                "• Uber – 20,00 – crédito\n"
+                "• Combustível – 300,00 – débito\n"
+                "• Farmácia – 50,00 – pix – Saúde\n\n"
+                "📌 Pode enviar vários gastos de uma vez, um por linha."
+            ))
             return {"status": "nenhum gasto extraído"}
 
         gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
@@ -467,7 +349,7 @@ async def whatsapp_webhook(request: Request):
             forma = gasto["forma_pagamento"]
             categoria = gasto["categoria"]
 
-            resultado = registrar_gasto(
+            registrar_gasto(
                 nome_usuario=name,
                 numero_usuario=from_number,
                 descricao=descricao,
@@ -482,7 +364,7 @@ async def whatsapp_webhook(request: Request):
 
         mensagem = ""
         if gastos_registrados:
-            mensagem += "*Gastos registrados:*\n" + "\n".join(gastos_registrados)
+            mensagem += "✅ *Gastos registrados com sucesso:*\n" + "\n".join(gastos_registrados)
 
         if gastos_sem_categoria:
             estado_anterior = carregar_estado(from_number) or {}
@@ -501,157 +383,23 @@ async def whatsapp_webhook(request: Request):
 
             salvar_estado(from_number, estado_anterior)
 
-            lista_gastos = "\n".join([
-                f"{g['descricao'].capitalize()}, R${g['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") +
-                f", pago com {g['forma_pagamento']}."
-                for g in gastos_sem_categoria
-            ])
+            lista_gastos = "\n".join(
+                [f"{g['descricao'].capitalize()}, R${g['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") +
+                 f", pago com {g['forma_pagamento']}."
+                 for g in gastos_sem_categoria]
+            )
 
             mensagem += (
-                "\n\n"
-                "Certo! Identifiquei os seguintes novos gastos sem categoria:\n\n" +
+                "\n\n🧐 Identifiquei alguns gastos sem categoria:\n\n" +
                 lista_gastos +
-                "\n\nSe quiser ajustar *categorias*, me envie agora as correções no formato:\n"
+                "\n\nSe quiser ajustar categorias, me envie agora as correções no formato:\n"
                 "[descrição]: [categoria desejada]\n\n"
-                "Exemplo: supermercado: alimentação\n\n"
-                "Senão, sigo com o que identifiquei e registro já."
+                "*Exemplo:* supermercado: alimentação\n\n"
+                "Se não precisar ajustar, só me avise que posso registrar assim mesmo!"
             )
 
         send_message(from_number, estilo_msg(mensagem.strip()))
         return {"status": "gastos processados"}
-    
-# === CORREÇÃO DE GASTO ===
-    if quer_corrigir_gasto(incoming_msg):
-        try:
-            partes = re.sub(r"(?i)corrigir gasto:|corrigir|ajustar|trocar", "", incoming_msg).strip()
-            match = re.match(
-                r"(.*?)\s*[-–—]\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(crédito|débito|pix|boleto)\s*(?:[-–—]\s*(.*))?",
-                partes, re.IGNORECASE
-            )
-
-            if not match:
-                salvar_estado(from_number, {"ultimo_fluxo": "correcao_em_andamento"})
-                send_message(from_number, estilo_msg(
-                    "⚠️ Parece que você quer corrigir um gasto, mas não entendi o que exatamente."))
-                send_message(from_number, estilo_msg(
-                    "Exemplo: Almoço – 45,00 – crédito – Alimentação ou algo parecido."))
-                return {"status": "aguardando detalhes de correção"}
-
-            descricao = match.group(1).strip().capitalize()
-            valor_raw = match.group(2)
-            forma = match.group(3).strip().capitalize()
-            categoria = match.group(4).strip().capitalize() if match.group(4) else "A DEFINIR"
-
-            valor = float(re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", "."))
-
-            fuso = pytz.timezone("America/Sao_Paulo")
-            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-
-            sucesso = atualizar_categoria(from_number, descricao, hoje, categoria)
-
-            if sucesso:
-                send_message(from_number, estilo_msg(f"✅ Gasto corrigido: {descricao} (R${valor:.2f}) – {categoria}"))
-                return {"status": "gasto corrigido"}
-            else:
-                send_message(from_number, estilo_msg(f"❌ Não encontrei o gasto '{descricao}' registrado em {hoje}."))
-                return {"status": "gasto não encontrado"}
-
-        except Exception as e:
-            print(f"[ERRO CORREÇÃO] {e}")
-            send_message(from_number, estilo_msg("Erro ao tentar corrigir o gasto. Tente novamente com o formato:\n\n*Almoço – 45,00 – crédito – Alimentação*"))
-            return {"status": "erro na correção"}
-    
-    if detectar_gastos_com_categoria_direta(incoming_msg):
-        gastos_identificados = []
-
-        # Tenta primeiro: Descrição – Valor – Forma – Categoria (opcional)
-        pattern1 = r"(.*?)\s*[-|–|—]\s*(\d+(?:[.,]\d{2})?)\s*[-|–|—]\s*(crédito|débito|pix|boleto)(?:\s*[-|–|—]\s*(.*))?"
-        matches = re.findall(pattern1, incoming_msg, re.IGNORECASE)
-
-        # Se falhar, tenta: Valor – Descrição – Forma – Categoria (opcional)
-        if not matches:
-            pattern2 = r"(\d+(?:[.,]\d{2})?)\s*[-|–|—]\s*(.*?)\s*[-|–|—]\s*(crédito|débito|pix|boleto)(?:\s*[-|–|—]\s*(.*))?"
-            matches = re.findall(pattern2, incoming_msg, re.IGNORECASE)
-
-        if not matches:
-            send_message(from_number, estilo_msg(
-                "Ops! 🤔 Parece que não consegui entender seus gastos direito.\n\n"
-                "Me ajuda mandando assim, por favor:\n\n"
-                "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\n"
-                "Exemplo:\n• Uber – 20,00 – crédito\n• Farmácia – 50,00 – pix – Saúde\n\n"
-                "Pode enviar vários, um por linha. 😉"
-            ))
-            return {"status": "formato inválido para gastos diretos"}
-
-        fuso = pytz.timezone("America/Sao_Paulo")
-        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-        linhas_confirmadas = []
-
-        for match in matches:
-            # Identifica a ordem automaticamente
-            if re.match(r"\d", match[0]):  # Começa com valor
-                valor_raw, descricao, forma, categoria_raw = match
-            else:  # Começa com descrição
-                descricao, valor_raw, forma, categoria_raw = match
-
-            try:
-                valor = float(re.sub(r"[^\d,]", "", valor_raw).replace(".", "").replace(",", "."))
-                categoria = categoria_raw.strip().capitalize() if categoria_raw else categorizar(descricao) or "A DEFINIR"
-
-                resultado = registrar_gasto(
-                    nome_usuario=name,
-                    numero_usuario=from_number,
-                    descricao=descricao.strip().capitalize(),
-                    valor=valor,
-                    forma_pagamento=forma.strip().capitalize(),
-                    data_gasto=hoje,
-                    categoria_manual=categoria
-                )
-
-                valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                linhas_confirmadas.append(f"{descricao.strip().capitalize()} ({valor_formatado}) – {categoria}")
-
-            except Exception as e:
-                print(f"[ERRO AO CONVERTER VALOR] {e}")
-                continue
-
-        send_message(from_number, estilo_msg("✅ *Gastos registrados:*\n\n" + "\n".join(linhas_confirmadas)))
-        return {"status": "gastos diretos com categoria processados"}        
-
-    elif "pode seguir" in incoming_msg.lower():
-        estado = carregar_estado(from_number)
-        if estado.get("gastos_temp"):
-            gastos = estado["gastos_temp"]
-            categorias_sugeridas = estado.get("categorias_sugeridas", {})
-            gastos_final = []
-
-            fuso = pytz.timezone("America/Sao_Paulo")
-            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-
-            for gasto in gastos:
-                descricao = gasto['descricao'].capitalize()
-                valor = gasto['valor']
-                forma = gasto['forma_pagamento']
-
-                chave_descricao = descricao.lower()
-                categoria = gasto.get("categoria") or categorias_sugeridas.get(chave_descricao) or "A DEFINIR"
-
-                resultado = registrar_gasto(
-                    nome_usuario=name,
-                    numero_usuario=from_number,
-                    descricao=descricao,
-                    valor=valor,
-                    forma_pagamento=forma,
-                    data_gasto=hoje,
-                    categoria_manual=categoria
-                )
-
-                valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                gastos_final.append(f"{descricao} ({valor_formatado}): {resultado['categoria']}")
-
-            resetar_estado(from_number)
-            send_message(from_number, estilo_msg("Gastos registrados:\n" + "\n".join(gastos_final)))
-            return {"status": "gastos registrados com ajuste"}
 
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
@@ -665,17 +413,6 @@ async def whatsapp_webhook(request: Request):
     with open(conversa_path, "r") as f:
         linhas_conversa = f.readlines()
 
-   # Só grava se 'reply' já foi gerado (evita erro antes da resposta da IA)
-    if 'reply' in locals():
-        if "[Nome]" in reply:
-            if name and name.strip():
-                primeiro_nome = name.split()[0]
-                reply = reply.replace("[Nome]", primeiro_nome)
-            else:
-                reply = reply.replace("[Nome]", "")
-        with open(conversa_path, "a") as f:
-            f.write(f"Conselheiro: {reply}\n")
-
     historico_filtrado = [
         linha for linha in linhas_conversa
         if not any(frase in linha.lower() for frase in [
@@ -687,8 +424,6 @@ async def whatsapp_webhook(request: Request):
             "por onde quer começar"
         ])
     ]
-
-    prompt_base = open("prompt.txt", "r").read()
 
     PALAVRAS_CHAVE_CATEGORIAS = {
         "espiritualidade": ["oração", "culpa", "confissão", "direção espiritual", "vida espiritual", "fé", "Deus", "confessar"],
@@ -705,14 +440,11 @@ async def whatsapp_webhook(request: Request):
             categoria_detectada = categoria
             break
 
-    # Lê o prompt atualizado do arquivo prompt.txt
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
 
-    # Mensagem base do prompt (garante instruções claras)
     mensagens = [{"role": "system", "content": prompt_base}]
 
-    # Contexto relevante da sua pasta knowledge (vetorização)
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, top_k=6, categoria=categoria_detectada)
     if contexto_resgatado:
         mensagens.append({
@@ -720,24 +452,18 @@ async def whatsapp_webhook(request: Request):
             "content": f"Utilize este conhecimento detalhadamente ao responder:\n{contexto_resgatado}"
         })
 
-    # Acrescenta estado anterior do fluxo se existir
     if ultimo_fluxo:
         mensagens.append({
             "role": "system",
             "content": f"O usuário está no fluxo atual: {ultimo_fluxo}."
         })
 
-    # Acrescenta histórico das últimas interações filtradas (máximo 6 linhas para manter contexto recente)
     for linha in historico_filtrado[-6:]:
         role = "user" if "Usuário:" in linha else "assistant"
         conteudo = linha.split(":", 1)[1].strip()
         mensagens.append({"role": role, "content": conteudo})
 
-    # Pergunta atual do usuário (reforça no final)
     mensagens.append({"role": "user", "content": incoming_msg})
-
-    # === INTEGRAÇÃO COM INDICADORES ECONÔMICOS ===
-    from indicadores import get_indicadores  # deixe esse import no topo do arquivo, se ainda não estiver
 
     termos_macro = ["empréstimo", "juros", "selic", "ipca", "cdi", "inflação", "investimento", "cenário econômico"]
     if any(palavra in incoming_msg.lower() for palavra in termos_macro):
@@ -753,14 +479,6 @@ async def whatsapp_webhook(request: Request):
             "content": f"Indicadores econômicos atuais:\n{texto_indicadores}"
         })
 
-    for linha in historico_filtrado[-6:]:
-        if "Usuário:" in linha:
-            mensagens.append({"role": "user", "content": linha.replace("Usuário:", "").strip()})
-        elif "Conselheiro:" in linha:
-            mensagens.append({"role": "assistant", "content": linha.replace("Conselheiro:", "").strip()})
-
-    mensagens.append({"role": "user", "content": incoming_msg})
-
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
@@ -772,17 +490,12 @@ async def whatsapp_webhook(request: Request):
         print(f"[ERRO OpenAI] {e}")
         reply = "⚠️ Tive um problema ao responder agora. Pode me mandar a mensagem de novo?"
 
-    reply = response["choices"][0]["message"]["content"].strip()
+    reply = re.sub(r'^(uai|tem base|bom demais|ô beleza)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
 
-    # Remover prefixos inadequados como "Ô beleza!" ou "Bom demais! Olá!"
-    reply = re.sub(r'^(uai|tem base|bom demais)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
-
-    # Substituição correta do placeholder [Nome]
     if "[Nome]" in reply:
         primeiro_nome = name.split()[0] if name else ""
         reply = reply.replace("[Nome]", primeiro_nome)
 
-    # Acrescenta automaticamente o disclaimer em assuntos sensíveis
     assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "divórcio", "separação", "terapia", "crise"]
     if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
         disclaimer = (
@@ -793,26 +506,6 @@ async def whatsapp_webhook(request: Request):
     with open(conversa_path, "a") as f:
         f.write(f"Conselheiro: {reply}\n")
 
-    armazenar_mensagem(from_number, "Usuário", incoming_msg)
-    armazenar_mensagem(from_number, "Conselheiro", reply)
-
-    tokens = count_tokens(incoming_msg) + count_tokens(reply)
-    valor_atual = linha_usuario[4] if len(linha_usuario) > 4 else 0
-    valor_atual = int(valor_atual) if valor_atual else 0
-    sheet.update_cell(row, 5, valor_atual + tokens)
-
-    increment_interactions(sheet, row)
-
-    # Disclaimer para mensagens sensíveis
-    assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "terapia"]
-    if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
-        disclaimer = (
-            "⚠️ Lembre-se: Este GPT não substitui acompanhamento profissional especializado em saúde física, emocional, orientação espiritual direta ou consultoria financeira personalizada."
-        )
-        reply = f"{reply}\n\n{disclaimer}"
-    send_message(from_number, estilo_msg(reply))
-
-    # === Detectar emoção e possível relação com aumento de gasto ===
     fuso = pytz.timezone("America/Sao_Paulo")
     data_msg = datetime.datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
     emocao = detectar_emocao(incoming_msg)
@@ -825,17 +518,10 @@ async def whatsapp_webhook(request: Request):
     if mensagem_estrela:
         send_message(from_number, estilo_msg(mensagem_estrela))
 
-    if not reply or not reply.strip():
+    if not reply.strip():
         send_message(from_number, estilo_msg(
-            from_number,
-            "❌ Não consegui entender o que você quis dizer.\n\n"
-            "Se estiver tentando registrar gastos, use o formato:\n\n"
-            "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
-            "*Exemplos válidos:*\n"
-            "• Uber – 20,00 – crédito\n"
-            "• Combustível – 300,00 – débito\n"
-            "• Farmácia – 50,00 – pix – Saúde\n\n"
-            "📎 Pode mandar *vários gastos de uma vez*, um por linha. Eu aguento."
+            "❌ Não consegui entender. Se estiver tentando registrar gastos, use o formato:\n"
+            "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)"
         ))
 
     return {"status": "mensagem enviada"}
