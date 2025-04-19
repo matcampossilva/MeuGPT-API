@@ -4,7 +4,7 @@ def saudacao_inicial():
     return (
         "Olá! 👋🏼 Sou o seu Conselheiro Financeiro criado pelo Matheus Campos, CFP®. "
         "Tô aqui pra te ajudar a organizar suas finanças e sua vida, sempre colocando Deus, sua família e seu trabalho antes do dinheiro. "
-        "Me conta uma coisa: por onde quer começar?"
+        "Pra começarmos a organizar sua vida financeira, me diga seu nome completo e e-mail, por favor."
     )
 
 def funcionalidades():
@@ -23,14 +23,14 @@ def solicitacao_cadastro():
 def cadastro_completo(primeiro_nome):
     return (
         f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
-        "Agora que já nos conhecemos melhor, bora organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
+        "Agora que já nos conhecemos melhor, vamos organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
         "Controle de gastos, resumos automáticos, solução de dívidas, investimentos ou vida espiritual ou familiar... por onde quer começar?"
     )
 
 def alerta_limite_gratuito():
     return (
         "⚠️ Eita, seu limite gratuito acabou de bater no teto! 😬\n\n"
-        "Bora parar de brincar com suas finanças e entrar pro clube dos adultos responsáveis? "
+        "Vamos parar de brincar com suas finanças e entrar pro clube dos adultos responsáveis? "
         "Libere agora o acesso premium e tenha controle total das suas finanças, alertas personalizados e orientação VIP pra alcançar seus objetivos. 🚀💳\n\n"
         "👉🏼 Acesse aqui: https://seulinkpremium.com"
     )
