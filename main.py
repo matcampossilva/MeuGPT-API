@@ -492,7 +492,7 @@ async def whatsapp_webhook(request: Request):
         print(f"[ERRO OpenAI] {e}")
         reply = "⚠️ Tive um problema ao responder agora. Pode me mandar a mensagem de novo?"
 
-    reply = re.sub(r'^(uai|tem base|bom demais|ô beleza)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
+    reply = re.sub(r'^(uai|tem base|bom demais)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
 
     if "[Nome]" in reply:
         primeiro_nome = name.split()[0] if name else ""
@@ -514,20 +514,14 @@ async def whatsapp_webhook(request: Request):
     if emocao:
         alerta = aumento_pos_emocao(from_number, emocao, data_msg)
         if alerta:
-            send_message(from_number, estilo_msg(alerta))
+            send_message(from_number, mensagens.estilo_msg(alerta))
 
     mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
     if mensagem_estrela:
-        send_message(from_number, estilo_msg(mensagem_estrela))
+        send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
 
     if not reply.strip():
-        send_message(from_number, estilo_msg(
+        send_message(from_number, mensagens.estilo_msg(
             "❌ Não consegui entender. Se estiver tentando registrar gastos, use o formato:\n"
             "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)"
         ))
-
-    return {"status": "mensagem enviada"}
-
-@app.get("/health")
-def health_check():
-    return {"status": "vivo, lúcido e com fé"}
