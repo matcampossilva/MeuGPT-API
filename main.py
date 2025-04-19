@@ -398,7 +398,7 @@ async def whatsapp_webhook(request: Request):
                 "Se não precisar ajustar, só me avise que posso registrar assim mesmo!"
             )
 
-        send_message(from_number, estilo_msg(mensagem.strip()))
+        send_message(from_number, mensagens.estilo_msg(mensagem.strip()))
         return {"status": "gastos processados"}
 
     # === CONTINUA CONVERSA ===
@@ -520,8 +520,21 @@ async def whatsapp_webhook(request: Request):
     if mensagem_estrela:
         send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
 
-    if not reply.strip():
+    print(f"[DEBUG] reply gerado pelo GPT: {reply}")
+    print(f"[DEBUG] Enviando mensagem para {from_number}")
+
+    if reply.strip():
+        send_message(from_number, mensagens.estilo_msg(reply))
+        print("[DEBUG] Mensagem enviada.")
+    else:
         send_message(from_number, mensagens.estilo_msg(
             "❌ Não consegui entender. Se estiver tentando registrar gastos, use o formato:\n"
             "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)"
         ))
+        print("[DEBUG] Mensagem padrão enviada por falta de reply.")
+
+    return {"status": "mensagem enviada"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "vivo, lúcido e com fé"}
