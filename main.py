@@ -507,7 +507,11 @@ async def whatsapp_webhook(request: Request):
     if contexto_resgatado:
         mensagens_gpt.append({
             "role": "system",
-            "content": f"Baseie sua resposta integralmente nas informações a seguir, respeitando fielmente o estilo, os princípios morais cristãos e a abordagem profunda:\n{contexto_resgatado}"
+            "content": (
+                "Ao responder, baseie-se prioritariamente nas informações a seguir, respeitando fielmente "
+                "o estilo, tom, e os princípios contidos:\n\n"
+                f"{contexto_resgatado}"
+            )
         })
 
     if ultimo_fluxo:
