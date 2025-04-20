@@ -503,10 +503,11 @@ async def whatsapp_webhook(request: Request):
     mensagens_gpt = [{"role": "system", "content": prompt_base}]
 
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
+    print(f"[DEBUG] Conteúdo recuperado da knowledge: {contexto_resgatado}")
     if contexto_resgatado:
         mensagens_gpt.append({
             "role": "system",
-            "content": f"Considere as informações a seguir ao responder:\n{contexto_resgatado}"
+            "content": f"Baseie sua resposta integralmente nas informações a seguir, respeitando fielmente o estilo, os princípios morais cristãos e a abordagem profunda:\n{contexto_resgatado}"
         })
 
     if ultimo_fluxo:
