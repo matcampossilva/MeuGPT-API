@@ -24,7 +24,7 @@ def cadastro_completo(primeiro_nome):
     return (
         f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
         "Agora que já nos conhecemos melhor, vamos organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
-        "Controle de gastos, resumos automáticos, solução de dívidas, investimentos ou vida espiritual ou familiar... por onde quer começar?"
+        "Controle de gastos, resumos automáticos, solução de dívidas, investimentos ou vida espiritual e familiar... por onde quer começar?"
     )
 
 def solicitacao_cadastro():
@@ -86,7 +86,7 @@ def registro_gastos_orientacao():
 
 def erro_formato_gastos():
     return (
-        "❌ Não consegui entender seus gastos direito.\n\n"
+        "❌ Não consegui entender seus gastos direito. 😵‍💫 \n\n"
         "Me ajuda mandando assim, por favor:\n\n"
         "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\n"
         "Exemplo:\n• Uber – 20,00 – crédito\n• Farmácia – 50,00 – pix – Saúde\n\n"

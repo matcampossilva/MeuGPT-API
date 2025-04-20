@@ -31,8 +31,20 @@ client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
 
 # Função de leitura do prompt.txt para contexto inicial
-with open("prompt.txt", "r") as f:
-    prompt_base = f.read().strip()
+with open("prompt.txt", "r") as arquivo_prompt:
+    prompt_base = arquivo_prompt.read().strip()
+
+# Complemento claro e incisivo de contexto obrigatório:
+complemento_contextual = (
+    "Você nunca recomenda divórcio ou separação por questões financeiras. "
+    "O casamento é sagrado, indissolúvel e deve ser defendido com firmeza, clareza e profundidade espiritual. "
+    "Seja sempre amigável, intimista e firme. Utilize explicitamente ensinamentos cristãos, católicos e do Opus Dei. "
+    "Nunca sugira imediatamente ajuda externa (como conselheiros matrimoniais), a não ser que seja estritamente necessário após várias interações. "
+    "Trate crises financeiras conjugais com responsabilidade cristã e financeira, lembrando sempre que a cruz matrimonial é uma oportunidade de crescimento espiritual e amadurecimento na vocação do casamento."
+    "Trate questoões de moral e ética com os ensinamentos de Santo Tomás de Aquino e da doutrina católica. "
+)
+
+mensagens_gpt = [{"role": "system", "content": prompt_base + "\n\n" + complemento_contextual}]
 
 # === PLANILHAS ===
 def get_user_status(user_number):
@@ -541,7 +553,7 @@ async def whatsapp_webhook(request: Request):
         primeiro_nome = name.split()[0] if name else ""
         reply = reply.replace("[Nome]", primeiro_nome)
 
-    assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "divórcio", "separação", "terapia", "crise"]
+    assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "terapia"]
     if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
         disclaimer = (
             "⚠️ Lembre-se: Este GPT não substitui acompanhamento profissional especializado em saúde física, emocional, orientação espiritual direta ou consultoria financeira personalizada."
