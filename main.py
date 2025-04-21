@@ -512,7 +512,7 @@ async def whatsapp_webhook(request: Request):
     mensagens_gpt = [{"role": "system", "content": prompt_base}]
 
     contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
-    print(f"[DEBUG] Conteúdo recuperado da knowledge: {contexto_resgatado}")
+    # print(f"[DEBUG] Conteúdo recuperado da knowledge: {contexto_resgatado}")
     if contexto_resgatado:
         mensagens_gpt.append({
             "role": "system",
@@ -535,7 +535,7 @@ async def whatsapp_webhook(request: Request):
             conteudo = linha.split(":", 1)[1].strip()
             mensagens_gpt.append({"role": role, "content": conteudo})
         else:
-            print(f"[DEBUG] Linha ignorada no histórico por falta de ':': {linha}")
+            # print(f"[DEBUG] Linha ignorada no histórico por falta de ':': {linha}")
 
     mensagens_gpt.append({"role": "user", "content": incoming_msg})
 
@@ -561,7 +561,7 @@ async def whatsapp_webhook(request: Request):
         )
         reply = response["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"[ERRO OpenAI] {e}")
+        # print(f"[ERRO OpenAI] {e}")
         reply = "⚠️ Tive um problema ao responder agora. Pode me mandar a mensagem de novo?"
 
     reply = re.sub(r'^(uai|tem base|bom demais)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
@@ -592,18 +592,18 @@ async def whatsapp_webhook(request: Request):
     if mensagem_estrela:
         send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
 
-    print(f"[DEBUG] reply gerado pelo GPT: {reply}")
-    print(f"[DEBUG] Enviando mensagem para {from_number}")
+    # print(f"[DEBUG] reply gerado pelo GPT: {reply}")
+    # print(f"[DEBUG] Enviando mensagem para {from_number}")
 
     if reply.strip():
         send_message(from_number, mensagens.estilo_msg(reply))
-        print("[DEBUG] Mensagem enviada.")
+        # print("[DEBUG] Mensagem enviada.")
     else:
         send_message(from_number, mensagens.estilo_msg(
             "❌ Não consegui entender. Se estiver tentando registrar gastos, use o formato:\n"
             "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)"
         ))
-        print("[DEBUG] Mensagem padrão enviada por falta de reply.")
+        # print("[DEBUG] Mensagem padrão enviada por falta de reply.")
 
     return {"status": "mensagem enviada"}
 
