@@ -203,9 +203,17 @@ async def whatsapp_webhook(request: Request):
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
     estado = carregar_estado(from_number)
+    ultima_msg = estado.get("ultima_msg", "")
     status_usuario = get_user_status(from_number)
     sheet_usuario = get_user_sheet(from_number)
 
+    if incoming_msg == ultima_msg:
+        print("[DEBUG] Mensagem duplicada detectada e ignorada.")
+        return {"status": "mensagem duplicada ignorada"}
+
+    estado["ultima_msg"] = incoming_msg
+    salvar_estado(from_number, estado)
+    
     linha_index = sheet_usuario.col_values(2).index(from_number) + 1
     linha_usuario = sheet_usuario.row_values(linha_index)
 
