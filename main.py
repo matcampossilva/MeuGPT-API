@@ -101,7 +101,6 @@ def send_message(to, body):
         print("[DEBUG] Resposta duplicada detectada e não enviada.")
         return
 
-    # Divide mensagens maiores em blocos de até 1500 caracteres
     partes = [body[i:i+1500] for i in range(0, len(body), 1500)]
     for parte in partes:
         client.messages.create(
@@ -109,12 +108,6 @@ def send_message(to, body):
             messaging_service_sid=MESSAGING_SERVICE_SID,
             to=f"whatsapp:{to}"
         )
-
-    client.messages.create(
-        body=body,
-        messaging_service_sid=MESSAGING_SERVICE_SID,
-        to=f"whatsapp:{to}"
-    )
 
     salvar_ultima_resposta(to, body)
 
@@ -223,8 +216,20 @@ async def whatsapp_webhook(request: Request):
     linha_usuario = sheet_usuario.row_values(linha_index)
 
     increment_interactions(sheet_usuario, linha_index)
+    def get_tokens(sheet, row):
+        try:
+            val = sheet.cell(row, 5).value
+            return int(val) if val else 0
+        except:
+            return 0
+
+    def increment_tokens(sheet, row, novos_tokens):
+        tokens_atuais = get_tokens(sheet, row)
+        sheet.update_cell(row, 5, tokens_atuais + novos_tokens)
+        return tokens_atuais + novos_tokens
+    
     tokens = count_tokens(incoming_msg)
-    sheet_usuario.update_cell(linha_index, 5, tokens)
+    increment_tokens(sheet_usuario, linha_index, tokens)
 
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0].strip() else None
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
