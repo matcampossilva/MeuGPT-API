@@ -42,7 +42,8 @@ def resumo_do_mes(numero_usuario, mes=None, ano=None):
     resumo += "Categorias mais frequentes:\n"
 
     for cat, qtd in mais_frequentes:
-        resumo += f"- {cat} ({qtd}x)\n"
+        total_cat = sum(float(linha[4]) for linha in gastos if linha[3] == cat)
+        resumo += f"- {cat}: R${total_cat:.2f} ({qtd}x)\n"
 
     return resumo
 

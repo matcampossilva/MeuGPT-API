@@ -48,7 +48,7 @@ def alerta_limite_gratuito(contexto='geral'):
             "⚠️ Seu período gratuito acabou.\n\n"
             "Pergunte-se agora: quer continuar vivendo de suposições financeiras no escuro ou finalmente ter clareza absoluta e controle real sobre cada centavo que você gasta?\n\n"
             "Com o Premium, você passa a tomar decisões financeiras com total precisão, organização e segurança.\n\n"
-            "👉🏼 Garanta controle absoluto aqui: https://seulinkpremium.com"
+            "👉🏼 Garanta agora o controle absoluto aqui: https://seulinkpremium.com"
         ),
         "decisoes_financeiras": (
             "⚠️ Você esgotou seu limite gratuito.\n\n"
@@ -66,7 +66,7 @@ def alerta_limite_gratuito(contexto='geral'):
             "⚠️ Eita, seu limite gratuito acabou de bater no teto! 😬\n\n"
             "Vamos parar de brincar com suas finanças e entrar pro clube dos adultos responsáveis? "
             "Libere agora o acesso premium e tenha controle total das suas finanças, alertas personalizados e orientação VIP pra alcançar seus objetivos. 🚀💳\n\n"
-            "👉🏼 Acesse aqui: https://seulinkpremium.com"
+            "👉🏼 Acesse agora aqui: https://seulinkpremium.com"
         )
     }
 
@@ -94,21 +94,26 @@ def erro_formato_gastos():
     )
 
 def humor_acido_alerta():
-    mensagens = [
-        "Olha só! Vai gastar todo seu dinheiro em iFood mesmo ou sobrou algum trocado pro aporte do mês? 🤡",
-        "Que legal, já pagou a mensalidade da academia mais cara da cidade. Agora só falta você ir treinar. 🫢",
-        "Uai! Tá investindo forte em roupas novas ou resolveu abrir uma loja? 😒",
-        "Netflix, Disney+, HBO… Cê já pensou em assistir menos séries e mais seu dinheiro crescendo? 👀",
-        "Não é rico, mas se dá certos luxos, né? 🐩",
-        "Feliz no simples? 🛥️",
-        "Ô Leônidas, cê tem que parar de arrumar essas confusão, meu! 🫣",
-        "Essa semana tenha o mindset de um boleto. Porque um boleto sempre vence. Vamo pra cima! 🚀",
-        "Uai, passa vontade não, passa o cartãozinho. 👹",
-        "Sinceramente, vou me abster de comentários porque sou da igreja. 🤝",
-        "Compra, pô. É seu lazer. 👹",
-        "Judas foi falso, mas você, hein... 😒"
-    ]
-    return random.choice(mensagens)
+    mensagens = {
+        "alimentação": "Delivery de novo? Já pode pedir música no Fantástico. Bora cozinhar em casa hoje ou vai esperar a falência bater na porta? 🍔🤡",
+        "roupas": "Mais roupa nova? Tá lançando coleção ou resolveu rasgar dinheiro com estilo? 🛍️🔥",
+        "entretenimento": "Netflix, Disney+, Prime… Parabéns, você é oficialmente acionista majoritário das plataformas de streaming. Já pensou investir um pouco em você? 📺💸",
+        "academia": "Que legal, já pagou a mensalidade da academia mais cara da cidade. Agora só falta você ir treinar. 🫢", 
+        "geral": [
+            "Seu cartão tá mais movimentado que metrô em horário de pico. Bora maneirar um pouco? 🚇😅",
+            "Não é rico, mas adora um luxo, né? 🐩",
+            "Ô Leônidas, cê tem que parar de arrumar essas confusão, meu! 🫣",
+            "Essa semana tenha o mindset de um boleto. Porque um boleto sempre vence. Vamo pra cima! 🚀",
+            "Compra, pô. É seu lazer. 👹",
+             "Uai, passa vontade não, passa o cartãozinho. 👹"
+        ]
+    }
+    
+    categoria_escolhida = random.choice(list(mensagens.keys()))
+    if isinstance(mensagens[categoria_escolhida], list):
+        return random.choice(mensagens[categoria_escolhida])
+    else:
+        return mensagens[categoria_escolhida]
 
 def disclaimer():
     return (
@@ -117,10 +122,12 @@ def disclaimer():
     )
 
 def estilo_msg(texto, leve=True):
-    fechamento_personalizado = random.choice([
-        "Vamos juntos! 🚀",
-        "Conte comigo! 🤝",
-        "Sigamos firmes! 💪🏼",
-        "Tô com você! 🫡"
-    ])
-    return f"{texto}\n\n{fechamento_personalizado}"
+    if leve and random.random() < 0.3:  # 30% de chance
+        fechamento_personalizado = random.choice([
+            "Vamos juntos! 🚀",
+            "Conte comigo! 🤝",
+            "Sigamos firmes! 💪🏼",
+            "Tô com você! 🫡"
+        ])
+        return f"{texto}\n\n{fechamento_personalizado}"
+    return texto

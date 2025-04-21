@@ -136,8 +136,8 @@ def is_boas_vindas(text):
 
 def detectar_gastos(texto):
     linhas = texto.strip().split("\n")
-    padrao = r"^(.*?)\s*[-–—]\s*(\d+(?:[.,]\d{2})?)\s*[-–—]\s*(crédito|débito|pix|boleto)(?:\s*[-–—]\s*(.*))?$"
-    return any(re.match(padrao, linha.strip(), re.IGNORECASE) for linha in linhas)
+    padrao = r"^[a-zA-ZáéíóúÁÉÍÓÚãõÃÕêÊôÔçÇ ]+[-–]\s*\d{1,3}(?:[.,]\d{2})\s*[-–]\s*(crédito|débito|pix|boleto)(?:\s*[-–]\s*[a-zA-ZáéíóúÁÉÍÓÚãõÃÕêÊôÔçÇ ]+)?$"
+    return all(re.match(padrao, linha.strip(), re.IGNORECASE) for linha in linhas)
 
 def detectar_gastos_com_categoria_direta(texto):
     linhas = texto.strip().split("\n")
@@ -273,21 +273,13 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagens.estilo_msg(mensagens.cadastro_completo(primeiro_nome)))
         return {"status": "cadastro completo"}
     
-    # Mensagem padrão para cumprimentos rápidos
-    if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"] and estado.get("ultimo_fluxo") != "conversa_iniciada":
-        resposta_curta = mensagens.saudacao_inicial()
-        send_message(from_number, mensagens.estilo_msg(resposta_curta))
-        estado["ultimo_fluxo"] = "conversa_iniciada"
-        salvar_estado(from_number, estado)
-        return {"status": "saudação inicial enviada"}
-    
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
         resposta_funcionalidades = mensagens.funcionalidades()
         send_message(from_number, mensagens.estilo_msg(resposta_funcionalidades))
         return {"status": "funcionalidades informadas"}
 
-    if quer_lista_comandos(incoming_msg):
+    if incoming_msg.strip().lower() in ["/comandos", "/ajuda"]:
         comandos = (
             "📋 *Comandos disponíveis:*\n"
             "/resumo – Ver seu resumo financeiro do dia\n"
@@ -518,7 +510,7 @@ async def whatsapp_webhook(request: Request):
         "financeiro": ["gasto", "dinheiro", "investimento", "renda", "salário", "orçamento", "juros", "empréstimo"],
         "casamento": ["cônjuge", "esposa", "marido", "matrimônio", "casamento", "vida a dois", "parceiro"],
         "dívidas": ["dívida", "devendo", "nome sujo", "negativado", "cobrança", "boleto atrasado"],
-        "filosofia": ["virtude", "temperamento", "Aristóteles", "São Tomás", "ética", "filosofia", "psicologia"],
+        "filosofia": ["virtude", "temperamento", "Aristóteles", "Santo Tomás", "ética", "filosofia", "psicologia"],
     }
 
     categoria_detectada = "geral"

@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 from collections import defaultdict
 from enviar_whatsapp import enviar_whatsapp
+import mensagens
 
 # === CONFIG ===
 load_dotenv()
@@ -15,6 +16,9 @@ GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
+
+fuso = pytz.timezone("America/Sao_Paulo")
+hoje = datetime.now(fuso).date()
 
 # === BUSCA LIMITES DEFINIDOS PELO USUÁRIO ===
 def buscar_limites_do_usuario(numero_usuario):
@@ -44,7 +48,7 @@ def buscar_limites_do_usuario(numero_usuario):
 def verificar_alertas():
     aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
     dados = aba.get_all_records()
-    hoje = datetime.now(pytz.timezone("America/Sao_Paulo")).date()
+    hoje = datetime.now(fuso).date()
 
     usuarios_gastos = defaultdict(lambda: defaultdict(float))
 
@@ -75,6 +79,16 @@ def verificar_alertas():
                     f"🚨 Alerta esperto! Hoje você já gastou R${total:.2f} com *{cat}* e seu limite era R${limite_cat:.2f}.\n"
                     f"Se for pra continuar gastando, que pelo menos valha a pena. Ou quer que eu esconda seu cartão? 😂"
                 )
+                from estado_usuario import carregar_estado, salvar_estado
+                estado_alertas = carregar_estado(numero)
+                alertas_enviados = estado_alertas.get("alertas_enviados", [])
+
+                if mensagem not in alertas_enviados:
+                    enviar_whatsapp(numero, mensagem)
+                    alertas_enviados.append(mensagem)
+                    estado_alertas["alertas_enviados"] = alertas_enviados
+                    salvar_estado(numero, estado_alertas)
+
                 enviar_whatsapp(numero, mensagem)
 
 # === GERA RESUMO DE ALERTAS (sem envio direto) ===

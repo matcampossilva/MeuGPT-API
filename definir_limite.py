@@ -4,25 +4,29 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from enviar_whatsapp import enviar_whatsapp
 from planilhas import get_gastos_diarios, get_limites
+import mensagens
+import pytz
+from estado_usuario import carregar_estado, salvar_estado
 
 load_dotenv()
 
-# === BUSCA LIMITES DEFINIDOS PELO USUÁRIO ===
+fuso = pytz.timezone("America/Sao_Paulo")
+
 def buscar_limites_do_usuario(numero_usuario):
     try:
         aba = get_limites()
         linhas = aba.get_all_records()
-        limites = defaultdict(dict)
+        limites = {}
 
         for linha in linhas:
             if linha["NÚMERO"].strip() != numero_usuario:
                 continue
             categoria = linha["CATEGORIA"].strip()
-            limite_dia = linha.get("LIMITE_DIÁRIO", "")
-            if isinstance(limite_dia, str):
-                limite_dia = limite_dia.replace("R$", "").replace(",", ".").strip()
+            limite_mes = linha.get("LIMITE_MENSAL", "")
+            if isinstance(limite_mes, str):
+                limite_mes = limite_mes.replace("R$", "").replace(".", "").replace(",", ".").strip()
             try:
-                limites[categoria] = float(limite_dia)
+                limites[categoria] = float(limite_mes)
             except:
                 continue
 
@@ -31,32 +35,10 @@ def buscar_limites_do_usuario(numero_usuario):
         print(f"Erro ao buscar limites: {e}")
         return {}
 
-# === FRASES PERSONALIZADAS ===
-def gerar_alerta_personalizado(categoria, total, limite, faixa):
-    frases = {
-        "50": [
-            f"👀 Já foi 50% do seu limite em *{categoria}*. Cautela não mata, mas a fatura talvez mate."
-        ],
-        "70": [
-            f"⚠️ Você já queimou 70% do que planejou pra *{categoria}*. Ainda é reversível, mas só se você largar o app do iFood agora. 🍔"
-        ],
-        "90": [
-            f"🚧 Tá chegando no fim da linha: 90% do limite de *{categoria}* usado. Tá vivendo como se não houvesse amanhã, né? 😵‍💫"
-        ],
-        "100": [
-            f"🔥 Limite de *{categoria}* estourado! Hora de esconder o cartão e fingir que o problema é o preço do arroz. 🍚💸"
-        ],
-        ">100": [
-            f"😈 Só se vive uma vez, né? Compra mesmo. Ass: Satanás. Você já passou dos 100% do limite de *{categoria}*."
-        ]
-    }
-    return random.choice(frases[faixa])
-
-# === ALERTAS PERSONALIZADOS ===
 def verificar_alertas():
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
-    hoje = datetime.now().date()
+    hoje = datetime.now(fuso).date()
 
     usuarios_gastos = defaultdict(lambda: defaultdict(float))
 
@@ -69,7 +51,7 @@ def verificar_alertas():
         except:
             continue
 
-        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(",", ".").strip()
+        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
         try:
             valor = float(valor_str)
         except:
@@ -99,25 +81,28 @@ def verificar_alertas():
                 faixa = ">100"
 
             if faixa:
-                mensagem = gerar_alerta_personalizado(cat, total, limite_cat, faixa)
-                enviar_whatsapp(numero, mensagem)
+                mensagem = mensagens.alerta_limite_excedido(cat, total, limite_cat, faixa)
 
-# === NOVA FUNÇÃO PARA DEFINIR LIMITE PERSONALIZADO ===
+                estado_alertas = carregar_estado(numero)
+                alertas_enviados = estado_alertas.get("alertas_enviados", [])
+
+                if mensagem not in alertas_enviados:
+                    enviar_whatsapp(numero, mensagem)
+                    alertas_enviados.append(mensagem)
+                    estado_alertas["alertas_enviados"] = alertas_enviados
+                    salvar_estado(numero, estado_alertas)
+
 def salvar_limite_usuario(numero, categoria, valor, tipo="mensal"):
     aba = get_limites()
     linhas = aba.get_all_records()
     linha_existente = None
 
-    for i, linha in enumerate(linhas, start=2):  # começa na linha 2 por causa do cabeçalho
+    for i, linha in enumerate(linhas, start=2):
         if linha["NÚMERO"].strip() == numero and linha["CATEGORIA"].strip().lower() == categoria.lower():
             linha_existente = i
             break
 
-    coluna = {
-        "diario": 3,
-        "semanal": 4,
-        "mensal": 5
-    }.get(tipo.lower(), 5)
+    coluna = {"diario": 3, "semanal": 4, "mensal": 5}.get(tipo.lower(), 5)
 
     if linha_existente:
         aba.update_cell(linha_existente, coluna, valor)
@@ -126,6 +111,5 @@ def salvar_limite_usuario(numero, categoria, valor, tipo="mensal"):
         nova_linha[coluna - 1] = valor
         aba.append_row(nova_linha)
 
-# === EXECUÇÃO DIRETA ===
 if __name__ == "__main__":
     verificar_alertas()
