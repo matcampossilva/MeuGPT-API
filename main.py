@@ -536,6 +536,7 @@ async def whatsapp_webhook(request: Request):
             mensagens_gpt.append({"role": role, "content": conteudo})
         else:
             # print(f"[DEBUG] Linha ignorada no histórico por falta de ':': {linha}")
+            pass # adicionado para evitar IndentationError após comentário
 
     mensagens_gpt.append({"role": "user", "content": incoming_msg})
 
