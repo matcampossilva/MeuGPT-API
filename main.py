@@ -95,8 +95,17 @@ def count_tokens(text):
 
 def send_message(to, body):
     if not body or not body.strip():
-        print(f"[ERRO] Tentativa de enviar mensagem vazia para {to}. Ignorado.")
+        print(f"[ERRO] Mensagem vazia para {to}.")
         return
+
+    # Divide mensagens maiores em blocos de até 1500 caracteres
+    partes = [body[i:i+1500] for i in range(0, len(body), 1500)]
+    for parte in partes:
+        client.messages.create(
+            body=parte,
+            messaging_service_sid=MESSAGING_SERVICE_SID,
+            to=f"whatsapp:{to}"
+        )
 
     client.messages.create(
         body=body,
@@ -527,7 +536,7 @@ async def whatsapp_webhook(request: Request):
             mensagens_gpt.append({"role": role, "content": conteudo})
         else:
             print(f"[DEBUG] Linha ignorada no histórico por falta de ':': {linha}")
-            
+
     mensagens_gpt.append({"role": "user", "content": incoming_msg})
 
     termos_macro = ["empréstimo", "juros", "selic", "ipca", "cdi", "inflação", "investimento", "cenário econômico"]
