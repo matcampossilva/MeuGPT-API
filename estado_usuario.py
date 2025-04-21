@@ -3,6 +3,7 @@ import os
 
 def salvar_estado(user_number, estado):
     caminho = f"estados/{user_number}.json"
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
     with open(caminho, "w", encoding="utf-8") as file:
         json.dump(estado, file)
 
