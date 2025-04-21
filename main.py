@@ -521,10 +521,13 @@ async def whatsapp_webhook(request: Request):
         })
 
     for linha in historico_relevante:
-        role = "user" if "Usuário:" in linha else "assistant"
-        conteudo = linha.split(":", 1)[1].strip()
-        mensagens_gpt.append({"role": role, "content": conteudo})
-
+        if ":" in linha:
+            role = "user" if "Usuário:" in linha else "assistant"
+            conteudo = linha.split(":", 1)[1].strip()
+            mensagens_gpt.append({"role": role, "content": conteudo})
+        else:
+            print(f"[DEBUG] Linha ignorada no histórico por falta de ':': {linha}")
+            
     mensagens_gpt.append({"role": "user", "content": incoming_msg})
 
     termos_macro = ["empréstimo", "juros", "selic", "ipca", "cdi", "inflação", "investimento", "cenário econômico"]
