@@ -213,7 +213,7 @@ async def whatsapp_webhook(request: Request):
 
     estado["ultima_msg"] = incoming_msg
     salvar_estado(from_number, estado)
-    
+
     linha_index = sheet_usuario.col_values(2).index(from_number) + 1
     linha_usuario = sheet_usuario.row_values(linha_index)
 
@@ -260,11 +260,13 @@ async def whatsapp_webhook(request: Request):
         return {"status": "cadastro completo"}
     
     # Mensagem padrão para cumprimentos rápidos
-    if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
+    if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"] and estado.get("ultimo_fluxo") != "conversa_iniciada":
         resposta_curta = mensagens.saudacao_inicial()
         send_message(from_number, mensagens.estilo_msg(resposta_curta))
+        estado["ultimo_fluxo"] = "conversa_iniciada"
+        salvar_estado(from_number, estado)
         return {"status": "saudação inicial enviada"}
-
+    
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
         resposta_funcionalidades = mensagens.funcionalidades()
