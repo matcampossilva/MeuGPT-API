@@ -222,6 +222,10 @@ async def whatsapp_webhook(request: Request):
     linha_index = sheet_usuario.col_values(2).index(from_number) + 1
     linha_usuario = sheet_usuario.row_values(linha_index)
 
+    increment_interactions(sheet_usuario, linha_index)
+    tokens = count_tokens(incoming_msg)
+    sheet_usuario.update_cell(linha_index, 5, tokens)
+
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0].strip() else None
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
 
