@@ -12,3 +12,8 @@ def carregar_estado(user_number):
         with open(caminho, "r", encoding="utf-8") as file:
             return json.load(file)
     return {}
+
+def resetar_estado(user_number):
+    caminho = f"estados/{user_number}.json"
+    if os.path.exists(caminho):
+        os.remove(caminho)
