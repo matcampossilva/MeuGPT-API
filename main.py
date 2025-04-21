@@ -10,7 +10,7 @@ import pytz
 import datetime
 import re
 from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria, parsear_gastos_em_lote
-from estado_usuario import salvar_estado, carregar_estado, resetar_estado
+from estado_usuario import salvar_estado, carregar_estado, resetar_estado, resposta_enviada_recentemente, salvar_ultima_resposta
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
@@ -95,7 +95,10 @@ def count_tokens(text):
 
 def send_message(to, body):
     if not body or not body.strip():
-        print(f"[ERRO] Mensagem vazia para {to}.")
+        print(f"[ERRO] Tentativa de enviar mensagem vazia para {to}. Ignorado.")
+        return
+    if resposta_enviada_recentemente(to, body):
+        print("[DEBUG] Resposta duplicada detectada e não enviada.")
         return
 
     # Divide mensagens maiores em blocos de até 1500 caracteres
@@ -112,6 +115,8 @@ def send_message(to, body):
         messaging_service_sid=MESSAGING_SERVICE_SID,
         to=f"whatsapp:{to}"
     )
+
+    salvar_ultima_resposta(to, body)
 
 def get_interactions(sheet, row):
     try:
