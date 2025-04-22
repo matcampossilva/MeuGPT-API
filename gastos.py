@@ -31,11 +31,11 @@ CATEGORIAS_AUTOMATICAS = {
 
 # === CATEGORIZAÇÃO INTELIGENTE ===
 def categorizar(descricao):
-    desc_lower = descricao.lower()
+    descricao = descricao.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ç", "c")
     for chave, categoria in CATEGORIAS_AUTOMATICAS.items():
-        if chave in desc_lower:
+        if chave in descricao:
             return categoria
-    return None
+    return "A DEFINIR"
 
 # === GERA ID ÚNICO ===
 def gerar_id_unico(numero_usuario, descricao, valor, data_gasto):

@@ -28,7 +28,9 @@ def resetar_estado(user_number):
 def resposta_enviada_recentemente(user_number, resposta_atual):
     estado = carregar_estado(user_number)
     ultima_resposta = estado.get("ultima_resposta", "")
-    return ultima_resposta.strip() == resposta_atual.strip()
+    if ultima_resposta.strip().lower() == resposta_atual.strip().lower():
+        return True
+    return False
 
 def salvar_ultima_resposta(user_number, resposta_atual):
     estado = carregar_estado(user_number)

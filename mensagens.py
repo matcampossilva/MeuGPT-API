@@ -158,3 +158,30 @@ def alerta_limite_excedido(categoria, total, limite, faixa):
     }
 
     return random.choice(mensagens.get(faixa, mensagens[">100"]))
+
+def alerta_limite_excedido(categoria, total, limite, faixa):
+    mensagens = {
+        "50": [
+            f"👀 Você já torrou 50% do limite mensal em *{categoria}*. Não tá cedo demais pra isso não, guerreiro? ",
+            f"⚠️ Metade do orçamento mensal de *{categoria}* já foi pro saco. Bora pisar no freio ou vai deixar pro mês que vem?",
+        ],
+        "70": [
+            f"😬 Alerta vermelho: você já gastou 70% do limite mensal em *{categoria}*. Desse jeito vai ter que fazer milagre no fim do mês.",
+            f"⚠️ Já queimou 70% do orçamento de *{categoria}*. A fatura tá batendo na sua porta igual testemunha de Jeová no domingo.",
+        ],
+        "90": [
+            f"🚧 Chegou a 90% do limite em *{categoria}*. Seu orçamento tá mais apertado que calça skinny depois do rodízio.",
+            f"😵‍💫 90% do orçamento em *{categoria}* já era. Quer testar os outros 10% ou parar enquanto dá tempo?",
+        ],
+        "100": [
+            f"🔥 100% do orçamento pra *{categoria}* já foi. Parabéns pela façanha! Agora só falta explicar isso pra sua família.",
+            f"🎉 Limite de *{categoria}* atingido! Seu prêmio? Uma bela dor de cabeça até o próximo mês.",
+        ],
+        ">100": [
+            f"💸 Você já passou em {((total-limite)/limite)*100:.1f}% do limite pra *{categoria}*. Tá tentando zerar sua conta bancária ou entrar pro Guinness?",
+            f"😈 Orçamento estourado em *{categoria}*! Continue assim e logo estará concorrendo ao título de maior patrocinador dos bancos do Brasil.",
+            f"🚨 Atenção: você já superou o limite de *{categoria}* em {((total-limite)/limite)*100:.1f}%. Tá gastando como se tivesse cartão black ilimitado, hein?",
+        ]
+    }
+
+    return random.choice(mensagens.get(faixa, mensagens[">100"]))

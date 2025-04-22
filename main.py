@@ -15,7 +15,7 @@ from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
-from definir_limite import salvar_limite_usuario
+from definir_limite import salvar_limite_usuario, verificar_alertas
 from memoria_usuario import resumo_do_mes, verificar_limites, contexto_principal_usuario
 from emocional import detectar_emocao, aumento_pos_emocao
 from planilhas import get_pagantes, get_gratuitos
@@ -197,6 +197,7 @@ def quer_lista_comandos(texto):
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
+    verificar_alertas()
     form = await request.form()
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
@@ -271,7 +272,13 @@ async def whatsapp_webhook(request: Request):
 
         primeiro_nome = name.split()[0]
         send_message(from_number, mensagens.estilo_msg(mensagens.cadastro_completo(primeiro_nome)))
+        estado["ultimo_fluxo"] = "cadastro_completo"
+        salvar_estado(from_number, estado)
         return {"status": "cadastro completo"}
+
+    elif estado.get("ultimo_fluxo") != "cadastro_completo":
+        estado["ultimo_fluxo"] = "cadastro_completo"
+        salvar_estado(from_number, estado)
     
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
@@ -401,6 +408,18 @@ async def whatsapp_webhook(request: Request):
         return {"status": "limite atingido"}
 
     # === REGISTRO DE GASTOS PADRÃO ===
+     # Instrução clara para registrar gastos (se o usuário pedir ajuda diretamente sobre gastos)
+    if any(frase in incoming_msg.lower() for frase in [
+        "quero registrar gastos",
+        "quero relacionar meus gastos",
+        "quero anotar gastos",
+        "como faço pra registrar gastos",
+        "quero lançar gastos",
+        "ajuda para registrar gastos"
+    ]):
+        send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
+        return {"status": "orientacao registro gastos enviada"}   
+    
     if detectar_gastos(incoming_msg):
         gastos_novos = extrair_gastos(incoming_msg)
 
@@ -527,7 +546,7 @@ async def whatsapp_webhook(request: Request):
 
     mensagens_gpt = [{"role": "system", "content": prompt_base}]
 
-    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
+    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=2)
     # print(f"[DEBUG] Conteúdo recuperado da knowledge: {contexto_resgatado}")
     if contexto_resgatado:
         mensagens_gpt.append({
