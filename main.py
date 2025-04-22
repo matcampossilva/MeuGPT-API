@@ -546,7 +546,7 @@ async def whatsapp_webhook(request: Request):
 
     mensagens_gpt = [{"role": "system", "content": prompt_base}]
 
-    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=2)
+    contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
     # print(f"[DEBUG] Conteúdo recuperado da knowledge: {contexto_resgatado}")
     if contexto_resgatado:
         mensagens_gpt.append({
