@@ -641,9 +641,9 @@ async def whatsapp_webhook(request: Request):
         if alerta:
             send_message(from_number, mensagens.estilo_msg(alerta))
 
-    mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
-    if mensagem_estrela:
-        send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
+    # mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
+    # if mensagem_estrela:
+        # send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
 
     from enviar_alertas import verificar_alertas
     verificar_alertas()
