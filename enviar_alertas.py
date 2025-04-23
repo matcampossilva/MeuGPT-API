@@ -7,46 +7,36 @@ import pytz
 from collections import defaultdict
 from enviar_whatsapp import enviar_whatsapp
 import mensagens
+from estado_usuario import carregar_estado, salvar_estado
+from planilhas import get_gastos_diarios, get_limites
 
 # === CONFIG ===
 load_dotenv()
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
-GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE")
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
-gs = gspread.authorize(creds)
-
 fuso = pytz.timezone("America/Sao_Paulo")
-hoje = datetime.now(fuso).date()
 
 # === BUSCA LIMITES DEFINIDOS PELO USUÁRIO ===
 def buscar_limites_do_usuario(numero_usuario):
-    try:
-        aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Limites")
-        linhas = aba.get_all_records()
-        limites = defaultdict(dict)
+    aba = get_limites()
+    linhas = aba.get_all_records()
+    limites = {}
 
-        for linha in linhas:
-            if linha["NÚMERO"].strip() != numero_usuario:
-                continue
-            categoria = linha["CATEGORIA"].strip()
-            limite_dia = linha.get("LIMITE_DIÁRIO", "")
-            if isinstance(limite_dia, str):
-                limite_dia = limite_dia.replace("R$", "").replace(",", ".").strip()
-            try:
-                limites[categoria] = float(limite_dia)
-            except:
-                continue
+    for linha in linhas:
+        if linha["NÚMERO"].strip() != numero_usuario:
+            continue
+        categoria = linha["CATEGORIA"].strip()
+        limite_mes = linha.get("LIMITE_MENSAL", "")
+        if isinstance(limite_mes, str):
+            limite_mes = limite_mes.replace("R$", "").replace(".", "").replace(",", ".").strip()
+        try:
+            limites[categoria] = float(limite_mes)
+        except:
+            continue
 
-        return limites
-    except Exception as e:
-        print(f"Erro ao buscar limites: {e}")
-        return {}
+    return limites
 
 # === ALERTAS PERSONALIZADOS ===
 def verificar_alertas():
-    aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
+    aba = get_gastos_diarios()
     dados = aba.get_all_records()
     hoje = datetime.now(fuso).date()
 
@@ -56,12 +46,12 @@ def verificar_alertas():
         numero = linha["NÚMERO"]
         try:
             data_gasto = datetime.strptime(linha["DATA DO GASTO"], "%d/%m/%Y").date()
-            if data_gasto != hoje:
+            if data_gasto.month != hoje.month or data_gasto.year != hoje.year:
                 continue
         except:
             continue
 
-        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(",", ".").strip()
+        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
         try:
             valor = float(valor_str)
         except:
@@ -74,12 +64,25 @@ def verificar_alertas():
         limites_user = buscar_limites_do_usuario(numero)
         for cat, total in categorias.items():
             limite_cat = limites_user.get(cat)
-            if limite_cat and total > limite_cat:
-                mensagem = (
-                    f"🚨 Alerta esperto! Hoje você já gastou R${total:.2f} com *{cat}* e seu limite era R${limite_cat:.2f}.\n"
-                    f"Se for pra continuar gastando, que pelo menos valha a pena. Ou quer que eu esconda seu cartão? 😂"
-                )
-                from estado_usuario import carregar_estado, salvar_estado
+            if not limite_cat:
+                continue
+
+            percentual = (total / limite_cat) * 100
+            faixa = None
+            if 45 < percentual <= 55:
+                faixa = "50"
+            elif 65 < percentual <= 75:
+                faixa = "70"
+            elif 85 < percentual <= 95:
+                faixa = "90"
+            elif 95 < percentual <= 105:
+                faixa = "100"
+            elif percentual > 105:
+                faixa = ">100"
+
+            if faixa:
+                mensagem = mensagens.alerta_limite_excedido(cat, total, limite_cat, faixa)
+
                 estado_alertas = carregar_estado(numero)
                 alertas_enviados = estado_alertas.get("alertas_enviados", [])
 
@@ -89,13 +92,11 @@ def verificar_alertas():
                     estado_alertas["alertas_enviados"] = alertas_enviados
                     salvar_estado(numero, estado_alertas)
 
-                enviar_whatsapp(numero, mensagem)
-
 # === GERA RESUMO DE ALERTAS (sem envio direto) ===
 def gerar_resumo_limites(numero_usuario):
-    aba = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
+    aba = get_gastos_diarios()
     dados = aba.get_all_records()
-    hoje = datetime.now(pytz.timezone("America/Sao_Paulo")).date()
+    hoje = datetime.now(fuso).date()
 
     categorias_usuario = defaultdict(float)
 
@@ -106,12 +107,12 @@ def gerar_resumo_limites(numero_usuario):
 
         try:
             data_gasto = datetime.strptime(linha["DATA DO GASTO"], "%d/%m/%Y").date()
-            if data_gasto != hoje:
+            if data_gasto.month != hoje.month or data_gasto.year != hoje.year:
                 continue
         except:
             continue
 
-        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(",", ".").strip()
+        valor_str = str(linha["VALOR (R$)"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
         try:
             valor = float(valor_str)
         except:
@@ -126,11 +127,22 @@ def gerar_resumo_limites(numero_usuario):
     for cat, total in categorias_usuario.items():
         limite_cat = limites_user.get(cat)
         if limite_cat and total > limite_cat:
-            alerta = (
-                f"🚨 Alerta esperto! Hoje você já gastou R${total:.2f} com *{cat}* e seu limite era R${limite_cat:.2f}.\n"
-                f"Se for pra continuar gastando, que pelo menos valha a pena. Ou quer que eu esconda seu cartão? 😂"
-            )
-            alertas.append(alerta)
+            percentual = (total / limite_cat) * 100
+            faixa = None
+            if 45 < percentual <= 55:
+                faixa = "50"
+            elif 65 < percentual <= 75:
+                faixa = "70"
+            elif 85 < percentual <= 95:
+                faixa = "90"
+            elif 95 < percentual <= 105:
+                faixa = "100"
+            elif percentual > 105:
+                faixa = ">100"
+
+            if faixa:
+                alerta = mensagens.alerta_limite_excedido(cat, total, limite_cat, faixa)
+                alertas.append(alerta)
 
     return "\n\n".join(alertas) if alertas else ""
 

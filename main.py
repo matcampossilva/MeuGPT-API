@@ -22,6 +22,7 @@ from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 import mensagens  # Novo módulo com mensagens padrão centralizadas
+import enviar_alertas
 
 load_dotenv()
 app = FastAPI()
@@ -38,7 +39,7 @@ with open("prompt.txt", "r") as arquivo_prompt:
 complemento_contextual = (
     "Você nunca recomenda divórcio ou separação por questões financeiras. "
     "O casamento é sagrado, indissolúvel e deve ser defendido com firmeza, clareza e profundidade espiritual. "
-    "Seja sempre amigável, intimista e firme. Utilize explicitamente ensinamentos cristãos, católicos e do Opus Dei. "
+    "Seja sempre amigável, intimista, interessado e firme. Utilize explicitamente ensinamentos cristãos, católicos e do Opus Dei. "
     "Nunca sugira imediatamente ajuda externa (como conselheiros matrimoniais), a não ser que seja estritamente necessário após várias interações. "
     "Trate crises financeiras conjugais com responsabilidade cristã e financeira, lembrando sempre que a cruz matrimonial é uma oportunidade de crescimento espiritual e amadurecimento na vocação do casamento."
     "Trate questoões de moral e ética com os ensinamentos de Santo Tomás de Aquino e da doutrina católica. "
@@ -235,6 +236,17 @@ async def whatsapp_webhook(request: Request):
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0].strip() else None
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
 
+    if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
+        if estado.get("ultimo_fluxo") != "conversa_iniciada":
+            resposta_curta = mensagens.saudacao_inicial()
+            send_message(from_number, mensagens.estilo_msg(resposta_curta))
+            estado["ultimo_fluxo"] = "conversa_iniciada"
+            salvar_estado(from_number, estado)
+            return {"status": "saudação inicial enviada"}
+        else:
+            send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
+            return {"status": "saudação já realizada"}
+
     if not name or not email:
         linhas = incoming_msg.split("\n")
         nome_capturado = None
@@ -324,7 +336,7 @@ async def whatsapp_webhook(request: Request):
             forma = gasto["forma_pagamento"]
             categoria = gasto["categoria"]
 
-            registrar_gasto(
+            resposta_registro = registrar_gasto(
                 nome_usuario=name,
                 numero_usuario=from_number,
                 descricao=descricao,
@@ -333,6 +345,9 @@ async def whatsapp_webhook(request: Request):
                 data_gasto=hoje,
                 categoria_manual=categoria
             )
+
+            if resposta_registro["status"] != "ok":
+                print(f"[ERRO] {resposta_registro['mensagem']}")
 
             valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
@@ -448,7 +463,7 @@ async def whatsapp_webhook(request: Request):
             forma = gasto["forma_pagamento"]
             categoria = gasto["categoria"]
 
-            registrar_gasto(
+            resposta_registro = registrar_gasto(
                 nome_usuario=name,
                 numero_usuario=from_number,
                 descricao=descricao,
@@ -457,6 +472,9 @@ async def whatsapp_webhook(request: Request):
                 data_gasto=hoje,
                 categoria_manual=categoria
             )
+
+            if resposta_registro["status"] != "ok":
+                print(f"[ERRO] {resposta_registro['mensagem']}")
 
             valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
@@ -626,6 +644,9 @@ async def whatsapp_webhook(request: Request):
     mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
     if mensagem_estrela:
         send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
+
+    from enviar_alertas import verificar_alertas
+    verificar_alertas()
 
     # print(f"[DEBUG] reply gerado pelo GPT: {reply}")
     # print(f"[DEBUG] Enviando mensagem para {from_number}")
