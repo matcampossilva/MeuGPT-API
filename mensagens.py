@@ -31,7 +31,16 @@ def cadastro_completo(primeiro_nome):
     return (
         f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
         "Agora que já nos conhecemos melhor, vamos organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
-        "Controle de gastos, resumos automáticos, solução de dívidas, investimentos ou vida espiritual e familiar... por onde quer começar?"
+        "Posso te ajudar com:\n\n"
+        "• Controle de gastos\n"
+        "• Resumos financeiros automáticos\n"
+        "• Alertas inteligentes no WhatsApp\n"
+        "• Solução de dívidas\n"
+        "• Análises de empréstimos e investimentos\n"
+        "• Orientação precisa em decisões financeiras\n"
+        "• Planejamento financeiro personalizado (seguindo os seis pilares CFP®)\n"
+        "• Orientações práticas para sua vida espiritual e familiar\n\n"
+        "Por onde você quer começar?"
     )
 
 def solicitacao_cadastro():
