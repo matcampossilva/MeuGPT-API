@@ -1,6 +1,11 @@
 import datetime
 import pytz
 from planilhas import get_gastos_diarios, gs
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
 
 def registrar_gastos_fixos():
     aba_fixos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Fixos")
