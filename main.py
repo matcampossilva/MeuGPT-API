@@ -516,7 +516,6 @@ async def whatsapp_webhook(request: Request):
         linha for linha in linhas_conversa
         if not any(frase in linha.lower() for frase in [
             "sou seu conselheiro financeiro",
-            "sou o meu conselheiro financeiro",
             "perfeito,",
             "tô aqui pra te ajudar",
             "posso te ajudar com controle de gastos",

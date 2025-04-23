@@ -9,9 +9,16 @@ def saudacao_inicial():
 
 def funcionalidades():
     return (
-        "Posso te ajudar com controle de gastos, resumos financeiros automáticos, alertas inteligentes no WhatsApp, "
-        "solução de dívidas, análises de empréstimos e investimentos, além de orientações práticas para sua vida espiritual e familiar. "
-        "Por onde quer começar?"
+        "Posso te ajudar com:\n\n"
+        "• Controle de gastos\n"
+        "• Resumos financeiros automáticos\n"
+        "• Alertas inteligentes no WhatsApp\n"
+        "• Solução de dívidas\n"
+        "• Análises de empréstimos e investimentos\n"
+        "• Orientação precisa em decisões financeiras\n"
+        "• Planejamento financeiro personalizado (seguindo os seis pilares CFP®)\n"
+        "• Orientações práticas para sua vida espiritual e familiar\n\n"
+        "Por onde você quer começar?"
     )
 
 def solicitacao_cadastro():
@@ -33,40 +40,53 @@ def solicitacao_cadastro():
 def alerta_limite_gratuito(contexto='geral'):
     mensagens_contextuais = {
         "casamento": (
-            "⚠️ Você chegou ao fim da versão gratuita.\n\n"
-            "Pergunte-se agora: Quer paz no casamento ou prefere continuar brigando por dinheiro? 🥲\n\n"
-            "No Premium você tem estratégias personalizadas para acabar com estresse financeiro no seu relacionamento.\n\n"
-            "👉🏼 Ative agora e proteja seu casamento: https://seulinkpremium.com"
+            "⚠️ Você atingiu o limite da versão gratuita.\n\n"
+            "Dinheiro não é só número, é paz dentro de casa, não é mesmo? "
+            "Imagine você e seu cônjuge conversando com calma sobre dinheiro, sem brigas, sem pressão, "
+            "transformando cada decisão financeira numa oportunidade para fortalecer a união entre vocês. "
+            "O Premium foi criado justamente para isso: trazer clareza financeira e harmonia conjugal ao seu lar. "
+            "Vamos dar esse passo juntos hoje?\n\n"
+            "👉🏼 https://seulinkpremium.com"
         ),
         "dívidas": (
-            "⚠️ Seu limite gratuito terminou.\n\n"
-            "Pergunte-se agora: você realmente vai continuar pagando juros e financiando o lucro dos bancos, ou prefere assumir o controle definitivo das suas dívidas?\n\n"
-            "Com o Premium, você tem planos concretos e personalizados para eliminar dívidas de uma vez por todas.\n\n"
-            "👉🏼 Livre-se das dívidas agora: https://seulinkpremium.com"
+            "⚠️ Seu acesso gratuito terminou.\n\n"
+            "Sei que dívidas preocupam e geram ansiedade, é difícil dormir tranquilo pensando em juros. "
+            "E se você pudesse dormir com tranquilidade, sabendo exatamente como quitar essas dívidas "
+            "e recuperar o controle das suas finanças? O Premium oferece exatamente esse plano de ação concreto. "
+            "Não vale a pena trocar juros por tranquilidade?\n\n"
+            "👉🏼 https://seulinkpremium.com"
         ),
         "controle_gastos": (
-            "⚠️ Seu período gratuito acabou.\n\n"
-            "Pergunte-se agora: quer continuar vivendo de suposições financeiras no escuro ou finalmente ter clareza absoluta e controle real sobre cada centavo que você gasta?\n\n"
-            "Com o Premium, você passa a tomar decisões financeiras com total precisão, organização e segurança.\n\n"
-            "👉🏼 Garanta agora o controle absoluto aqui: https://seulinkpremium.com"
+            "⚠️ Seu período gratuito chegou ao fim.\n\n"
+            "Você já percebeu como pequenos gastos acumulados roubam grandes sonhos? "
+            "Que tal substituir a dúvida por clareza absoluta e controle total sobre cada real gasto? "
+            "Com o Premium, você decide onde vai parar seu dinheiro. Está pronto para assumir o controle "
+            "definitivo da sua vida financeira hoje?\n\n"
+            "👉🏼 https://seulinkpremium.com"
         ),
         "decisoes_financeiras": (
             "⚠️ Você esgotou seu limite gratuito.\n\n"
-            "Pergunte-se agora: quantas decisões financeiras erradas você ainda pode se dar ao luxo de cometer?\n\n"
-            "O acesso Premium oferece respostas certeiras e objetivas para suas decisões financeiras diárias e estratégicas.\n\n"
-            "👉🏼 Tome decisões inteligentes agora: https://seulinkpremium.com"
+            "Eu sei como é difícil tomar decisões financeiras sem ter todas as informações claras. "
+            "Quantas oportunidades já foram perdidas por falta de clareza? "
+            "Com o Premium, cada decisão financeira passa a ser objetiva e certeira. "
+            "Está pronto para trocar insegurança por decisões inteligentes e assertivas?\n\n"
+            "👉🏼 https://seulinkpremium.com"
         ),
         "liberdade_espiritual": (
-            "⚠️ Seu período gratuito chegou ao fim.\n\n"
-            "Pergunte-se agora: você quer que seu dinheiro sirva aos seus valores mais profundos ou prefere continuar refém da pressão financeira?\n\n"
-            "No Premium, dinheiro e espiritualidade trabalham juntos, dando clareza, liberdade e paz verdadeira para sua vida.\n\n"
-            "👉🏼 Conquiste liberdade real agora: https://seulinkpremium.com"
+            "⚠️ Seu acesso gratuito encerrou.\n\n"
+            "Dinheiro não precisa ser motivo de pressão, ansiedade ou culpa. "
+            "Ele pode servir como instrumento para realizar seus valores mais profundos e trazer paz verdadeira "
+            "ao seu coração. O Premium é exatamente essa ponte entre sua vida espiritual e sua vida material. "
+            "Quer experimentar essa liberdade e paz hoje mesmo?\n\n"
+            "👉🏼 https://seulinkpremium.com"
         ),
         "geral": (
-            "⚠️ Eita, seu limite gratuito acabou de bater no teto! 😬\n\n"
-            "Vamos parar de brincar com suas finanças e entrar pro clube dos adultos responsáveis? "
-            "Libere agora o acesso premium e tenha controle total das suas finanças, alertas personalizados e orientação VIP pra alcançar seus objetivos. 🚀💳\n\n"
-            "👉🏼 Acesse agora aqui: https://seulinkpremium.com"
+            "⚠️ Você atingiu o limite gratuito.\n\n"
+            "Sei como é frustrante querer mais da sua vida financeira, mas não saber por onde começar. "
+            "Você merece clareza, tranquilidade e segurança sobre cada passo financeiro que der daqui pra frente. "
+            "O Premium oferece exatamente isso, com estratégias personalizadas e acompanhamento próximo, todos os dias. "
+            "Que tal começar hoje a transformar seu futuro financeiro de verdade?\n\n"
+            "👉🏼 https://seulinkpremium.com"
         )
     }
 
