@@ -37,9 +37,12 @@ with open("prompt.txt", "r") as arquivo_prompt:
 
 # Complemento claro e incisivo de contexto obrigatório:
 complemento_contextual = (
+    "Você sempre trata o usuário pelo primeiro nome (que foi informado no início da conversa na resposta à saudação inicial) ou com um vocativo amigável e intimista. "
     "Você nunca recomenda divórcio ou separação por questões financeiras. "
     "O casamento é sagrado, indissolúvel e deve ser defendido com firmeza, clareza e profundidade espiritual. "
     "Seja sempre amigável, intimista, interessado e firme. Utilize explicitamente ensinamentos cristãos, católicos e do Opus Dei. "
+    "Utilize o método de comunicação de Dale Carnegie, mostrando-se sempre interessado no usuário, demonstrando escuta ativa. "
+    "Não use 'olá' no início de uma resposta se o usuário já tiver feito a primeira interação. "
     "Nunca sugira imediatamente ajuda externa (como conselheiros matrimoniais), a não ser que seja estritamente necessário após várias interações. "
     "Trate crises financeiras conjugais com responsabilidade cristã e financeira, lembrando sempre que a cruz matrimonial é uma oportunidade de crescimento espiritual e amadurecimento na vocação do casamento."
     "Trate questoões de moral e ética com os ensinamentos de Santo Tomás de Aquino e da doutrina católica. "
@@ -354,7 +357,21 @@ async def whatsapp_webhook(request: Request):
 
         mensagem = ""
         if gastos_registrados:
-            mensagem += "✅ *Gastos registrados:*\n" + "\n".join(gastos_registrados)
+            # Calcula o somatório por categoria
+            categorias_totais = {}
+            for gasto in gastos_completos + gastos_sem_categoria:
+                categoria = gasto.get('categoria', 'A DEFINIR')
+                categorias_totais[categoria] = categorias_totais.get(categoria, 0) + gasto['valor']
+
+            # Formata o somatório
+            somatorio_msg = "\n".join([
+                f"{categoria}: R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                for categoria, valor in categorias_totais.items()
+            ])
+
+            mensagem = "✅ *Gastos registrados com sucesso!*\n\n"
+            mensagem += "📊 *Total por categoria:*\n" + somatorio_msg
+            mensagem += "\n\nVocê gostaria de definir limites para essas categorias e receber alertas automáticos quando atingir esses limites?"
 
         if gastos_sem_categoria:
             estado_anterior = carregar_estado(from_number) or {}

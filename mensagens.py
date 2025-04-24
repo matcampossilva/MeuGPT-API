@@ -9,10 +9,12 @@ def saudacao_inicial():
 
 def funcionalidades():
     return (
-        "Posso te ajudar com:\n\n"
-        "• Controle de gastos\n"
-        "• Resumos financeiros\n"
-        "• Alertas inteligentes no WhatsApp\n"
+        "✍️ Posso te ajudar com:\n\n"
+        "• Controle de gastos diários\n"
+        "• Resumos financeiros diários, semanais e mensais\n"
+        "• Alertas inteligentes para controle de gastos\n"
+        "• Controle de despesas fixas mensais\n"
+        "• Lembrete de pagamentos de contas\n"
         "• Solução de dívidas\n"
         "• Análises de empréstimos e investimentos\n"
         "• Orientação precisa em decisões financeiras\n"
@@ -31,10 +33,12 @@ def cadastro_completo(primeiro_nome):
     return (
         f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
         "Agora que já nos conhecemos melhor, vamos organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
-        "Posso te ajudar com:\n\n"
-        "• Controle de gastos\n"
-        "• Resumos financeiros automáticos\n"
-        "• Alertas inteligentes no WhatsApp\n"
+        "✍️ Posso te ajudar com:\n\n"
+        "• Controle de gastos diários\n"
+        "• Resumos financeiros diários, semanais e mensais\n"
+        "• Alertas inteligentes para controle de gastos\n"
+        "• Controle de despesas fixas mensais\n"
+        "• Lembrete de pagamentos de contas\n"
         "• Solução de dívidas\n"
         "• Análises de empréstimos e investimentos\n"
         "• Orientação precisa em decisões financeiras\n"
