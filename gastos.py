@@ -54,7 +54,7 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
 
         categoria = categoria_manual or categorizar(descricao) or "A DEFINIR"
         id_unico = gerar_id_unico(numero_usuario, descricao, valor, data_gasto)
-        registros = aba.col_values(9)  # coluna do id_unico
+        registros = [linha[8] for linha in aba.get_all_values()[1:] if len(linha) >= 9]
         if id_unico in registros:
             return {"status": "ignorado", "mensagem": "Esse gasto já foi registrado.", "categoria": categoria}
 
