@@ -11,7 +11,7 @@ def funcionalidades():
     return (
         "Posso te ajudar com:\n\n"
         "• Controle de gastos\n"
-        "• Resumos financeiros automáticos\n"
+        "• Resumos financeiros\n"
         "• Alertas inteligentes no WhatsApp\n"
         "• Solução de dívidas\n"
         "• Análises de empréstimos e investimentos\n"
