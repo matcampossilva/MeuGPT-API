@@ -9,6 +9,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 import datetime
 import re
+import mensagens
+import enviar_alertas
 from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria, parsear_gastos_em_lote
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado, resposta_enviada_recentemente, salvar_ultima_resposta
 from gerar_resumo import gerar_resumo
@@ -21,8 +23,7 @@ from emocional import detectar_emocao, aumento_pos_emocao
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
-import mensagens  # Novo módulo com mensagens padrão centralizadas
-import enviar_alertas
+from enviar_alertas import verificar_alertas
 
 load_dotenv()
 app = FastAPI()
@@ -641,11 +642,10 @@ async def whatsapp_webhook(request: Request):
         if alerta:
             send_message(from_number, mensagens.estilo_msg(alerta))
 
-    mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
-    if mensagem_estrela:
-        send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
+    # mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
+    # if mensagem_estrela:
+        # send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
 
-    from enviar_alertas import verificar_alertas
     verificar_alertas()
 
     # print(f"[DEBUG] reply gerado pelo GPT: {reply}")
