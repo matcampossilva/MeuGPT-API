@@ -48,7 +48,14 @@ complemento_contextual = (
     "Trate questoões de moral e ética com os ensinamentos de Santo Tomás de Aquino e da doutrina católica. "
 )
 
-mensagens_gpt = [{"role": "system", "content": prompt_base + "\n\n" + complemento_contextual}]
+with open("prompt.txt", "r") as arquivo_prompt:
+    prompt_base = arquivo_prompt.read().strip()
+
+mensagens_gpt = [
+    {"role": "system", "content": prompt_base},
+    {"role": "system", "content": complemento_contextual},
+    {"role": "system", "content": "Sempre consulte a pasta Knowledge via embeddings para complementar respostas de acordo com o contexto."}
+]
 
 # === PLANILHAS ===
 def get_user_status(user_number):
