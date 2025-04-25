@@ -24,6 +24,7 @@ from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 from enviar_alertas import verificar_alertas
+from enviar_lembretes import enviar_lembretes
 
 load_dotenv()
 app = FastAPI()
