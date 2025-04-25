@@ -324,26 +324,28 @@ async def whatsapp_webhook(request: Request):
         return {"status": "comandos enviados"}
     
     if "despesas fixas" in incoming_msg.lower() or "gastos fixos" in incoming_msg.lower():
-        gastos_fixos, erros = parsear_gastos_em_lote(incoming_msg)
+        if detectar_gastos(incoming_msg):
+            gastos_fixos, erros = parsear_gastos_em_lote(incoming_msg)
 
-        if erros:
-            send_message(from_number, mensagens.estilo_msg(
-                "❌ Houve erro ao ler os gastos. Confira o formato e tente novamente:\n" +
-                "\n".join(erros)
-            ))
-            return {"status": "erro nos gastos fixos"}
+            if erros:
+                send_message(from_number, mensagens.estilo_msg(mensagens.erro_formato_gastos()))
+                return {"status": "erro nos gastos fixos"}
 
-        salvar_gastos_fixos(from_number, gastos_fixos)
+            salvar_gastos_fixos(from_number, gastos_fixos)
 
-        total_gastos = sum(gasto["valor"] for gasto in gastos_fixos)
-        mensagem = "✅ *Suas despesas fixas foram salvas!*\n"
-        mensagem += "\n".join([f"{g['descricao']} - R${g['valor']:.2f}" for g in gastos_fixos])
-        mensagem += f"\n\n*Total mensal:* R${total_gastos:.2f}\n\n"
-        mensagem += "Quer definir limites mensais para esses gastos e receber alertas quando atingidos?"
+            total_gastos = sum(gasto["valor"] for gasto in gastos_fixos)
+            mensagem = "✅ *Suas despesas fixas foram salvas!*\n"
+            mensagem += "\n".join([f"{g['descricao']} - R${g['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") for g in gastos_fixos])
+            mensagem += f"\n\n*Total mensal:* R${total_gastos:,.2f}\n\n".replace(",", "X").replace(".", ",").replace("X", ".")
+            mensagem += "Quer definir limites mensais para esses gastos e receber alertas quando atingidos?"
 
-        send_message(from_number, mensagens.estilo_msg(mensagem))
+            send_message(from_number, mensagens.estilo_msg(mensagem))
 
-        return {"status": "gastos fixos registrados"}
+            return {"status": "gastos fixos registrados"}
+
+        else:
+            send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
+            return {"status": "aguardando formato correto gastos fixos"}
 
     linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
@@ -480,8 +482,8 @@ async def whatsapp_webhook(request: Request):
         "quero lançar gastos",
         "ajuda para registrar gastos"
     ]):
-        send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
-        return {"status": "orientacao registro gastos enviada"}   
+        send_message(from_number, mensagens.estilo_msg(mensagens.orientacao_controle_gastos()))
+        return {"status": "orientacao controle gastos enviada"} 
     
     if detectar_gastos(incoming_msg):
         gastos_novos = extrair_gastos(incoming_msg)
