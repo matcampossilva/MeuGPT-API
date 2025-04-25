@@ -191,3 +191,12 @@ def alerta_limite_excedido(categoria, total, limite, faixa):
     }
 
     return random.choice(mensagens.get(faixa, mensagens[">100"]))
+
+def orientacao_controle_gastos():
+    return (
+        "🚀 Para um controle eficiente das suas finanças, temos três funções importantes:\n\n"
+        "1️⃣ *Relacionar gastos fixos mensais:* ajuda a entender o seu padrão de vida e garante que você não perca datas importantes, evitando atrasos e juros desnecessários.\n\n"
+        "2️⃣ *Registrar gastos diários:* permite acompanhar de perto seu comportamento financeiro em tempo real, corrigindo pequenos hábitos antes que eles se tornem grandes problemas na fatura.\n\n"
+        "3️⃣ *Definir limites por categoria:* receba alertas automáticos quando estiver próximo do seu limite definido, facilitando ajustes rápidos e mantendo sua vida financeira organizada e equilibrada.\n\n"
+        "Por qual dessas funções gostaria de começar? Para melhor resultado, recomendo utilizar todas! 😉"
+    )
