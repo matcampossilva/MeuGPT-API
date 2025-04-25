@@ -35,3 +35,19 @@ def registrar_gastos_fixos():
 
 if __name__ == "__main__":
     registrar_gastos_fixos()
+
+def salvar_gastos_fixos(numero_usuario, gastos_fixos):
+    aba_fixos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Fixos")
+    hoje = datetime.datetime.now(pytz.timezone("America/Sao_Paulo"))
+    dia_atual = hoje.day
+
+    for gasto in gastos_fixos:
+        aba_fixos.append_row([
+            numero_usuario,
+            gasto["descricao"],
+            gasto["valor"],
+            gasto["forma_pagamento"],
+            gasto.get("categoria", "A DEFINIR"),
+            dia_atual
+        ])
+    print("Novos gastos fixos salvos com sucesso.")

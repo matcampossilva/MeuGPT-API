@@ -19,6 +19,7 @@ from armazenar_mensagem import armazenar_mensagem
 from definir_limite import salvar_limite_usuario
 from memoria_usuario import resumo_do_mes, verificar_limites, contexto_principal_usuario
 from emocional import detectar_emocao, aumento_pos_emocao
+from registrar_gastos_fixos import salvar_gastos_fixos
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
@@ -320,6 +321,28 @@ async def whatsapp_webhook(request: Request):
         )
         send_message(from_number, mensagens.estilo_msg(comandos))
         return {"status": "comandos enviados"}
+    
+    if "despesas fixas" in incoming_msg.lower() or "gastos fixos" in incoming_msg.lower():
+        gastos_fixos, erros = parsear_gastos_em_lote(incoming_msg)
+
+        if erros:
+            send_message(from_number, mensagens.estilo_msg(
+                "❌ Houve erro ao ler os gastos. Confira o formato e tente novamente:\n" +
+                "\n".join(erros)
+            ))
+            return {"status": "erro nos gastos fixos"}
+
+        salvar_gastos_fixos(from_number, gastos_fixos)
+
+        total_gastos = sum(gasto["valor"] for gasto in gastos_fixos)
+        mensagem = "✅ *Suas despesas fixas foram salvas!*\n"
+        mensagem += "\n".join([f"{g['descricao']} - R${g['valor']:.2f}" for g in gastos_fixos])
+        mensagem += f"\n\n*Total mensal:* R${total_gastos:.2f}\n\n"
+        mensagem += "Quer definir limites mensais para esses gastos e receber alertas quando atingidos?"
+
+        send_message(from_number, mensagens.estilo_msg(mensagem))
+
+        return {"status": "gastos fixos registrados"}
 
     linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
