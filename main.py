@@ -75,17 +75,21 @@ def get_user_status(user_number):
         return "Novo"
 
 def get_user_sheet(user_number):
-    status = get_user_status(user_number)
-    if status == "Pagantes":
-        return get_pagantes()
-    elif status == "Gratuitos":
-        return get_gratuitos()
+    user_number = format_number(user_number)
+    aba_pagantes = get_pagantes()
+    aba_gratuitos = get_gratuitos()
+
+    pagantes = aba_pagantes.col_values(2)
+    gratuitos = aba_gratuitos.col_values(2)
+
+    if user_number in pagantes:
+        return aba_pagantes
+    elif user_number in gratuitos:
+        return aba_gratuitos
     else:
-        user_number = format_number(user_number)  # Garante formatação limpa
         now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        aba = get_gratuitos()
-        aba.append_row(["", user_number, "", now, 0, 0, ""])
-        return aba
+        aba_gratuitos.append_row(["", user_number, "", now, 0, 0])
+        return aba_gratuitos
 
 def nome_valido(text):
     if not text:
@@ -256,22 +260,22 @@ async def whatsapp_webhook(request: Request):
     name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0].strip() else None
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
 
-    if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
+    if is_boas_vindas(incoming_msg):
         if not name or not email:
             send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
             estado["ultimo_fluxo"] = "aguardando_cadastro"
             salvar_estado(from_number, estado)
             return {"status": "aguardando nome e email"}
 
-        if estado.get("ultimo_fluxo") != "conversa_iniciada":
-            resposta_curta = mensagens.saudacao_inicial()
+        if estado.get("ultimo_fluxo") in [None, "", "aguardando_cadastro"]:
+            resposta_curta = mensagens.cadastro_completo(name.split()[0])
             send_message(from_number, mensagens.estilo_msg(resposta_curta))
-            estado["ultimo_fluxo"] = "conversa_iniciada"
+            estado["ultimo_fluxo"] = "cadastro_completo"
             salvar_estado(from_number, estado)
-            return {"status": "saudação inicial enviada"}
-        else:
-            send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
-            return {"status": "saudação já realizada"}
+            return {"status": "cadastro completo"}
+
+        send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
+        return {"status": "saudação já realizada"}
 
     if not name or not email:
         linhas = incoming_msg.split("\n")
@@ -480,11 +484,13 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagens.estilo_msg(
             "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌"))
 
-    if estado.get("ultimo_fluxo") == "cadastro_completo" and passou_limite(sheet_usuario, sheet_usuario.col_values(2).index(from_number) + 1):
-        contexto_usuario = contexto_principal_usuario(from_number)
-        mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
-        send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
-        return {"status": "limite atingido"}
+    if estado.get("ultimo_fluxo") == "cadastro_completo":
+        interacoes = get_interactions(sheet_usuario, linha_index)
+        if interacoes >= 10:
+            contexto_usuario = contexto_principal_usuario(from_number)
+            mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
+            send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
+            return {"status": "limite atingido"}
 
     # === REGISTRO DE GASTOS PADRÃO ===
      # Instrução clara para registrar gastos (se o usuário pedir ajuda diretamente sobre gastos)
