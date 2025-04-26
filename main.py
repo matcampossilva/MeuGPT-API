@@ -81,9 +81,10 @@ def get_user_sheet(user_number):
     elif status == "Gratuitos":
         return get_gratuitos()
     else:
+        user_number = format_number(user_number)  # Garante formatação limpa
         now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
         aba = get_gratuitos()
-        aba.append_row(["", user_number, "", now, 0, 0])
+        aba.append_row(["", user_number, "", now, 0, 0, ""])
         return aba
 
 def nome_valido(text):
@@ -479,7 +480,7 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagens.estilo_msg(
             "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌"))
 
-    if passou_limite(sheet_usuario, sheet_usuario.col_values(2).index(from_number) + 1):
+    if estado.get("ultimo_fluxo") == "cadastro_completo" and passou_limite(sheet_usuario, sheet_usuario.col_values(2).index(from_number) + 1):
         contexto_usuario = contexto_principal_usuario(from_number)
         mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
         send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
