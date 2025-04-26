@@ -249,12 +249,20 @@ async def whatsapp_webhook(request: Request):
     email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
 
     if incoming_msg.lower() in ["olá", "oi", "bom dia", "boa tarde", "boa noite"]:
-        if estado.get("ultimo_fluxo") != "conversa_iniciada":
+        if not name or not email:
+            resposta_cadastro = mensagens.solicitacao_cadastro()
+            send_message(from_number, mensagens.estilo_msg(resposta_cadastro))
+            estado["ultimo_fluxo"] = "aguardando_nome_email"
+            salvar_estado(from_number, estado)
+            return {"status": "solicitação de cadastro enviada"}
+
+        elif estado.get("ultimo_fluxo") != "conversa_iniciada":
             resposta_curta = mensagens.saudacao_inicial()
             send_message(from_number, mensagens.estilo_msg(resposta_curta))
             estado["ultimo_fluxo"] = "conversa_iniciada"
             salvar_estado(from_number, estado)
             return {"status": "saudação inicial enviada"}
+
         else:
             send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
             return {"status": "saudação já realizada"}
