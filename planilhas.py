@@ -1,4 +1,3 @@
-# planilhas.py
 import os
 import gspread
 from dotenv import load_dotenv
@@ -14,39 +13,17 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
-# === Cache planilha de controle ===
-_cache_abas = {}
-
-def get_aba(nome_aba):
-    if nome_aba not in _cache_abas:
-        planilha = gs.open_by_key(GOOGLE_SHEET_ID)
-        aba = planilha.worksheet(nome_aba)
-        _cache_abas[nome_aba] = aba
-    return _cache_abas[nome_aba]
-
 def get_pagantes():
-    return get_aba("Pagantes")
+    return gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Pagantes")
 
 def get_gratuitos():
-    return get_aba("Gratuitos")
-
-
-# === Cache planilha de gastos ===
-_cache_abas_gastos = {}
+    return gs.open_by_key(GOOGLE_SHEET_ID).worksheet("Gratuitos")
 
 def get_gastos_diarios():
-    if "Gastos Diários" not in _cache_abas_gastos:
-        planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
-        aba = planilha.worksheet("Gastos Diários")
-        _cache_abas_gastos["Gastos Diários"] = aba
-    return _cache_abas_gastos["Gastos Diários"]
-
-# === Cache planilha de limites ===
-_cache_abas_limites = {}
+    return gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Diários")
 
 def get_limites():
-    if "Limites" not in _cache_abas_limites:
-        planilha = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID)
-        aba = planilha.worksheet("Limites")
-        _cache_abas_limites["Limites"] = aba
-    return _cache_abas_limites["Limites"]
+    return gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Limites")
+
+def get_gastos_fixos():
+    return gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Fixos")
