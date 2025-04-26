@@ -232,13 +232,20 @@ async def whatsapp_webhook(request: Request):
     salvar_estado(from_number, estado)
 
     try:
-        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
-        linha_usuario = sheet_usuario.row_values(linha_index)
+        numeros_col = [num.strip() for num in sheet_usuario.col_values(2)]
+        from_number_limpo = from_number.strip()
+
+        if from_number_limpo in numeros_col:
+            linha_index = numeros_col.index(from_number_limpo) + 1
+            linha_usuario = sheet_usuario.row_values(linha_index)
+        else:
+            raise ValueError("Número não encontrado")
+
     except ValueError:
         now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        sheet_usuario.append_row(["", from_number, "", now, 0, 0])
-        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
-        linha_usuario = ["", from_number, "", now, 0, 0]
+        sheet_usuario.append_row(["", from_number_limpo, "", now, 0, 0])
+        linha_index = sheet_usuario.col_values(2).index(from_number_limpo) + 1
+        linha_usuario = ["", from_number_limpo, "", now, 0, 0]
 
     increment_interactions(sheet_usuario, linha_index)
 
