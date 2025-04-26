@@ -226,10 +226,17 @@ async def whatsapp_webhook(request: Request):
     estado["ultima_msg"] = incoming_msg
     salvar_estado(from_number, estado)
 
-    linha_index = sheet_usuario.col_values(2).index(from_number) + 1
-    linha_usuario = sheet_usuario.row_values(linha_index)
+    try:
+        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
+        linha_usuario = sheet_usuario.row_values(linha_index)
+    except ValueError:
+        now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+        sheet_usuario.append_row(["", from_number, "", now, 0, 0])
+        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
+        linha_usuario = ["", from_number, "", now, 0, 0]
 
     increment_interactions(sheet_usuario, linha_index)
+
     def get_tokens(sheet, row):
         try:
             val = sheet.cell(row, 5).value
