@@ -213,6 +213,18 @@ def quer_lista_comandos(texto):
     ]
     return any(t in texto for t in termos)
 
+def get_tokens(sheet, row):
+    try:
+        val = sheet.cell(row, 5).value
+        return int(val) if val else 0
+    except:
+        return 0
+
+def increment_tokens(sheet, row, novos_tokens):
+    tokens_atuais = get_tokens(sheet, row)
+    sheet.update_cell(row, 5, tokens_atuais + novos_tokens)
+    return tokens_atuais + novos_tokens
+
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
