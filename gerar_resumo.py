@@ -9,38 +9,31 @@ load_dotenv()
 
 # === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
-    numero_usuario = numero_usuario.replace("whatsapp:", "").strip()
+    numero_usuario = numero_usuario.replace("whatsapp:", "").replace("+", "").strip()
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
 
-    hoje = datetime.now().astimezone(pytz.timezone("America/Sao_Paulo"))
+    hoje = datetime.now(pytz.timezone("America/Sao_Paulo"))
     print(f"[DEBUG] Hoje é {hoje.date()} no servidor")
 
     resumo = defaultdict(lambda: {"total": 0.0, "formas": defaultdict(float)})
     total_geral = 0.0
 
     for linha in dados:
-        print(f"[DEBUG] Linha bruta: {linha}")
-        print(f"[DEBUG] NÚMERO: {linha.get('NÚMERO')} == {numero_usuario}")
-        print(f"[DEBUG] DATA DO GASTO: {linha.get('DATA DO GASTO')}")
-
-        numero_linha = str(linha.get("NÚMERO", "")).strip().replace("+", "").replace("whatsapp:", "")
-        numero_requisicao = numero_usuario.replace("+", "").replace("whatsapp:", "").strip()
-        if numero_linha != numero_requisicao:
+        numero_linha = str(linha.get("NÚMERO", "")).replace("whatsapp:", "").replace("+", "").strip()
+        if numero_linha != numero_usuario:
             continue
 
+        data_str = linha.get("DATA DO GASTO", "")
         try:
-            data_str = linha.get("DATA DO GASTO", "")
-            data = datetime.strptime(data_str, "%d/%m/%Y")
+            data = datetime.strptime(data_str, "%d/%m/%Y").date()
         except Exception as e:
-            print(f"[ERRO] Data inválida: {linha.get('DATA DO GASTO')} | {e}")
+            print(f"[ERRO] Data inválida ({data_str}): {e}")
             continue
 
-        print(f"[DEBUG] data={data.date()} | hoje={hoje.date()}")
-
-        if periodo == "diario" and data.date() != hoje.date():
+        if periodo == "diario" and data != hoje.date():
             continue
-        if periodo == "custom" and data_personalizada and data.date() != data_personalizada:
+        if periodo == "custom" and data_personalizada and data != data_personalizada:
             continue
         if periodo == "mensal" and (data.month != hoje.month or data.year != hoje.year):
             continue
@@ -50,16 +43,11 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         valor_raw = linha.get("VALOR (R$)", 0)
 
         try:
-            if isinstance(valor_raw, (int, float)):
-                valor = float(valor_raw)
-            else:
-                valor_str = str(valor_raw).replace("R$", "").replace("R$ ", "").replace(".", "").replace(",", ".").strip()
-                valor = float(valor_str)
-            print(f"[DEBUG] valor_str={valor_str} | valor={valor}")
-            if valor < 0:
+            valor = float(str(valor_raw).replace("R$", "").replace(".", "").replace(",", ".").strip())
+            if valor <= 0:
                 continue
         except Exception as e:
-            print(f"[ERRO] Valor inválido: {valor_raw} | {e}")
+            print(f"[ERRO] Valor inválido ({valor_raw}): {e}")
             continue
 
         resumo[categoria]["total"] += valor
