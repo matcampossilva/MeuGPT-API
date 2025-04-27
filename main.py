@@ -242,8 +242,11 @@ async def whatsapp_webhook(request: Request):
 
     increment_interactions(sheet_usuario, linha_index)
 
-    name = linha_usuario[0].strip() if len(linha_usuario) > 0 else None
-    email = linha_usuario[2].strip() if len(linha_usuario) > 2 else None
+    name = linha_usuario[0].strip() or None
+    email = linha_usuario[2].strip() or None
+
+    tokens = count_tokens(incoming_msg)
+    increment_tokens(sheet_usuario, linha_index, tokens)
 
     if is_boas_vindas(incoming_msg):
         if not name or not email:
@@ -251,62 +254,22 @@ async def whatsapp_webhook(request: Request):
             estado["ultimo_fluxo"] = "aguardando_cadastro"
             salvar_estado(from_number, estado)
             return {"status": "aguardando nome e email"}
+
+        if estado.get("saudacao_realizada"):
+            send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
+            return {"status": "saudação já realizada"}
 
         resposta_curta = mensagens.cadastro_completo(name.split()[0])
         send_message(from_number, mensagens.estilo_msg(resposta_curta))
         estado["ultimo_fluxo"] = "cadastro_completo"
+        estado["saudacao_realizada"] = True
         salvar_estado(from_number, estado)
         return {"status": "cadastro completo"}
 
-    def get_tokens(sheet, row):
-        try:
-            val = sheet.cell(row, 5).value
-            return int(val) if val else 0
-        except:
-            return 0
-
-    def increment_tokens(sheet, row, novos_tokens):
-        tokens_atuais = get_tokens(sheet, row)
-        sheet.update_cell(row, 5, tokens_atuais + novos_tokens)
-        return tokens_atuais + novos_tokens
-    
-    tokens = count_tokens(incoming_msg)
-    increment_tokens(sheet_usuario, linha_index, tokens)
-
-    name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0].strip() else None
-    email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2].strip() else None
-
-    if is_boas_vindas(incoming_msg):
-        if not name or not email:
-            send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
-            estado["ultimo_fluxo"] = "aguardando_cadastro"
-            salvar_estado(from_number, estado)
-            return {"status": "aguardando nome e email"}
-
-        if estado.get("ultimo_fluxo") in [None, "", "aguardando_cadastro"]:
-            resposta_curta = mensagens.cadastro_completo(name.split()[0])
-            send_message(from_number, mensagens.estilo_msg(resposta_curta))
-            estado["ultimo_fluxo"] = "cadastro_completo"
-            salvar_estado(from_number, estado)
-            return {"status": "cadastro completo"}
-
-        send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
-        return {"status": "saudação já realizada"}
-
     if not name or not email:
         linhas = incoming_msg.split("\n")
-        nome_capturado = None
-        email_capturado = None
-
-        for linha in linhas:
-            linha = linha.strip()
-            if not email_capturado:
-                email_possivel = extract_email(linha)
-                if email_possivel:
-                    email_capturado = email_possivel.lower()
-                    continue
-            if not nome_capturado and nome_valido(linha):
-                nome_capturado = linha.title()
+        nome_capturado = next((linha.title() for linha in linhas if nome_valido(linha)), None)
+        email_capturado = next((extract_email(linha).lower() for linha in linhas if extract_email(linha)), None)
 
         if nome_capturado and not name:
             sheet_usuario.update_cell(linha_index, 1, nome_capturado)
@@ -331,10 +294,11 @@ async def whatsapp_webhook(request: Request):
         primeiro_nome = name.split()[0]
         send_message(from_number, mensagens.estilo_msg(mensagens.cadastro_completo(primeiro_nome)))
         estado["ultimo_fluxo"] = "cadastro_completo"
+        estado["saudacao_realizada"] = True
         salvar_estado(from_number, estado)
         return {"status": "cadastro completo"}
 
-    elif estado.get("ultimo_fluxo") != "cadastro_completo":
+    if estado.get("ultimo_fluxo") != "cadastro_completo":
         estado["ultimo_fluxo"] = "cadastro_completo"
         salvar_estado(from_number, estado)
     
