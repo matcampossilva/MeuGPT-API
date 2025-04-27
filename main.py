@@ -215,14 +215,12 @@ def quer_lista_comandos(texto):
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
-    verificar_alertas()
     form = await request.form()
     incoming_msg = form["Body"].strip()
     from_number = format_number(form["From"])
+
     estado = carregar_estado(from_number)
     ultima_msg = estado.get("ultima_msg", "")
-    status_usuario = get_user_status(from_number)
-    sheet_usuario = get_user_sheet(from_number)
 
     if incoming_msg == ultima_msg:
         print("[DEBUG] Mensagem duplicada detectada e ignorada.")
@@ -231,23 +229,34 @@ async def whatsapp_webhook(request: Request):
     estado["ultima_msg"] = incoming_msg
     salvar_estado(from_number, estado)
 
+    sheet_usuario = get_user_sheet(from_number)
+
     try:
-        numeros_col = [num.strip() for num in sheet_usuario.col_values(2)]
-        from_number_limpo = from_number.strip()
-
-        if from_number_limpo in numeros_col:
-            linha_index = numeros_col.index(from_number_limpo) + 1
-            linha_usuario = sheet_usuario.row_values(linha_index)
-        else:
-            raise ValueError("Número não encontrado")
-
+        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
+        linha_usuario = sheet_usuario.row_values(linha_index)
     except ValueError:
         now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        sheet_usuario.append_row(["", from_number_limpo, "", now, 0, 0])
-        linha_index = sheet_usuario.col_values(2).index(from_number_limpo) + 1
-        linha_usuario = ["", from_number_limpo, "", now, 0, 0]
+        sheet_usuario.append_row(["", from_number, "", now, 0, 0])
+        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
+        linha_usuario = ["", from_number, "", now, 0, 0]
 
     increment_interactions(sheet_usuario, linha_index)
+
+    name = linha_usuario[0].strip() if len(linha_usuario) > 0 else None
+    email = linha_usuario[2].strip() if len(linha_usuario) > 2 else None
+
+    if is_boas_vindas(incoming_msg):
+        if not name or not email:
+            send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
+            estado["ultimo_fluxo"] = "aguardando_cadastro"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando nome e email"}
+
+        resposta_curta = mensagens.cadastro_completo(name.split()[0])
+        send_message(from_number, mensagens.estilo_msg(resposta_curta))
+        estado["ultimo_fluxo"] = "cadastro_completo"
+        salvar_estado(from_number, estado)
+        return {"status": "cadastro completo"}
 
     def get_tokens(sheet, row):
         try:
