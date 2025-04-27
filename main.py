@@ -419,6 +419,9 @@ async def whatsapp_webhook(request: Request):
             if resposta_registro["status"] != "ok":
                 print(f"[ERRO] {resposta_registro['mensagem']}")
 
+            estado["ultimo_fluxo"] = "gastos_registrados"
+            salvar_estado(from_number, estado)
+        
             valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
 
