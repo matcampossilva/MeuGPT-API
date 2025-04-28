@@ -254,7 +254,7 @@ async def whatsapp_webhook(request: Request):
 
     increment_interactions(sheet_usuario, linha_index)
 
-    name = linha_usuario[0].strip() or None
+    name = linha_usuario[0].strip() if len(linha_usuario[0].strip()) > 0 else "Usuário"
     email = linha_usuario[2].strip() or None
 
     tokens = count_tokens(incoming_msg)

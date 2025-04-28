@@ -54,18 +54,13 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
 
         categoria = categoria_manual or categorizar(descricao) or "A DEFINIR"
         id_unico = gerar_id_unico(numero_usuario, descricao, valor, data_gasto)
+
         registros = [linha[8] for linha in aba.get_all_values()[1:] if len(linha) >= 9]
         if id_unico in registros:
             return {"status": "ignorado", "mensagem": "Esse gasto já foi registrado.", "categoria": categoria}
 
-        registros = aba.get_all_values()
-        for linha in registros[1:]:
-            if len(linha) >= 9 and linha[8].strip() == id_unico:
-                print("[IGNORADO] Gasto duplicado detectado.")
-                return {"status": "ignorado", "mensagem": "Gasto já registrado anteriormente.", "categoria": categoria}
-
         nova_linha = [
-            nome_usuario,
+            nome_usuario if nome_usuario else "Usuário",
             numero_usuario,
             descricao,
             categoria,
@@ -73,7 +68,7 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
             forma_pagamento,
             data_gasto,
             data_registro,
-            id_unico  # Nova coluna oculta para controle
+            id_unico
         ]
 
         aba.append_row(nova_linha)
