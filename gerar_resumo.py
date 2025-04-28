@@ -21,7 +21,6 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
 
     for linha in dados:
         numero_linha = str(linha.get("NÚMERO", "")).replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
-
         if numero_linha != numero_usuario:
             continue
 
@@ -55,7 +54,6 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         resumo[categoria]["formas"][forma] += valor
         total_geral += valor
 
-    # === FORMATAÇÃO DO TEXTO ===
     if total_geral == 0.0:
         return f"Resumo {periodo} dos seus gastos:\n\nTotal geral: R$0,00"
 
