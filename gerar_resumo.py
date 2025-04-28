@@ -9,7 +9,7 @@ load_dotenv()
 
 # === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
-    numero_usuario = numero_usuario.replace("whatsapp:", "").replace("+", "").strip()
+    numero_usuario = numero_usuario.replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
     aba = get_gastos_diarios()
     dados = aba.get_all_records()
 
@@ -21,7 +21,6 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
 
     for linha in dados:
         numero_linha = str(linha.get("NÚMERO", "")).replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
-        numero_usuario = numero_usuario.replace(" ", "").strip()
 
         if numero_linha != numero_usuario:
             continue

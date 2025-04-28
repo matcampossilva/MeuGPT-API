@@ -102,7 +102,7 @@ def nome_valido(text):
     return True
 
 def format_number(raw_number):
-    return raw_number.replace("whatsapp:", "").strip()
+    return raw_number.replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
 
 def extract_email(text):
     match = re.search(r'[\w\.-]+@[\w\.-]+', text)
