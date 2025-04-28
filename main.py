@@ -283,11 +283,11 @@ async def whatsapp_webhook(request: Request):
         nome_capturado = next((linha.title() for linha in linhas if nome_valido(linha)), None)
         email_capturado = next((extract_email(linha).lower() for linha in linhas if extract_email(linha)), None)
 
-        if nome_capturado and not name:
+        if nome_capturado:
             sheet_usuario.update_cell(linha_index, 1, nome_capturado)
             name = nome_capturado
 
-        if email_capturado and not email:
+        if email_capturado:
             sheet_usuario.update_cell(linha_index, 3, email_capturado)
             email = email_capturado
 
