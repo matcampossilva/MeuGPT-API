@@ -20,7 +20,9 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
     total_geral = 0.0
 
     for linha in dados:
-        numero_linha = str(linha.get("NÚMERO", "")).replace("whatsapp:", "").replace("+", "").strip()
+        numero_linha = str(linha.get("NÚMERO", "")).replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
+        numero_usuario = numero_usuario.replace(" ", "").strip()
+
         if numero_linha != numero_usuario:
             continue
 
