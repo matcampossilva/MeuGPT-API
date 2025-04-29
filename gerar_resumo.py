@@ -20,7 +20,7 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
     total_geral = 0.0
 
     for linha in dados:
-        numero_linha = str(linha.get("NÚMERO", "")).replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
+        numero_linha = ''.join(filter(str.isdigit, linha.get("NÚMERO", "")))
         if numero_linha != numero_usuario:
             continue
 
@@ -42,11 +42,13 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
         forma = linha.get("FORMA DE PAGAMENTO", "Outro").strip()
         valor_raw = linha.get("VALOR (R$)", 0)
 
+        valor_str = str(valor_raw).replace("R$", "").replace(".", "").replace(",", ".").strip()
+
         try:
-            valor = float(str(valor_raw).replace("R$", "").replace(".", "").replace(",", ".").strip())
+            valor = float(valor_str)
             if valor <= 0:
                 continue
-        except Exception as e:
+        except ValueError as e:
             print(f"[ERRO] Valor inválido ({valor_raw}): {e}")
             continue
 
