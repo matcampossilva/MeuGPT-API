@@ -501,32 +501,36 @@ async def whatsapp_webhook(request: Request):
         return {"status": "orientacao controle gastos enviada"} 
     
     if detectar_gastos(incoming_msg):
-        gastos_novos = extrair_gastos(incoming_msg)
+        gastos_novos, erros = parsear_gastos_em_lote(incoming_msg)
+
+        if erros:
+            send_message(from_number, mensagens.estilo_msg(
+                "⚠️ Alguns gastos não foram reconhecidos:\n" + "\n".join(erros)
+            ))
 
         if not gastos_novos:
             send_message(from_number, mensagens.estilo_msg(
-                "❌ Não consegui entender os gastos. Confira se estão no formato correto:\n\n"
-                "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)\n\n"
+                "❌ Não consegui entender os gastos que você mandou.\n\n"
+                "Use este formato exato:\n\n"
+                "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
                 "*Exemplos válidos:*\n"
                 "• Uber – 20,00 – crédito\n"
                 "• Combustível – 300,00 – débito\n"
                 "• Farmácia – 50,00 – pix – Saúde\n\n"
-                "📌 Pode enviar vários gastos de uma vez, um por linha."
+                "📎 Pode mandar vários gastos, um por linha."
             ))
             return {"status": "nenhum gasto extraído"}
-
-        gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
-        gastos_completos = [g for g in gastos_novos if g.get("categoria")]
 
         fuso = pytz.timezone("America/Sao_Paulo")
         hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
 
         gastos_registrados = []
-        for gasto in gastos_completos:
+
+        for gasto in gastos_novos:
             descricao = gasto["descricao"].capitalize()
             valor = gasto["valor"]
             forma = gasto["forma_pagamento"]
-            categoria = gasto["categoria"]
+            categoria = gasto.get("categoria") or categorizar(descricao)
 
             resposta_registro = registrar_gasto(
                 nome_usuario=name,
@@ -542,7 +546,14 @@ async def whatsapp_webhook(request: Request):
                 print(f"[ERRO] {resposta_registro['mensagem']}")
 
             valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
+            gastos_registrados.append(f"{descricao} – {valor_formatado} – {forma} – {categoria}")
+
+        mensagem_final = "Registro anotado, meu amigo! Aqui está o resumo dos seus gastos do dia:\n\n"
+        mensagem_final += "\n".join(gastos_registrados)
+
+        send_message(from_number, mensagens.estilo_msg(mensagem_final))
+
+        return {"status": "gastos registrados"}
 
         mensagem = ""
         if gastos_registrados:
