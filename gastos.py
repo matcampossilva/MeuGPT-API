@@ -124,11 +124,6 @@ def corrigir_gasto(numero_usuario, descricao, valor, forma_pagamento, categoria,
 import re
 
 def parsear_gastos_em_lote(texto):
-    """
-    Recebe uma string com várias linhas no formato:
-    Descrição – Valor – Forma de pagamento – Categoria (opcional)
-    Retorna uma lista de dicionários com os campos extraídos ou uma lista de erros.
-    """
     linhas = texto.strip().split('\n')
     gastos = []
     erros = []
@@ -143,7 +138,6 @@ def parsear_gastos_em_lote(texto):
         descricao = partes[0]
         valor_str = partes[1].replace("R$", "").replace(",", ".").strip()
         forma_pagamento = partes[2].capitalize()
-
         categoria = partes[3].capitalize() if len(partes) > 3 else None
 
         try:
