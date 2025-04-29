@@ -534,7 +534,7 @@ async def whatsapp_webhook(request: Request):
 
             resposta_registro = registrar_gasto(
                 nome_usuario=name,
-                numero_usuario=from_number,
+                numero_usuario=format_number(from_number),  # ✅ Corrigido aqui!
                 descricao=descricao,
                 valor=valor,
                 forma_pagamento=forma,
@@ -554,59 +554,6 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagens.estilo_msg(mensagem_final))
 
         return {"status": "gastos registrados"}
-
-        mensagem = ""
-        if gastos_registrados:
-            # Calcula o somatório por categoria
-            categorias_totais = {}
-            for gasto in gastos_completos + gastos_sem_categoria:
-                categoria = gasto.get('categoria', 'A DEFINIR')
-                categorias_totais[categoria] = categorias_totais.get(categoria, 0) + gasto['valor']
-
-            # Formata o somatório
-            somatorio_msg = "\n".join([
-                f"{categoria}: R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                for categoria, valor in categorias_totais.items()
-            ])
-
-            mensagem = "✅ *Gastos registrados com sucesso!*\n\n"
-            mensagem += "📊 *Total por categoria:*\n" + somatorio_msg
-            mensagem += "\n\nVocê gostaria de definir limites para essas categorias e receber alertas automáticos quando atingir esses limites?"
-
-        if gastos_sem_categoria:
-            estado_anterior = carregar_estado(from_number) or {}
-            categorias_sugeridas = estado_anterior.get("categorias_sugeridas", {})
-
-            for gasto in gastos_sem_categoria:
-                descricao = gasto["descricao"].strip().lower()
-                categoria_sug = categorizar(descricao) or "A DEFINIR"
-                categorias_sugeridas[descricao] = categoria_sug
-
-            estado_anterior.update({
-                "ultimo_fluxo": "aguardando_categorias",
-                "gastos_temp": gastos_sem_categoria,
-                "categorias_sugeridas": categorias_sugeridas
-            })
-
-            salvar_estado(from_number, estado_anterior)
-
-            lista_gastos = "\n".join(
-                [f"{g['descricao'].capitalize()}, R${g['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") +
-                 f", pago com {g['forma_pagamento']}."
-                 for g in gastos_sem_categoria]
-            )
-
-            mensagem += (
-                "\n\n🧐 Identifiquei alguns gastos sem categoria:\n\n" +
-                lista_gastos +
-                "\n\nSe quiser ajustar categorias, me envie agora as correções no formato:\n"
-                "[descrição]: [categoria desejada]\n\n"
-                "*Exemplo:* supermercado: alimentação\n\n"
-                "Se não precisar ajustar, só me avise que posso registrar assim mesmo!"
-            )
-
-        send_message(from_number, mensagens.estilo_msg(mensagem.strip()))
-        return {"status": "gastos processados"}
 
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
