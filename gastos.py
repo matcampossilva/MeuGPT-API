@@ -70,6 +70,7 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
             data_registro,
             id_unico
         ]
+        print("[DEBUG] Inserindo na planilha:", nova_linha)
 
         aba.append_row(nova_linha)
         return {"status": "ok", "categoria": categoria}
