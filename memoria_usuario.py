@@ -76,12 +76,15 @@ def verificar_limites(numero_usuario):
 
 def contexto_principal_usuario(numero_usuario):
     historico = resumo_do_mes(numero_usuario).lower()
-    
+    frequentes = palavras_frequentes_usuario(numero_usuario)
+
+    historico += " " + " ".join(frequentes)
+
     if any(palavra in historico for palavra in ["casamento", "esposa", "marido", "cônjuge", "matrimônio"]):
         return "casamento"
     elif any(palavra in historico for palavra in ["dívida", "dívidas", "devendo", "juros", "negativado"]):
         return "dívidas"
-    elif any(palavra in historico for palavra in ["oração", "espiritualidade", "fé", "Deus", "moral", "pecado"]):
+    elif any(palavra in historico for palavra in ["oração", "espiritualidade", "fé", "deus", "moral", "pecado"]):
         return "liberdade_espiritual"
     elif any(palavra in historico for palavra in ["controle", "gasto", "gastos", "orçamento", "despesa", "despesas"]):
         return "controle_gastos"
@@ -89,3 +92,10 @@ def contexto_principal_usuario(numero_usuario):
         return "decisoes_financeiras"
     else:
         return "geral"
+    
+def palavras_frequentes_usuario(numero_usuario, top_n=5):
+    gastos = get_gastos_usuario(numero_usuario)
+    todas_descricoes = " ".join([linha[2].lower() for linha in gastos])
+    palavras = re.findall(r'\w+', todas_descricoes)
+    contagem = Counter(palavras)
+    return [palavra for palavra, _ in contagem.most_common(top_n)]

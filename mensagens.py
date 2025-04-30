@@ -10,17 +10,14 @@ def saudacao_inicial():
 def funcionalidades():
     return (
         "✍️ Posso te ajudar com:\n\n"
-        "• Controle de gastos diários\n"
-        "• Resumos financeiros diários, semanais e mensais\n"
-        "• Alertas inteligentes para controle de gastos\n"
-        "• Controle de despesas fixas mensais\n"
-        "• Lembrete de pagamentos de contas\n"
-        "• Solução de dívidas\n"
-        "• Análises de empréstimos e investimentos\n"
-        "• Orientação precisa em decisões financeiras\n"
-        "• Planejamento financeiro personalizado (seguindo os seis pilares CFP®)\n"
-        "• Orientações práticas para sua vida espiritual e familiar\n\n"
-        "Por onde você quer começar?"
+        "• Controle inteligente e automático de gastos\n"
+        "• Alertas certeiros sobre seus gastos e limites\n"
+        "• Solução concreta e definitiva para dívidas\n"
+        "• Organização prática das despesas fixas e pagamentos\n"
+        "• Orientações seguras para empréstimos e investimentos\n"
+        "• Planejamento financeiro personalizado pelos seis pilares do CFP®\n"
+        "• Fortalecimento prático da sua vida espiritual e familiar\n\n"
+        "Qual dessas áreas você sente que precisa priorizar agora?"
     )
 
 def solicitacao_cadastro():
@@ -32,19 +29,17 @@ def solicitacao_cadastro():
 def cadastro_completo(primeiro_nome):
     return (
         f"Perfeito, {primeiro_nome}! 👊🏼\n\n"
-        "Agora que já nos conhecemos melhor, vamos organizar suas finanças com clareza e propósito, sempre respeitando a ordem: Deus, família e trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
+        "Agora que já nos conhecemos, chegou a hora de organizar sua vida financeira com clareza absoluta, deixando de lado métodos antigos como as planilhas orçamentárias que ninguém usa mais. "
+        "Estou aqui pra garantir que cada centavo esteja alinhado com seus valores mais profundos e objetivos reais, sempre respeitando a ordem correta: Deus, sua família e o trabalho. 🙏🏼👨‍👩‍👧‍👦💼\n\n"
         "✍️ Posso te ajudar com:\n\n"
-        "• Controle de gastos diários\n"
-        "• Resumos financeiros diários, semanais e mensais\n"
-        "• Alertas inteligentes para controle de gastos\n"
-        "• Controle de despesas fixas mensais\n"
-        "• Lembrete de pagamentos de contas\n"
-        "• Solução de dívidas\n"
-        "• Análises de empréstimos e investimentos\n"
-        "• Orientação precisa em decisões financeiras\n"
-        "• Planejamento financeiro personalizado (seguindo os seis pilares CFP®)\n"
-        "• Orientações práticas para sua vida espiritual e familiar\n\n"
-        "Por onde você quer começar?"
+        "• Controle inteligente e automático de gastos\n"
+        "• Alertas certeiros sobre seus gastos e limites\n"
+        "• Solução concreta e definitiva para dívidas\n"
+        "• Organização prática das despesas fixas e pagamentos\n"
+        "• Orientações seguras para empréstimos e investimentos\n"
+        "• Planejamento financeiro personalizado pelos seis pilares do CFP®\n"
+        "• Fortalecimento prático da sua vida espiritual e familiar\n\n"
+        "Qual dessas áreas você sente que precisa priorizar agora?"
     )
 
 def solicitacao_cadastro():
@@ -200,3 +195,14 @@ def orientacao_controle_gastos():
         "3️⃣ *Definir limites por categoria:* receba alertas automáticos quando estiver próximo do seu limite definido, facilitando ajustes rápidos e mantendo sua vida financeira organizada e equilibrada.\n\n"
         "Por qual dessas funções gostaria de começar? Para melhor resultado, recomendo utilizar todas! 😉"
     )
+
+def pergunta_escuta_ativa(tema):
+    perguntas = {
+        "casamento": "Como exatamente essa questão financeira tem impactado seu casamento?",
+        "espiritualidade": "Como você tem integrado sua vida espiritual com suas decisões financeiras?",
+        "dívidas": "Me diga quais dívidas estão mais pesadas atualmente, para resolvermos isso juntos.",
+        "filosofia": "Que questões filosóficas estão interferindo em suas decisões financeiras hoje?",
+        "financeiro": "Qual é seu maior desafio financeiro neste momento?",
+        "geral": "Me fala mais sobre isso para te dar uma orientação certeira."
+    }
+    return perguntas.get(tema, perguntas["geral"])
