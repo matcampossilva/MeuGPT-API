@@ -72,7 +72,13 @@ def registrar_gasto(nome_usuario, numero_usuario, descricao, valor, forma_pagame
         ]
         print("[DEBUG] Inserindo na planilha:", nova_linha)
 
-        aba.append_row(nova_linha)
+        try:
+            aba.append_row(nova_linha, value_input_option="USER_ENTERED")
+            print("[SUCESSO APPEND_ROW] Dados enviados:", nova_linha)
+        except Exception as e:
+            print("[ERRO GRAVE APPEND_ROW]:", e)
+            return {"status": "erro", "mensagem": str(e)}
+
         return {"status": "ok", "categoria": categoria}
 
     except Exception as e:

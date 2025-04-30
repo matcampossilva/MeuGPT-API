@@ -15,18 +15,9 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_KEY_FILE, scope)
 gs = gspread.authorize(creds)
 
-_cache_abas = {}
-
-def formatar_numero(numero):
-    return numero.replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
-
 def get_aba(sheet_id, nome_aba):
-    chave = f"{sheet_id}_{nome_aba}"
-    if chave not in _cache_abas:
-        planilha = gs.open_by_key(sheet_id)
-        aba = planilha.worksheet(nome_aba)
-        _cache_abas[chave] = aba
-    return _cache_abas[chave]
+    planilha = gs.open_by_key(sheet_id)
+    return planilha.worksheet(nome_aba)
 
 def get_pagantes():
     return get_aba(GOOGLE_SHEET_ID, "Pagantes")
