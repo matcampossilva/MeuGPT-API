@@ -534,7 +534,7 @@ async def whatsapp_webhook(request: Request):
 
             resposta_registro = registrar_gasto(
                 nome_usuario=name,
-                numero_usuario=format_number(from_number),  # ✅ Corrigido aqui!
+                numero_usuario=from_number.replace("whatsapp:", "").replace("+", "").strip(),
                 descricao=descricao,
                 valor=valor,
                 forma_pagamento=forma,
