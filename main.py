@@ -9,8 +9,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pytz
 import datetime
 import re
+import json # Adicionado para o novo fluxo de gastos
 import mensagens
-from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria, parsear_gastos_em_lote
+# Removido parsear_gastos_em_lote das importações de gastos, pois será substituído
+from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria 
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado, resposta_enviada_recentemente, salvar_ultima_resposta
 from gerar_resumo import gerar_resumo
 from resgatar_contexto import buscar_conhecimento_relevante
@@ -50,14 +52,63 @@ complemento_contextual = (
     "Trate questoões de moral e ética com os ensinamentos de Santo Tomás de Aquino e da doutrina católica. "
 )
 
-with open("prompt.txt", "r") as arquivo_prompt:
-    prompt_base = arquivo_prompt.read().strip()
+# Removido a leitura duplicada do prompt.txt
 
-mensagens_gpt = [
+mensagens_gpt_base = [
     {"role": "system", "content": prompt_base},
     {"role": "system", "content": complemento_contextual},
     {"role": "system", "content": "Sempre consulte a pasta Knowledge via embeddings para complementar respostas de acordo com o contexto."}
 ]
+
+# === NOVA FUNÇÃO PARA INTERPRETAR GASTOS COM GPT ===
+def interpretar_gasto_com_gpt(mensagem_usuario):
+    """Usa o GPT para extrair detalhes de um gasto a partir da mensagem do usuário."""
+    prompt_extracao = f"""
+Você é um assistente de finanças pessoais. Analise a seguinte mensagem do usuário e extraia as seguintes informações sobre um gasto:
+- Descrição do gasto (o que foi comprado/pago)
+- Valor do gasto (em formato numérico com ponto decimal, ex: 50.00)
+- Forma de pagamento (crédito, débito, pix, boleto, dinheiro. Se não mencionado, retorne N/A)
+- Categoria sugerida (escolha uma destas: Alimentação, Transporte, Moradia, Saúde, Lazer, Educação, Vestuário, Doações, Outros. Se não tiver certeza, retorne 'A DEFINIR')
+
+Mensagem do usuário: "{mensagem_usuario}"
+
+Retorne a resposta APENAS no formato JSON, sem nenhum outro texto antes ou depois:
+{{
+  "descricao": "...",
+  "valor": ..., 
+  "forma_pagamento": "...",
+  "categoria_sugerida": "..."
+}}
+"""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo", # Usando um modelo mais rápido e barato para esta tarefa específica
+            messages=[{"role": "system", "content": prompt_extracao}],
+            temperature=0.1,
+        )
+        resposta_gpt = response["choices"][0]["message"]["content"].strip()
+        
+        # Tenta analisar o JSON
+        dados_gasto = json.loads(resposta_gpt)
+        
+        # Validação básica
+        if not dados_gasto.get("descricao") or not isinstance(dados_gasto.get("valor"), (int, float)):
+            print("[DEBUG GPT Gasto] Descrição ou valor inválido/ausente no JSON.")
+            return None # Não conseguiu extrair descrição ou valor válidos
+            
+        # Garante que valor seja float
+        dados_gasto["valor"] = float(dados_gasto["valor"])
+        
+        print(f"[DEBUG GPT Gasto] Dados extraídos: {dados_gasto}")
+        return dados_gasto
+        
+    except json.JSONDecodeError as e:
+        print(f"[ERRO GPT JSONDecodeError] Não foi possível decodificar a resposta do GPT: {resposta_gpt}. Erro: {e}")
+        return None
+    except Exception as e:
+        print(f"[ERRO GPT] Erro ao chamar API OpenAI para extração de gasto: {e}")
+        return None
+# === FIM DA NOVA FUNÇÃO ===
 
 # === PLANILHAS ===
 def get_user_status(user_number):
@@ -95,9 +146,14 @@ def nome_valido(text):
     if not text:
         return False
     partes = text.strip().split()
-    if len(partes) < 2:
+    # Permitir nomes compostos, verificar se tem pelo menos 1 parte
+    if len(partes) < 1:
         return False
-    if any(char in text for char in "@!?0123456789#%$*"):
+    # Permitir apenas letras, espaços e acentos comuns
+    if not re.fullmatch(r"[a-zA-ZáéíóúÁÉÍÓÚâêîôûÂÊÎÔÛãõÃÕçÇ\s]+", text.strip()):
+        return False
+    # Evitar caracteres especiais ainda pode ser útil
+    if any(char in text for char in "@!?0123456789#$%*()[]{}"):
         return False
     return True
 
@@ -109,6 +165,7 @@ def extract_email(text):
     return match.group(0) if match else None
 
 def count_tokens(text):
+    # Uma contagem mais simples, pode ser ajustada se necessário
     return len(text.split())
 
 def send_message(to, body):
@@ -119,66 +176,58 @@ def send_message(to, body):
         print("[DEBUG] Resposta duplicada detectada e não enviada.")
         return
 
+    # Divide a mensagem em partes menores (Twilio tem limite)
     partes = [body[i:i+1500] for i in range(0, len(body), 1500)]
-    for parte in partes:
-        client.messages.create(
-            body=parte,
-            messaging_service_sid=MESSAGING_SERVICE_SID,
-            to=f"whatsapp:{to}"
-        )
-
-    salvar_ultima_resposta(to, body)
+    try:
+        for parte in partes:
+            client.messages.create(
+                body=parte,
+                messaging_service_sid=MESSAGING_SERVICE_SID,
+                to=f"whatsapp:{to}"
+            )
+        salvar_ultima_resposta(to, body)
+        print(f"[DEBUG] Mensagem enviada para {to}")
+    except Exception as e:
+        print(f"[ERRO TWILIO] Falha ao enviar mensagem para {to}: {e}")
 
 def get_interactions(sheet, row):
     try:
         val = sheet.cell(row, 6).value
         return int(val) if val else 0
-    except:
+    except Exception as e:
+        print(f"[ERRO Planilha] get_interactions: {e}")
         return 0
 
 def increment_interactions(sheet, row):
-    count = get_interactions(sheet, row) + 1
-    sheet.update_cell(row, 6, count)
-    return count
+    try:
+        count = get_interactions(sheet, row) + 1
+        sheet.update_cell(row, 6, count)
+        return count
+    except Exception as e:
+        print(f"[ERRO Planilha] increment_interactions: {e}")
+        return get_interactions(sheet, row) # Retorna o valor antigo em caso de erro
 
 def passou_limite(sheet, row):
-    status = sheet.title
-    if status != "Gratuitos":
+    try:
+        status = sheet.title
+        if status != "Gratuitos":
+            return False
+        return get_interactions(sheet, row) >= 10
+    except Exception as e:
+        print(f"[ERRO Planilha] passou_limite: {e}")
         return False
-    return get_interactions(sheet, row) >= 10
 
 def is_boas_vindas(text):
-    saudacoes = ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"]
-    text = text.lower()
-    return any(sauda in text for sauda in saudacoes)
+    saudacoes = ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "e aí", "opa"]
+    text_lower = text.lower().strip()
+    # Verifica se a mensagem *começa* com uma saudação (evita acionar no meio de frases)
+    return any(text_lower.startswith(sauda) for sauda in saudacoes)
 
-def detectar_gastos(texto):
-    linhas = texto.strip().split("\n")
-    padrao = r"^[a-zA-ZáéíóúÁÉÍÓÚãõÃÕêÊôÔçÇ ]+[-–]\s*\d{1,3}(?:[.,]\d{2})\s*[-–]\s*(crédito|débito|pix|boleto)(?:\s*[-–]\s*[a-zA-ZáéíóúÁÉÍÓÚãõÃÕêÊôÔçÇ ]+)?$"
-    return all(re.match(padrao, linha.strip(), re.IGNORECASE) for linha in linhas)
-
-def detectar_gastos_com_categoria_direta(texto):
-    linhas = texto.strip().split("\n")
-    # Normaliza hífens e travessões
-    texto = texto.replace("–", "-").replace("—", "-").replace("−", "-")
-    linhas = texto.split("\n")
-
-    for linha in linhas:
-        if re.search(r"[-–—]", linha) and re.search(r"\d{1,3}(?:[.,]\d{2})", linha) and any(p in linha.lower() for p in ["crédito", "débito", "pix", "boleto"]):
-            return True
-    return False
-
-def extrair_gastos(texto):
-    gastos, erros = parsear_gastos_em_lote(texto)
-
-    if erros:
-        print("[ERRO PARSE]:", erros)
-
-    return gastos
-
-def quer_corrigir_gasto(msg):
-    termos = ["corrigir", "corrigir gasto", "consertar", "ajustar", "tá errado", "trocar valor"]
-    return any(t in msg.lower() for t in termos) and detectar_gastos(msg)
+# Funções antigas de detecção/parsing de gastos foram removidas
+# def detectar_gastos(texto): ...
+# def detectar_gastos_com_categoria_direta(texto): ...
+# def extrair_gastos(texto): ...
+# def quer_corrigir_gasto(msg): ...
 
 def precisa_direcionamento(msg):
     frases_vagas = [
@@ -186,11 +235,11 @@ def precisa_direcionamento(msg):
         "não sei por onde começar", "como começar", "tô perdido", "me explica",
         "quero ajuda", "quero controlar", "quero começar", "começar a usar"
     ]
-    msg = msg.lower()
-    return any(frase in msg for frase in frases_vagas)
+    msg_lower = msg.lower()
+    return any(frase in msg_lower for frase in frases_vagas)
 
 def quer_resumo_mensal(msg):
-    msg = msg.lower()
+    msg_lower = msg.lower()
     termos = [
         "quanto gastei", 
         "resumo do mês",
@@ -202,28 +251,34 @@ def quer_resumo_mensal(msg):
         "gastando muito",
         "gastei demais"
     ]
-    return any(t in msg for t in termos)
+    return any(t in msg_lower for t in termos)
 
 def quer_lista_comandos(texto):
-    texto = texto.lower()
+    texto_lower = texto.lower()
     termos = [
         "quais comandos", "comandos disponíveis", "o que você faz",
         "como usar", "me ajuda com comandos", "o que posso pedir",
-        "me manda os comandos", "comando", "menu", "como funciona"
+        "me manda os comandos", "comando", "menu", "como funciona",
+        "/comandos", "/ajuda"
     ]
-    return any(t in texto for t in termos)
+    return any(t in texto_lower for t in termos)
 
 def get_tokens(sheet, row):
     try:
         val = sheet.cell(row, 5).value
         return int(val) if val else 0
-    except:
+    except Exception as e:
+        print(f"[ERRO Planilha] get_tokens: {e}")
         return 0
 
 def increment_tokens(sheet, row, novos_tokens):
-    tokens_atuais = get_tokens(sheet, row)
-    sheet.update_cell(row, 5, tokens_atuais + novos_tokens)
-    return tokens_atuais + novos_tokens
+    try:
+        tokens_atuais = get_tokens(sheet, row)
+        sheet.update_cell(row, 5, tokens_atuais + novos_tokens)
+        return tokens_atuais + novos_tokens
+    except Exception as e:
+        print(f"[ERRO Planilha] increment_tokens: {e}")
+        return get_tokens(sheet, row)
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -232,553 +287,565 @@ async def whatsapp_webhook(request: Request):
     from_number = format_number(form["From"])
 
     estado = carregar_estado(from_number)
-    ultima_msg = estado.get("ultima_msg", "")
+    ultima_msg_registrada = estado.get("ultima_msg", "")
 
-    if incoming_msg == ultima_msg:
+    # Verificação de duplicidade mais robusta
+    if incoming_msg == ultima_msg_registrada:
         print("[DEBUG] Mensagem duplicada detectada e ignorada.")
         return {"status": "mensagem duplicada ignorada"}
 
     estado["ultima_msg"] = incoming_msg
-    salvar_estado(from_number, estado)
+    # Salvar estado *após* processar a mensagem ou em pontos chave
 
-    sheet_usuario = get_user_sheet(from_number)
-
+    # --- INÍCIO SETUP USUÁRIO ---
     try:
+        sheet_usuario = get_user_sheet(from_number)
         linha_index = sheet_usuario.col_values(2).index(from_number) + 1
         linha_usuario = sheet_usuario.row_values(linha_index)
     except ValueError:
-        now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
-        sheet_usuario.append_row(["", from_number, "", now, 0, 0])
-        linha_index = sheet_usuario.col_values(2).index(from_number) + 1
-        linha_usuario = ["", from_number, "", now, 0, 0]
+        print(f"[INFO] Usuário {from_number} não encontrado, adicionando.")
+        now_str = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+        try:
+            sheet_usuario.append_row(["", from_number, "", now_str, 0, 0])
+            linha_index = sheet_usuario.col_values(2).index(from_number) + 1
+            linha_usuario = ["", from_number, "", now_str, 0, 0]
+        except Exception as e:
+            print(f"[ERRO GRAVE Planilha] Falha ao adicionar novo usuário {from_number}: {e}")
+            # Enviar mensagem de erro genérica e sair?
+            send_message(from_number, "Tivemos um problema interno ao processar sua solicitação. Por favor, tente novamente mais tarde.")
+            return {"status": "erro crítico ao adicionar usuário"}
+    except Exception as e:
+        print(f"[ERRO GRAVE Planilha] Falha ao buscar/criar usuário {from_number}: {e}")
+        send_message(from_number, "Tivemos um problema interno ao processar sua solicitação. Por favor, tente novamente mais tarde.")
+        return {"status": "erro crítico ao buscar usuário"}
 
     increment_interactions(sheet_usuario, linha_index)
 
-    name = linha_usuario[0].strip() if len(linha_usuario[0].strip()) > 0 else "Usuário"
-    email = linha_usuario[2].strip() or None
+    name = linha_usuario[0].strip() if len(linha_usuario) > 0 and linha_usuario[0] else "Usuário"
+    email = linha_usuario[2].strip() if len(linha_usuario) > 2 and linha_usuario[2] else None
 
-    tokens = count_tokens(incoming_msg)
-    increment_tokens(sheet_usuario, linha_index, tokens)
+    tokens_msg = count_tokens(incoming_msg)
+    increment_tokens(sheet_usuario, linha_index, tokens_msg)
+    # --- FIM SETUP USUÁRIO ---
 
+    # --- INÍCIO FLUXO ONBOARDING/CADASTRO ---
     if is_boas_vindas(incoming_msg):
-        if not name or not email:
-            send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
+        if not name or name == "Usuário" or not email:
+            # Se já está aguardando cadastro, não manda a msg de novo
+            if estado.get("ultimo_fluxo") != "aguardando_cadastro":
+                send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
+                estado["ultimo_fluxo"] = "aguardando_cadastro"
+                salvar_estado(from_number, estado)
+            return {"status": "aguardando nome e email"}
+
+        # Se já tem nome/email e já saudou antes, evita repetir
+        if estado.get("saudacao_realizada"):
+            # Poderia ter uma resposta mais dinâmica aqui? Ou só ignorar?
+            # send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
+            print("[DEBUG] Saudação repetida ignorada.")
+            # Não retorna aqui, deixa o fluxo seguir para interpretar a mensagem
+        else:
+            primeiro_nome = name.split()[0] if name != "Usuário" else ""
+            resposta_curta = mensagens.cadastro_completo(primeiro_nome)
+            send_message(from_number, mensagens.estilo_msg(resposta_curta))
+            estado["ultimo_fluxo"] = "cadastro_completo" # Ou talvez "inicio_conversa"?
+            estado["saudacao_realizada"] = True
+            salvar_estado(from_number, estado)
+            return {"status": "cadastro completo e saudação feita"}
+
+    # Lógica para capturar nome/email se ainda não tiver
+    if not name or name == "Usuário" or not email:
+        nome_capturado = None
+        email_capturado = None
+        
+        # Tenta capturar das linhas da mensagem atual
+        linhas = incoming_msg.split("\n")
+        for linha in linhas:
+            if not nome_capturado and nome_valido(linha):
+                nome_capturado = linha.title().strip()
+            if not email_capturado and extract_email(linha):
+                email_capturado = extract_email(linha).lower().strip()
+
+        nome_atualizado = False
+        email_atualizado = False
+
+        if nome_capturado and (not name or name == "Usuário"):
+            try:
+                sheet_usuario.update_cell(linha_index, 1, nome_capturado)
+                name = nome_capturado
+                nome_atualizado = True
+                print(f"[INFO] Nome atualizado para {name}")
+            except Exception as e:
+                 print(f"[ERRO Planilha] Falha ao atualizar nome para {nome_capturado}: {e}")
+
+        if email_capturado and not email:
+            try:
+                sheet_usuario.update_cell(linha_index, 3, email_capturado)
+                email = email_capturado
+                email_atualizado = True
+                print(f"[INFO] Email atualizado para {email}")
+            except Exception as e:
+                 print(f"[ERRO Planilha] Falha ao atualizar email para {email_capturado}: {e}")
+
+        # Verifica o que ainda falta e pede
+        if not name or name == "Usuário":
+            # Se acabou de atualizar o email, não pede nome de novo na mesma msg
+            if not email_atualizado:
+                send_message(from_number, mensagens.estilo_msg("Ótimo! E qual seu nome completo, por favor? ✍️"))
+                estado["ultimo_fluxo"] = "aguardando_cadastro"
+                salvar_estado(from_number, estado)
+                return {"status": "aguardando nome"}
+        elif not email:
+             # Se acabou de atualizar o nome, não pede email de novo na mesma msg
+            if not nome_atualizado:
+                send_message(from_number, mensagens.estilo_msg("Perfeito! Agora só preciso do seu e-mail. 📧"))
+                estado["ultimo_fluxo"] = "aguardando_cadastro"
+                salvar_estado(from_number, estado)
+                return {"status": "aguardando email"}
+        
+        # Se ambos foram atualizados ou já existiam
+        if name and name != "Usuário" and email:
+            primeiro_nome = name.split()[0]
+            send_message(from_number, mensagens.estilo_msg(mensagens.cadastro_completo(primeiro_nome)))
+            estado["ultimo_fluxo"] = "cadastro_completo"
+            estado["saudacao_realizada"] = True # Assume que se completou cadastro, saudação tá feita
+            salvar_estado(from_number, estado)
+            return {"status": "cadastro completo via captura"}
+        else:
+            # Se algo deu errado ou só capturou um, mantém aguardando cadastro
             estado["ultimo_fluxo"] = "aguardando_cadastro"
             salvar_estado(from_number, estado)
-            return {"status": "aguardando nome e email"}
+            # Mensagem já foi enviada pedindo o que falta
+            return {"status": "continuando aguardando cadastro"}
+            
+    # --- FIM FLUXO ONBOARDING/CADASTRO ---
 
-        if estado.get("saudacao_realizada"):
-            send_message(from_number, mensagens.estilo_msg("Já estou aqui com você! Como posso te ajudar agora? 😉"))
-            return {"status": "saudação já realizada"}
-
-        resposta_curta = mensagens.cadastro_completo(name.split()[0])
-        send_message(from_number, mensagens.estilo_msg(resposta_curta))
-        estado["ultimo_fluxo"] = "cadastro_completo"
-        estado["saudacao_realizada"] = True
-        salvar_estado(from_number, estado)
-        return {"status": "cadastro completo"}
-
-    if not name or not email:
-        linhas = incoming_msg.split("\n")
-        nome_capturado = next((linha.title() for linha in linhas if nome_valido(linha)), None)
-        email_capturado = next((extract_email(linha).lower() for linha in linhas if extract_email(linha)), None)
-
-        if nome_capturado:
-            sheet_usuario.update_cell(linha_index, 1, nome_capturado)
-            name = nome_capturado
-
-        if email_capturado:
-            sheet_usuario.update_cell(linha_index, 3, email_capturado)
-            email = email_capturado
-
-        if not name and not email:
-            send_message(from_number, mensagens.estilo_msg(mensagens.solicitacao_cadastro()))
-            return {"status": "aguardando nome e email"}
-
-        if not name:
-            send_message(from_number, mensagens.estilo_msg("Faltou seu nome completo. ✍️"))
-            return {"status": "aguardando nome"}
-
-        if not email:
-            send_message(from_number, mensagens.estilo_msg("Agora me manda seu e-mail, por favor. 📧"))
-            return {"status": "aguardando email"}
-
-        primeiro_nome = name.split()[0]
-        send_message(from_number, mensagens.estilo_msg(mensagens.cadastro_completo(primeiro_nome)))
-        estado["ultimo_fluxo"] = "cadastro_completo"
-        estado["saudacao_realizada"] = True
-        salvar_estado(from_number, estado)
-        return {"status": "cadastro completo"}
-
-    if estado.get("ultimo_fluxo") != "cadastro_completo":
-        estado["ultimo_fluxo"] = "cadastro_completo"
-        salvar_estado(from_number, estado)
-
-    if estado.get("ultimo_fluxo") == "escuta_ativa":
-        historico_relevante.append(f"Usuário: {incoming_msg}")
+    # --- INÍCIO PROCESSAMENTO DE MENSAGEM (PÓS-CADASTRO) ---
     
-    # Mensagem padrão sobre funcionalidades
-    if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
-        resposta_funcionalidades = mensagens.funcionalidades()
-        send_message(from_number, mensagens.estilo_msg(resposta_funcionalidades))
-        return {"status": "funcionalidades informadas"}
+    # Flag para saber se a mensagem foi tratada por um fluxo específico
+    mensagem_tratada = False 
 
-    if incoming_msg.strip().lower() in ["/comandos", "/ajuda"]:
-        comandos = (
-            "📋 *Comandos disponíveis:*\n"
-            "/resumo – Ver seu resumo financeiro do dia\n"
-            "/limites – Mostrar seus limites por categoria\n"
-            "/relatorio – Análise completa dos seus gastos (em breve)\n"
-            "/ranking – Ver o ranking dos usuários\n"
-            "/minhas_estrelas – Ver suas estrelas acumuladas\n"
-            "/ajuda – Mostrar esta lista de comandos"
-        )
-        send_message(from_number, mensagens.estilo_msg(comandos))
-        return {"status": "comandos enviados"}
-    
-    if "despesas fixas" in incoming_msg.lower() or "gastos fixos" in incoming_msg.lower():
-        if detectar_gastos(incoming_msg):
-            gastos_fixos, erros = parsear_gastos_em_lote(incoming_msg)
+    # --- INÍCIO NOVO FLUXO DE REGISTRO DE GASTOS (GPT + CONVERSACIONAL) ---
+    ultimo_fluxo_gasto = estado.get("ultimo_fluxo")
+    gasto_pendente = estado.get("gasto_pendente")
 
-            if erros:
-                send_message(from_number, mensagens.estilo_msg(mensagens.erro_formato_gastos()))
-                return {"status": "erro nos gastos fixos"}
-
-            salvar_gastos_fixos(from_number, gastos_fixos)
-
-            total_gastos = sum(gasto["valor"] for gasto in gastos_fixos)
-            mensagem = "✅ *Suas despesas fixas foram salvas!*\n"
-            mensagem += "\n".join([f"{g['descricao']} - R${g['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") for g in gastos_fixos])
-            mensagem += f"\n\n*Total mensal:* R${total_gastos:,.2f}\n\n".replace(",", "X").replace(".", ",").replace("X", ".")
-            mensagem += "Quer definir limites mensais para esses gastos e receber alertas quando atingidos?"
-
-            send_message(from_number, mensagens.estilo_msg(mensagem))
-
-            return {"status": "gastos fixos registrados"}
-
-        else:
-            send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
-            return {"status": "aguardando formato correto gastos fixos"}
-
-    linha_usuario = sheet_usuario.row_values(sheet_usuario.col_values(2).index(from_number) + 1)
-    name = linha_usuario[0].strip() if len(linha_usuario) > 0 else ""
-
-    if estado.get("ultimo_fluxo") == "registro_gastos_continuo" and detectar_gastos(incoming_msg):
-        gastos_novos = extrair_gastos(incoming_msg)
-        if not gastos_novos:
-            send_message(
-                from_number,
-                mensagens.estilo_msg(mensagens.erro_formato_gastos())
-            )
-            return {"status": "nenhum gasto extraído"}
-
-        gastos_sem_categoria = [g for g in gastos_novos if not g.get("categoria")]
-        gastos_completos = [g for g in gastos_novos if g.get("categoria")]
-
-        fuso = pytz.timezone("America/Sao_Paulo")
-        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-
-        gastos_registrados = []
-        for gasto in gastos_completos:
-            descricao = gasto["descricao"].capitalize()
-            valor = gasto["valor"]
-            forma = gasto["forma_pagamento"]
-            categoria = gasto["categoria"]
-
-            resposta_registro = registrar_gasto(
-                nome_usuario=name,
-                numero_usuario=from_number.replace("whatsapp:", "").replace("+", "").strip(),
-                descricao=descricao,
-                valor=valor,
-                forma_pagamento=forma,
-                data_gasto=hoje,
-                categoria_manual=categoria
-            )
-
-            if resposta_registro["status"] != "ok":
-                print(f"[ERRO] {resposta_registro['mensagem']}")
-
-            estado["ultimo_fluxo"] = "gastos_registrados"
+    # 1. Usuário está respondendo sobre FORMA DE PAGAMENTO?
+    if ultimo_fluxo_gasto == "aguardando_forma_pagamento" and gasto_pendente:
+        forma_pagamento_resposta = incoming_msg.strip().capitalize()
+        # Validação simples da forma de pagamento (pode melhorar)
+        if forma_pagamento_resposta and len(forma_pagamento_resposta) > 2:
+            gasto_pendente["forma_pagamento"] = forma_pagamento_resposta
+            
+            categoria_sugerida = gasto_pendente.get("categoria_sugerida", "A DEFINIR")
+            valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+            if categoria_sugerida != "A DEFINIR":
+                mensagem_confirmacao = (
+                    f"Entendido: {gasto_pendente['descricao']} - {valor_formatado} ({forma_pagamento_resposta}).\n"
+                    f"Sugeri a categoria *{categoria_sugerida}*. Está correto? (Sim/Não/Ou diga a categoria certa)"
+                )
+                estado["ultimo_fluxo"] = "aguardando_confirmacao_categoria"
+            else:
+                 mensagem_confirmacao = (
+                    f"Entendido: {gasto_pendente['descricao']} - {valor_formatado} ({forma_pagamento_resposta}).\n"
+                    f"Qual seria a categoria para este gasto? (Ex: Alimentação, Transporte, Lazer...)"
+                )
+                 estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
+                 
+            # Mantém gasto_pendente no estado
             salvar_estado(from_number, estado)
+            send_message(from_number, mensagens.estilo_msg(mensagem_confirmacao))
+            mensagem_tratada = True
+        else:
+            # Forma de pagamento inválida ou vazia, pede de novo
+            send_message(from_number, mensagens.estilo_msg("Não entendi a forma de pagamento. Pode repetir? (crédito, débito, pix, etc.)"))
+            # Mantém o estado como aguardando_forma_pagamento
+            salvar_estado(from_number, estado)
+            mensagem_tratada = True
+
+    # 2. Usuário está respondendo sobre CONFIRMAÇÃO DE CATEGORIA?
+    elif ultimo_fluxo_gasto == "aguardando_confirmacao_categoria" and gasto_pendente:
+        resposta_categoria = incoming_msg.strip().lower()
+        categoria_final = ""
         
-            valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            gastos_registrados.append(f"{descricao} ({valor_formatado}): {categoria}")
-
-        mensagem = ""
-        if gastos_registrados:
-            # Calcula o somatório por categoria
-            categorias_totais = {}
-            for gasto in gastos_completos + gastos_sem_categoria:
-                categoria = gasto.get('categoria', 'A DEFINIR')
-                categorias_totais[categoria] = categorias_totais.get(categoria, 0) + gasto['valor']
-
-            # Formata o somatório
-            somatorio_msg = "\n".join([
-                f"{categoria}: R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                for categoria, valor in categorias_totais.items()
-            ])
-
-            mensagem = "✅ *Gastos registrados com sucesso!*\n\n"
-            mensagem += "📊 *Total por categoria:*\n" + somatorio_msg
-            mensagem += "\n\nVocê gostaria de definir limites para essas categorias e receber alertas automáticos quando atingir esses limites?"
-
-        if gastos_sem_categoria:
-            estado_anterior = carregar_estado(from_number) or {}
-            categorias_sugeridas = estado_anterior.get("categorias_sugeridas", {})
-
-            for gasto in gastos_sem_categoria:
-                descricao = gasto["descricao"].strip().lower()
-                categoria_sug = categorizar(descricao) or "A DEFINIR"
-                categorias_sugeridas[descricao] = categoria_sug
-
-            estado_anterior.update({
-                "ultimo_fluxo": "aguardando_categorias",
-                "gastos_temp": gastos_sem_categoria,
-                "categorias_sugeridas": categorias_sugeridas
-            })
-
-            salvar_estado(from_number, estado_anterior)
-
-            lista_gastos = "\n".join(
-                [f"{g['descricao'].capitalize()}, R${g['valor']}, pago com {g['forma_pagamento']}." for g in gastos_sem_categoria]
-            )
-
-            mensagem += (
-                "\n\n"
-                "Certo! Encontrei alguns gastos sem categoria:\n\n" +
-                lista_gastos +
-                "\n\nResponda agora indicando a categoria desejada com este formato:\n"
-                "[descrição]: [categoria]\n\n"
-                "*Exemplo:* supermercado: alimentação"
-            )
-
-        send_message(from_number, mensagens.estilo_msg(mensagem.strip()))
-        return {"status": "gastos processados via fluxo contínuo"}
-
-    ultimo_fluxo = estado.get("ultimo_fluxo")
-
-    if quer_resumo_mensal(incoming_msg):
-        resumo = resumo_do_mes(from_number)
-        limites = verificar_limites(from_number)
-        send_message(from_number, mensagens.estilo_msg(resumo + "\n\n" + limites))
-        return {"status": "resumo mensal enviado"}
-
-    if any(t in incoming_msg.lower() for t in [
-        "resumo do dia", "resumo de hoje", "quanto gastei hoje",
-        "novo resumo", "resumo agora", "resumo atualizado",
-        "quero o resumo", "meu resumo", "resumo aqui"
-    ]):
-        resumo = gerar_resumo(from_number, periodo="diario")
-        send_message(from_number, mensagens.estilo_msg(resumo))
-        return {"status": "resumo hoje enviado"}
-
-    if any(t in incoming_msg.lower() for t in ["resumo de ontem", "quanto gastei ontem"]):
-        ontem = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")) - datetime.timedelta(days=1)
-        resumo = gerar_resumo(from_number, periodo="custom", data_personalizada=ontem.date())
-        send_message(from_number, mensagens.estilo_msg(resumo))
-        return {"status": "resumo ontem enviado"}
-
-    if verificar_upgrade_automatico(from_number):
-        send_message(from_number, mensagens.estilo_msg(
-            "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌"))
-
-    if estado.get("ultimo_fluxo") == "cadastro_completo":
-        interacoes = get_interactions(sheet_usuario, linha_index)
-        if interacoes >= 10:
-            contexto_usuario = contexto_principal_usuario(from_number, ultima_msg=incoming_msg)
-            mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
-            send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
-            return {"status": "limite atingido"}
-
-    # === REGISTRO DE GASTOS PADRÃO ===
-     # Instrução clara para registrar gastos (se o usuário pedir ajuda diretamente sobre gastos)
-    if any(frase in incoming_msg.lower() for frase in [
-        "quero registrar gastos",
-        "quero relacionar meus gastos",
-        "quero anotar gastos",
-        "como faço pra registrar gastos",
-        "quero lançar gastos",
-        "ajuda para registrar gastos",
-        "controle inteligente e automático de gastos",
-        "controle automático de gastos",
-        "controle inteligente de gastos",
-        "controlar meus gastos",
-        "controle de gastos"
-    ]):
-        send_message(from_number, mensagens.estilo_msg(mensagens.orientacao_controle_gastos()))
-        estado["ultimo_fluxo"] = "aguardando_opcao_controle_gastos"
-        salvar_estado(from_number, estado)
-
-        return {"status": "orientacao controle gastos enviada"}
-
-    if estado.get("ultimo_fluxo") == "aguardando_opcao_controle_gastos":
-        msg_lower = incoming_msg.lower()
-
-        if any(op in msg_lower for op in ["1", "gastos fixos", "fixos", "despesas fixas"]):
-            send_message(from_number, mensagens.estilo_msg(
-                "Ótima escolha! Vamos relacionar suas despesas fixas mensais.\n"
-                "Mande cada despesa fixa neste formato:\n"
-                "📌 Descrição – Valor – Dia do mês que vence\n\n"
-                "Exemplo:\n"
-                "Aluguel – 2500,00 – 05\n"
-                "Internet – 100,00 – 15"
-            ))
-            estado["ultimo_fluxo"] = "aguardando_gastos_fixos"
-
-        elif any(op in msg_lower for op in ["2", "gastos diários", "diários", "registrar gastos", "registrar", "lançar gastos"]):
-            send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
-            estado["ultimo_fluxo"] = "registro_gastos_continuo"
-
-        elif any(op in msg_lower for op in ["3", "limites", "limite", "categorias"]):
-            send_message(from_number, mensagens.estilo_msg(
-                "Perfeito! Vamos definir seus limites por categoria. Para isso, envie cada categoria e o valor mensal desejado neste formato:\n"
-                "📌 Categoria – Valor limite\n\n"
-                "Exemplo:\n"
-                "Alimentação – 1500,00\n"
-                "Lazer – 500,00\n"
-                "Transporte – 800,00"
-            ))
-            estado["ultimo_fluxo"] = "aguardando_limites_categoria"
-
-        else:
-            send_message(from_number, mensagens.estilo_msg(
-                "Não consegui identificar claramente a opção. Pode responder com o número (1, 2 ou 3) ou a descrição da opção?"
-            ))
-
-        salvar_estado(from_number, estado)
-        return {"status": estado["ultimo_fluxo"]}
-   
-    if detectar_gastos(incoming_msg):
-        gastos_novos, erros = parsear_gastos_em_lote(incoming_msg)
-
-        if erros:
-            send_message(from_number, mensagens.estilo_msg(
-                "⚠️ Alguns gastos não foram reconhecidos:\n" + "\n".join(erros)
-            ))
-
-        if not gastos_novos:
-            send_message(from_number, mensagens.estilo_msg(
-                "❌ Não consegui entender os gastos que você mandou.\n\n"
-                "Use este formato exato:\n\n"
-                "📌 *Descrição – Valor – Forma de pagamento – Categoria (opcional)*\n\n"
-                "*Exemplos válidos:*\n"
-                "• Uber – 20,00 – crédito\n"
-                "• Combustível – 300,00 – débito\n"
-                "• Farmácia – 50,00 – pix – Saúde\n\n"
-                "📎 Pode mandar vários gastos, um por linha."
-            ))
-            return {"status": "nenhum gasto extraído"}
-
-        fuso = pytz.timezone("America/Sao_Paulo")
-        hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-
-        gastos_registrados = []
-
-        for gasto in gastos_novos:
-            descricao = gasto["descricao"].capitalize()
-            valor = gasto["valor"]
-            forma = gasto["forma_pagamento"]
-            categoria = gasto.get("categoria") or categorizar(descricao)
-
+        if resposta_categoria in ["sim", "s", "correto", "ok", "isso", "tá certo", "pode ser"]:
+            categoria_final = gasto_pendente.get("categoria_sugerida")
+        elif resposta_categoria not in ["não", "nao", "errado"]:
+            # Assume que o usuário digitou a categoria correta
+            categoria_final = incoming_msg.strip().capitalize()
+        
+        if categoria_final:
+            # REGISTRA O GASTO COMPLETO
+            fuso = pytz.timezone("America/Sao_Paulo")
+            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
             resposta_registro = registrar_gasto(
                 nome_usuario=name,
-                numero_usuario=from_number.replace("whatsapp:", "").replace("+", "").strip(),
-                descricao=descricao,
-                valor=valor,
-                forma_pagamento=forma,
+                numero_usuario=from_number, # Usar número formatado
+                descricao=gasto_pendente["descricao"],
+                valor=gasto_pendente["valor"],
+                forma_pagamento=gasto_pendente["forma_pagamento"],
                 data_gasto=hoje,
-                categoria_manual=categoria
+                categoria_manual=categoria_final
             )
-
-            if resposta_registro["status"] != "ok":
-                print(f"[ERRO] {resposta_registro['mensagem']}")
-
-            valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            gastos_registrados.append(f"{descricao} – {valor_formatado} – {forma} – {categoria}")
-
-        mensagem_final = "Registro anotado, meu amigo! Aqui está o resumo dos seus gastos do dia:\n\n"
-        mensagem_final += "\n".join(gastos_registrados)
-
-        send_message(from_number, mensagens.estilo_msg(mensagem_final))
-
-        return {"status": "gastos registrados"}
-
-    # === CONTINUA CONVERSA ===
-    conversa_path = f"conversas/{from_number}.txt"
-    if not os.path.exists("conversas"):
-        os.makedirs("conversas")
-
-    if not os.path.isfile(conversa_path):
-        with open(conversa_path, "w") as f:
-            f.write("")
-
-    with open(conversa_path, "r") as f:
-        linhas_conversa = f.readlines()
-
-    historico_filtrado = [
-        linha for linha in linhas_conversa
-        if not any(frase in linha.lower() for frase in [
-            "sou seu conselheiro financeiro",
-            "perfeito,",
-            "tô aqui pra te ajudar",
-            "posso te ajudar com controle de gastos",
-            "por onde quer começar"
-        ])
-    ]
-  
-    historico_relevante = historico_filtrado[-4:]
-  
-    def precisa_escuta_ativa(historico, assunto_atual):
-        return not any(assunto_atual in linha.lower() for linha in historico)
-
-    PALAVRAS_CHAVE_CATEGORIAS = {
-        "espiritualidade": ["oração", "culpa", "confissão", "direção espiritual", "vida espiritual", "fé", "deus", "confessar"],
-        "financeiro": ["gasto", "dinheiro", "investimento", "renda", "salário", "orçamento", "juros", "empréstimo"],
-        "casamento": ["cônjuge", "esposa", "marido", "matrimônio", "casamento", "vida a dois", "parceiro"],
-        "dívidas": ["dívida", "devendo", "nome sujo", "negativado", "cobrança", "boleto atrasado"],
-        "filosofia": ["virtude", "temperamento", "aristóteles", "santo tomás", "ética", "filosofia", "psicologia"],
-    }
-
-    categoria_detectada = "geral"
-    texto_lower = incoming_msg.lower()
-    for categoria, palavras in PALAVRAS_CHAVE_CATEGORIAS.items():
-        if any(palavra.lower() in texto_lower for palavra in palavras):
-            categoria_detectada = categoria
-            break
-
-    assuntos_sensiveis_escuta = ["casamento", "espiritualidade", "dívidas", "filosofia", "financeiro"]
-
-    if categoria_detectada in assuntos_sensiveis_escuta:
-        if precisa_escuta_ativa(historico_relevante, categoria_detectada):
-            resposta_escuta = mensagens.pergunta_escuta_ativa(categoria_detectada)
-            send_message(from_number, mensagens.estilo_msg(resposta_escuta))
-            estado["ultimo_fluxo"] = "escuta_ativa"
-            salvar_estado(from_number, estado)
-            return {"status": "aguardando mais contexto do usuário"}
-
-    if ultimo_fluxo == "escuta_ativa":
-        prompt_escuta_ativa = (
-            "O usuário acaba de fornecer mais contexto sobre um assunto importante ou sensível que você perguntou anteriormente. "
-            "Agora, com essa informação adicional, responda diretamente e de maneira acolhedora ao contexto específico apresentado pelo usuário. "
-            "Não repita perguntas. Ofereça orientações práticas e claras alinhadas aos valores cristãos, familiares e financeiros do método Matheus Campos, CFP®. "
-            "Utilize o estilo amigável, firme e interessado de Dale Carnegie. Seja breve, prático e direto ao ponto."
-        )
-        mensagens_gpt.append({"role": "system", "content": prompt_escuta_ativa})
-        estado["ultimo_fluxo"] = "cadastro_completo"
-        salvar_estado(from_number, estado)
-    
-    with open("prompt.txt", "r") as arquivo_prompt:
-        prompt_base = arquivo_prompt.read().strip()
-
-    mensagens_gpt = [
-        {"role": "system", "content": prompt_base},
-        {"role": "system", "content": complemento_contextual},
-        {"role": "system", "content": "Sempre consulte primeiro os arquivos da pasta Knowledge para respostas, respeitando rigorosamente o prompt definido por Matheus Campos. Só então, caso necessário, complemente com sua própria base de dados."}
-    ]
-
-    termos_resumo_financeiro = ["resumo", "resumo do dia", "resumo financeiro", "quanto gastei", "gastos hoje"]
-    if any(termo in incoming_msg.lower() for termo in termos_resumo_financeiro):
-        contexto_resgatado = ""
-    else:
-        contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada, top_k=4)
-    # print(f"[DEBUG] Conteúdo recuperado da knowledge: {contexto_resgatado}")
-    if contexto_resgatado:
-        mensagens_gpt.append({
-            "role": "system",
-            "content": (
-                "Ao responder, baseie-se prioritariamente nas informações a seguir, respeitando fielmente "
-                "o estilo, tom, e os princípios contidos:\n\n"
-                f"{contexto_resgatado}"
-            )
-        })
-
-    if ultimo_fluxo:
-        mensagens_gpt.append({
-            "role": "system",
-            "content": f"O usuário está no seguinte fluxo: {ultimo_fluxo}."
-        })
-
-    for linha in historico_relevante:
-        if ":" in linha:
-            role = "user" if "Usuário:" in linha else "assistant"
-            conteudo = linha.split(":", 1)[1].strip()
-            mensagens_gpt.append({"role": role, "content": conteudo})
+            resetar_estado(from_number) # Limpa estado após tentativa de registro
+            if resposta_registro["status"] == "ok":
+                valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                send_message(from_number, mensagens.estilo_msg(f"✅ Gasto registrado: {gasto_pendente['descricao']} ({valor_formatado}) em {categoria_final}."))
+            elif resposta_registro["status"] == "ignorado":
+                 send_message(from_number, mensagens.estilo_msg("📝 Hmm, parece que esse gasto já foi registrado antes."))
+            else:
+                 send_message(from_number, mensagens.estilo_msg(f"⚠️ Tive um problema ao registrar o gasto na planilha. Por favor, tente de novo ou verifique mais tarde."))
+                 print(f"[ERRO REGISTRO] {resposta_registro.get('mensagem')}")
+            mensagem_tratada = True
         else:
-            # print(f"[DEBUG] Linha ignorada no histórico por falta de ':': {linha}")
-            pass # adicionado para evitar IndentationError após comentário
+            # Usuário disse 'não' mas não informou a categoria
+            send_message(from_number, mensagens.estilo_msg("Ok. Qual seria a categoria correta para este gasto?"))
+            estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
+            # Mantém gasto_pendente
+            salvar_estado(from_number, estado)
+            mensagem_tratada = True
 
-    mensagens_gpt.append({"role": "user", "content": incoming_msg})
+    # 3. Usuário está respondendo sobre DEFINIÇÃO DE CATEGORIA?
+    elif ultimo_fluxo_gasto == "aguardando_definicao_categoria" and gasto_pendente:
+        categoria_resposta = incoming_msg.strip().capitalize()
+        if categoria_resposta and len(categoria_resposta) > 2: # Validação simples
+            # REGISTRA O GASTO COMPLETO
+            fuso = pytz.timezone("America/Sao_Paulo")
+            hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
+            resposta_registro = registrar_gasto(
+                nome_usuario=name,
+                numero_usuario=from_number,
+                descricao=gasto_pendente["descricao"],
+                valor=gasto_pendente["valor"],
+                forma_pagamento=gasto_pendente["forma_pagamento"],
+                data_gasto=hoje,
+                categoria_manual=categoria_resposta
+            )
+            resetar_estado(from_number)
+            if resposta_registro["status"] == "ok":
+                valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                send_message(from_number, mensagens.estilo_msg(f"✅ Gasto registrado: {gasto_pendente['descricao']} ({valor_formatado}) em {categoria_resposta}."))
+            elif resposta_registro["status"] == "ignorado":
+                 send_message(from_number, mensagens.estilo_msg("📝 Hmm, parece que esse gasto já foi registrado antes."))
+            else:
+                 send_message(from_number, mensagens.estilo_msg(f"⚠️ Tive um problema ao registrar o gasto na planilha. Por favor, tente de novo ou verifique mais tarde."))
+                 print(f"[ERRO REGISTRO] {resposta_registro.get('mensagem')}")
+            mensagem_tratada = True
+        else:
+            # Categoria inválida ou vazia, pede de novo
+            send_message(from_number, mensagens.estilo_msg("Não entendi a categoria. Pode me dizer de novo? (Ex: Alimentação, Transporte, Lazer...)"))
+            # Mantém o estado
+            salvar_estado(from_number, estado)
+            mensagem_tratada = True
+            
+    # 4. Se não estava respondendo a perguntas anteriores, TENTA INTERPRETAR A MENSAGEM COMO UM NOVO GASTO
+    if not mensagem_tratada:
+        # Verifica se a mensagem parece um gasto antes de chamar o GPT (otimização)
+        # Heurística simples: contém números e talvez R$ ou palavras como gastei/paguei/comprei
+        contem_valor = any(char.isdigit() for char in incoming_msg)
+        palavras_chave_gasto = ["gastei", "paguei", "comprei", "custou", "foi R$", "deu R$"]
+        indica_gasto = contem_valor and (re.search(r'R\$\s*\d', incoming_msg, re.IGNORECASE) or any(p in incoming_msg.lower() for p in palavras_chave_gasto))
+        
+        # Evita interpretar comandos ou pedidos de resumo como gastos
+        if indica_gasto and not quer_lista_comandos(incoming_msg) and not quer_resumo_mensal(incoming_msg) and not incoming_msg.lower().startswith("/resumo"):
+            print("[DEBUG] Tentando interpretar mensagem como gasto via GPT...")
+            dados_gasto_gpt = interpretar_gasto_com_gpt(incoming_msg)
 
-    termos_macro = ["empréstimo", "juros", "selic", "ipca", "cdi", "inflação", "investimento", "cenário econômico"]
-    if any(palavra in incoming_msg.lower() for palavra in termos_macro):
-        indicadores = get_indicadores()
-        texto_indicadores = "\n".join([
-            f"Taxa Selic: {indicadores.get('selic', 'indisponível')}%",
-            f"CDI: {indicadores.get('cdi', 'indisponível')}%",
-            f"IPCA (inflação): {indicadores.get('ipca', 'indisponível')}%",
-            f"Ibovespa: {indicadores.get('ibovespa', 'indisponível')}"
-        ])
-        mensagens_gpt.append({
-            "role": "user",
-            "content": f"Indicadores econômicos atuais:\n{texto_indicadores}"
-        })
+            if dados_gasto_gpt: 
+                # GPT conseguiu extrair informações
+                descricao = dados_gasto_gpt.get("descricao")
+                valor = dados_gasto_gpt.get("valor")
+                forma_pagamento = dados_gasto_gpt.get("forma_pagamento")
+                categoria_sugerida = dados_gasto_gpt.get("categoria_sugerida")
+                
+                valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+                if forma_pagamento and forma_pagamento != "N/A":
+                    # Temos forma de pagamento, pergunta sobre categoria
+                    if categoria_sugerida and categoria_sugerida != "A DEFINIR":
+                        mensagem = (
+                            f"Entendi: {descricao} - {valor_formatado} ({forma_pagamento}).\n"
+                            f"Sugeri a categoria *{categoria_sugerida}*. Está correto? (Sim/Não/Ou diga a categoria certa)"
+                        )
+                        estado["ultimo_fluxo"] = "aguardando_confirmacao_categoria"
+                    else:
+                        mensagem = (
+                            f"Entendi: {descricao} - {valor_formatado} ({forma_pagamento}).\n"
+                            f"Qual seria a categoria para este gasto? (Ex: Alimentação, Transporte, Lazer...)"
+                        )
+                        estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
+                    
+                    estado["gasto_pendente"] = dados_gasto_gpt
+                    salvar_estado(from_number, estado)
+                    send_message(from_number, mensagens.estilo_msg(mensagem))
+                    mensagem_tratada = True
+                    
+                else:
+                    # Falta forma de pagamento
+                    mensagem = f"Entendi: {descricao} - {valor_formatado}. Como você pagou (crédito, débito, pix, etc.)?"
+                    estado["ultimo_fluxo"] = "aguardando_forma_pagamento"
+                    estado["gasto_pendente"] = dados_gasto_gpt
+                    salvar_estado(from_number, estado)
+                    send_message(from_number, mensagens.estilo_msg(mensagem))
+                    mensagem_tratada = True
+            else:
+                # GPT não conseguiu extrair ou falhou
+                print("[DEBUG] GPT não retornou dados válidos para o gasto.")
+                # Deixa seguir para a conversa normal
+                pass 
+        # Se não indica gasto, segue para conversa normal
+
+    # --- FIM NOVO FLUXO DE REGISTRO DE GASTOS ---
+
+    # --- INÍCIO FLUXOS DE COMANDOS E CONVERSA GERAL ---
+    # Só executa se a mensagem não foi tratada pelo fluxo de gastos
+    if not mensagem_tratada:
+        print("[DEBUG] Mensagem não tratada como gasto, seguindo para comandos/conversa...")
+        
+        # Comandos /ajuda, /comandos, etc.
+        if quer_lista_comandos(incoming_msg):
+            comandos_txt = (
+                "📋 *Comandos disponíveis:*\n"
+                "/resumo – Ver seu resumo financeiro do dia\n"
+                "/limites – Mostrar seus limites por categoria\n"
+                # "/relatorio – Análise completa dos seus gastos (em breve)\n"
+                # "/ranking – Ver o ranking dos usuários\n"
+                # "/minhas_estrelas – Ver suas estrelas acumuladas\n"
+                "/ajuda – Mostrar esta lista de comandos\n\n"
+                "💡 *Para registrar gastos, apenas me diga o que gastou!*\n"
+                "Ex: 'Gastei 50 reais no almoço com pix' ou 'Comprei pão na padaria por 10 reais no débito'"
+            )
+            send_message(from_number, mensagens.estilo_msg(comandos_txt))
+            salvar_estado(from_number, estado) # Salva estado com ultima_msg
+            return {"status": "comandos enviados"}
+        
+        # Resumo Mensal
+        if quer_resumo_mensal(incoming_msg):
+            resumo = resumo_do_mes(from_number)
+            limites_txt = verificar_limites(from_number)
+            send_message(from_number, mensagens.estilo_msg(resumo + "\n\n" + limites_txt))
+            salvar_estado(from_number, estado)
+            return {"status": "resumo mensal enviado"}
+
+        # Resumo Diário / Ontem (simplificado)
+        if any(t in incoming_msg.lower() for t in [
+            "resumo do dia", "resumo de hoje", "quanto gastei hoje",
+            "novo resumo", "resumo agora", "resumo atualizado",
+            "quero o resumo", "meu resumo", "resumo aqui", "/resumo"
+        ]):
+            resumo = gerar_resumo(from_number, periodo="diario")
+            send_message(from_number, mensagens.estilo_msg(resumo))
+            salvar_estado(from_number, estado)
+            return {"status": "resumo hoje enviado"}
+
+        if any(t in incoming_msg.lower() for t in ["resumo de ontem", "quanto gastei ontem"]):
+            ontem = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")) - datetime.timedelta(days=1)
+            resumo = gerar_resumo(from_number, periodo="custom", data_personalizada=ontem.date())
+            send_message(from_number, mensagens.estilo_msg(resumo))
+            salvar_estado(from_number, estado)
+            return {"status": "resumo ontem enviado"}
+            
+        # Lógica de Upgrade (mantida)
+        if verificar_upgrade_automatico(from_number):
+            send_message(from_number, mensagens.estilo_msg(
+                "🔓 Seu acesso premium foi liberado!\nBem-vindo ao grupo dos que escolheram dominar a vida financeira com dignidade e IA de primeira. 🙌"))
+            # Não retorna, pode ser que a mensagem atual seja outra coisa
+
+        # Alerta de limite gratuito (mantido)
+        # Considerar se este limite deve ser verificado antes ou depois da conversa
+        user_status = get_user_status(from_number)
+        if user_status == "Gratuitos" and passou_limite(sheet_usuario, linha_index):
+                contexto_usuario = contexto_principal_usuario(from_number, ultima_msg=incoming_msg)
+                mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
+                send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
+                salvar_estado(from_number, estado)
+                return {"status": "limite gratuito atingido"}
+
+        # --- INÍCIO CONVERSA GERAL COM GPT --- 
+        print("[DEBUG] Iniciando fluxo de conversa geral com GPT...")
+        
+        # Prepara histórico para GPT
+        conversa_path = f"conversas/{from_number}.txt"
+        if not os.path.exists("conversas"):
+            os.makedirs("conversas")
+        if not os.path.isfile(conversa_path):
+            with open(conversa_path, "w", encoding='utf-8') as f:
+                f.write("")
+        
+        try:
+            with open(conversa_path, "r", encoding='utf-8') as f:
+                linhas_conversa = f.readlines()
+        except Exception as e:
+            print(f"[ERRO] Falha ao ler histórico {conversa_path}: {e}")
+            linhas_conversa = []
+
+        # Filtra mensagens genéricas do histórico (mantido)
+        historico_filtrado = [
+            linha for linha in linhas_conversa
+            if not any(frase in linha.lower() for frase in [
+                "sou seu conselheiro financeiro",
+                "perfeito,",
+                "tô aqui pra te ajudar",
+                "posso te ajudar com controle de gastos",
+                "por onde quer começar"
+            ])
+        ]
+        historico_relevante = historico_filtrado[-6:] # Aumentar um pouco o histórico?
+
+        # Monta mensagens para GPT
+        mensagens_para_gpt = list(mensagens_gpt_base) # Copia a base
+
+        # Adiciona contexto da Knowledge Base (se não for pedido de resumo)
+        termos_resumo_financeiro = ["resumo", "resumo do dia", "resumo financeiro", "quanto gastei", "gastos hoje"]
+        if not any(termo in incoming_msg.lower() for termo in termos_resumo_financeiro):
+            # Detecta categoria da mensagem atual para busca na knowledge
+            categoria_detectada_conversa = "geral"
+            texto_lower_conversa = incoming_msg.lower()
+            PALAVRAS_CHAVE_CATEGORIAS = {
+                "espiritualidade": ["oração", "culpa", "confissão", "direção espiritual", "vida espiritual", "fé", "deus", "confessar"],
+                "financeiro": ["gasto", "dinheiro", "investimento", "renda", "salário", "orçamento", "juros", "empréstimo", "dívida"],
+                "casamento": ["cônjuge", "esposa", "marido", "matrimônio", "casamento", "vida a dois", "parceiro"],
+                # "dívidas": ["dívida", "devendo", "nome sujo", "negativado", "cobrança", "boleto atrasado"], # Incluído em financeiro
+                "filosofia": ["virtude", "temperamento", "aristóteles", "santo tomás", "ética", "filosofia", "psicologia"],
+            }
+            for categoria, palavras in PALAVRAS_CHAVE_CATEGORIAS.items():
+                if any(palavra in texto_lower_conversa for palavra in palavras):
+                    categoria_detectada_conversa = categoria
+                    break
+            
+            contexto_resgatado = buscar_conhecimento_relevante(incoming_msg, categoria=categoria_detectada_conversa, top_k=3)
+            if contexto_resgatado:
+                print(f"[DEBUG] Contexto Knowledge: {contexto_resgatado[:100]}...")
+                mensagens_para_gpt.append({
+                    "role": "system",
+                    "content": (
+                        "Ao responder, baseie-se prioritariamente nas informações a seguir, respeitando fielmente "
+                        "o estilo, tom, e os princípios contidos:\n\n"
+                        f"{contexto_resgatado}"
+                    )
+                })
+            else:
+                 print("[DEBUG] Nenhum contexto relevante encontrado na Knowledge Base.")
+
+        # Adiciona histórico da conversa
+        for linha in historico_relevante:
+            try:
+                partes = linha.split(":", 1)
+                if len(partes) == 2:
+                    role = "user" if "Usuário:" in partes[0] else "assistant"
+                    conteudo = partes[1].strip()
+                    if conteudo: # Evita adicionar mensagens vazias
+                        mensagens_para_gpt.append({"role": role, "content": conteudo})
+            except Exception as e:
+                print(f"[ERRO] Falha ao processar linha do histórico: {linha} - {e}")
+
+        # Adiciona mensagem atual do usuário
+        mensagens_para_gpt.append({"role": "user", "content": incoming_msg})
+
+        # Adiciona indicadores econômicos se relevante (mantido)
+        termos_macro = ["empréstimo", "juros", "selic", "ipca", "cdi", "inflação", "investimento", "cenário econômico"]
+        if any(palavra in incoming_msg.lower() for palavra in termos_macro):
+            indicadores = get_indicadores()
+            if indicadores:
+                texto_indicadores = "\n".join([
+                    f"{nome.upper()}: {valor}%" if isinstance(valor, (int, float)) else f"{nome.upper()}: {valor}" 
+                    for nome, valor in indicadores.items() if valor is not None
+                ])
+                mensagens_para_gpt.append({
+                    "role": "system", # Ou 'user'? System parece mais apropriado para info contextual
+                    "content": f"Lembre-se dos indicadores econômicos atuais ao responder:\n{texto_indicadores}"
+                })
+
+        # Chama GPT para obter a resposta da conversa
+        try:
+            print(f"[DEBUG] Chamando GPT para conversa com {len(mensagens_para_gpt)} mensagens.")
+            response = openai.ChatCompletion.create(
+                model="gpt-4-turbo", # Ou o modelo que preferir
+                messages=mensagens_para_gpt,
+                temperature=0.7,
+            )
+            reply = response["choices"][0]["message"]["content"].strip()
+            print(f"[DEBUG] Resposta GPT (conversa): {reply[:100]}...")
+        except Exception as e:
+            print(f"[ERRO OpenAI Conversa] {e}")
+            reply = "⚠️ Tive um problema ao processar sua mensagem agora. Poderia tentar de novo, por favor?"
+
+        # Pós-processamento da resposta (mantido)
+        reply = re.sub(r'^(oi|olá|opa|e aí)[,.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
+        if "[Nome]" in reply:
+            primeiro_nome = name.split()[0] if name and name != "Usuário" else ""
+            reply = reply.replace("[Nome]", primeiro_nome)
+
+        # Disclaimer para assuntos sensíveis (mantido)
+        assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "terapia"]
+        if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
+            disclaimer = (
+                "\n\n⚠️ *Lembre-se: Sou uma IA e não substituo acompanhamento profissional especializado em saúde, orientação espiritual direta ou consultoria financeira personalizada.*"
+            )
+            if disclaimer not in reply:
+                 reply += disclaimer
+
+        # Salva a conversa (User + Assistant)
+        try:
+            with open(conversa_path, "a", encoding='utf-8') as f:
+                f.write(f"Usuário: {incoming_msg}\n")
+                f.write(f"Conselheiro: {reply}\n")
+        except Exception as e:
+            print(f"[ERRO] Falha ao salvar conversa {conversa_path}: {e}")
+
+        # Envia a resposta final
+        if reply:
+            send_message(from_number, mensagens.estilo_msg(reply))
+        else:
+            # Fallback se GPT não responder nada
+            send_message(from_number, mensagens.estilo_msg("Não entendi muito bem. Pode reformular, por favor?"))
+            print("[AVISO] Resposta vazia do GPT para conversa.")
+            
+        # --- FIM CONVERSA GERAL COM GPT --- 
+
+    # --- INÍCIO TAREFAS ASSÍNCRONAS / FINALIZAÇÃO ---
+    # (Estas podem rodar independentemente de ser gasto ou conversa)
+    
+    # Avaliação de emoção (mantida)
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4-turbo",
-            messages=mensagens_gpt,
-            temperature=0.7,
-        )
-        reply = response["choices"][0]["message"]["content"].strip()
+        fuso = pytz.timezone("America/Sao_Paulo")
+        data_msg_str = datetime.datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
+        emocao = detectar_emocao(incoming_msg)
+        if emocao:
+            alerta_emocao = aumento_pos_emocao(from_number, emocao, data_msg_str)
+            if alerta_emocao:
+                # Enviar como uma mensagem separada? Ou adicionar ao reply?
+                # send_message(from_number, mensagens.estilo_msg(alerta_emocao))
+                print(f"[INFO Emoção] Alerta gerado: {alerta_emocao}")
     except Exception as e:
-        # print(f"[ERRO OpenAI] {e}")
-        reply = "⚠️ Tive um problema ao responder agora. Pode me mandar a mensagem de novo?"
+        print(f"[ERRO Emoção] Falha na detecção/alerta: {e}")
 
-    reply = re.sub(r'^(uai|tem base|bom demais)\s*[.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
+    # Avaliação de engajamento (mantida, mas talvez precise ajustar)
+    # try:
+    #     mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
+    #     if mensagem_estrela:
+    #         send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
+    # except Exception as e:
+    #     print(f"[ERRO Engajamento] {e}")
 
-    if "[Nome]" in reply:
-        primeiro_nome = name.split()[0] if name else ""
-        reply = reply.replace("[Nome]", primeiro_nome)
+    # Verificação de alertas de limite (mantida - rodar periodicamente?)
+    # verificar_alertas() # Chamar isso aqui a cada msg pode ser ineficiente
+    
+    # Envio de lembretes (mantido - rodar periodicamente?)
+    # enviar_lembretes() # Chamar isso aqui a cada msg pode ser ineficiente
+    
+    # Salva o estado final da interação
+    salvar_estado(from_number, estado)
 
-    assuntos_sensiveis = ["violência", "agressão", "abuso", "depressão", "ansiedade", "suicídio", "terapia"]
-    if any(termo in incoming_msg.lower() for termo in assuntos_sensiveis):
-        disclaimer = (
-            "⚠️ Lembre-se: Este GPT não substitui acompanhamento profissional especializado em saúde física, emocional, orientação espiritual direta ou consultoria financeira personalizada."
-        )
-        reply = f"{reply}\n\n{disclaimer}"
-
-    with open(conversa_path, "a") as f:
-        f.write(f"Conselheiro: {reply}\n")
-
-    fuso = pytz.timezone("America/Sao_Paulo")
-    data_msg = datetime.datetime.now(fuso).strftime("%Y-%m-%d %H:%M:%S")
-    emocao = detectar_emocao(incoming_msg)
-    if emocao:
-        alerta = aumento_pos_emocao(from_number, emocao, data_msg)
-        if alerta:
-            send_message(from_number, mensagens.estilo_msg(alerta))
-
-    # mensagem_estrela = avaliar_engajamento(from_number, incoming_msg)
-    # if mensagem_estrela:
-        # send_message(from_number, mensagens.estilo_msg(mensagem_estrela))
-
-    verificar_alertas()
-
-    # print(f"[DEBUG] reply gerado pelo GPT: {reply}")
-    # print(f"[DEBUG] Enviando mensagem para {from_number}")
-
-    if reply.strip():
-        send_message(from_number, mensagens.estilo_msg(reply))
-        # print("[DEBUG] Mensagem enviada.")
-    else:
-        send_message(from_number, mensagens.estilo_msg(
-            "❌ Não consegui entender. Se estiver tentando registrar gastos, use o formato:\n"
-            "📌 Descrição – Valor – Forma de pagamento – Categoria (opcional)"
-        ))
-        # print("[DEBUG] Mensagem padrão enviada por falta de reply.")
-
-    return {"status": "mensagem enviada"}
+    print(f"[INFO] Processamento da mensagem de {from_number} concluído.")
+    return {"status": "processamento concluído"}
+    # --- FIM PROCESSAMENTO DE MENSAGEM ---
 
 @app.get("/health")
 def health_check():
     return {"status": "vivo, lúcido e com fé"}
+
+# Adicionar para rodar com Uvicorn (se não estiver usando um Procfile ou similar)
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
