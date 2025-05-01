@@ -512,7 +512,9 @@ async def whatsapp_webhook(request: Request):
         return {"status": "orientacao controle gastos enviada"}
 
     if estado.get("ultimo_fluxo") == "aguardando_opcao_controle_gastos":
-        if "1" in incoming_msg:
+        msg_lower = incoming_msg.lower()
+
+        if any(op in msg_lower for op in ["1", "gastos fixos", "fixos", "despesas fixas"]):
             send_message(from_number, mensagens.estilo_msg(
                 "Ótima escolha! Vamos relacionar suas despesas fixas mensais.\n"
                 "Mande cada despesa fixa neste formato:\n"
@@ -522,18 +524,14 @@ async def whatsapp_webhook(request: Request):
                 "Internet – 100,00 – 15"
             ))
             estado["ultimo_fluxo"] = "aguardando_gastos_fixos"
-            salvar_estado(from_number, estado)
-            return {"status": "aguardando gastos fixos"}
 
-        elif "2" in incoming_msg:
+        elif any(op in msg_lower for op in ["2", "gastos diários", "diários", "registrar gastos", "registrar", "lançar gastos"]):
             send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
             estado["ultimo_fluxo"] = "registro_gastos_continuo"
-            salvar_estado(from_number, estado)
-            return {"status": "aguardando registro gastos"}
 
-        elif "3" in incoming_msg:
+        elif any(op in msg_lower for op in ["3", "limites", "limite", "categorias"]):
             send_message(from_number, mensagens.estilo_msg(
-                "Perfeito! Vamos definir seus limites por categoria. Para isso, envie cada categoria e o valor mensal desejado assim:\n"
+                "Perfeito! Vamos definir seus limites por categoria. Para isso, envie cada categoria e o valor mensal desejado neste formato:\n"
                 "📌 Categoria – Valor limite\n\n"
                 "Exemplo:\n"
                 "Alimentação – 1500,00\n"
@@ -541,9 +539,15 @@ async def whatsapp_webhook(request: Request):
                 "Transporte – 800,00"
             ))
             estado["ultimo_fluxo"] = "aguardando_limites_categoria"
-            salvar_estado(from_number, estado)
-            return {"status": "aguardando limites por categoria"}
-    
+
+        else:
+            send_message(from_number, mensagens.estilo_msg(
+                "Não consegui identificar claramente a opção. Pode responder com o número (1, 2 ou 3) ou a descrição da opção?"
+            ))
+
+        salvar_estado(from_number, estado)
+        return {"status": estado["ultimo_fluxo"]}
+   
     if detectar_gastos(incoming_msg):
         gastos_novos, erros = parsear_gastos_em_lote(incoming_msg)
 
