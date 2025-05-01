@@ -498,10 +498,15 @@ async def whatsapp_webhook(request: Request):
         "quero anotar gastos",
         "como faço pra registrar gastos",
         "quero lançar gastos",
-        "ajuda para registrar gastos"
+        "ajuda para registrar gastos",
+        "controle inteligente e automático de gastos",
+        "controle automático de gastos",
+        "controle inteligente de gastos",
+        "controlar meus gastos",
+        "controle de gastos"
     ]):
         send_message(from_number, mensagens.estilo_msg(mensagens.orientacao_controle_gastos()))
-        return {"status": "orientacao controle gastos enviada"} 
+        return {"status": "orientacao controle gastos enviada"}
     
     if detectar_gastos(incoming_msg):
         gastos_novos, erros = parsear_gastos_em_lote(incoming_msg)
