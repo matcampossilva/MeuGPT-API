@@ -313,6 +313,9 @@ async def whatsapp_webhook(request: Request):
     if estado.get("ultimo_fluxo") != "cadastro_completo":
         estado["ultimo_fluxo"] = "cadastro_completo"
         salvar_estado(from_number, estado)
+
+    if estado.get("ultimo_fluxo") == "escuta_ativa":
+        historico_relevante.append(f"Usuário: {incoming_msg}")
     
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
@@ -604,7 +607,20 @@ async def whatsapp_webhook(request: Request):
         if precisa_escuta_ativa(historico_relevante, categoria_detectada):
             resposta_escuta = mensagens.pergunta_escuta_ativa(categoria_detectada)
             send_message(from_number, mensagens.estilo_msg(resposta_escuta))
+            estado["ultimo_fluxo"] = "escuta_ativa"
+            salvar_estado(from_number, estado)
             return {"status": "aguardando mais contexto do usuário"}
+
+    if ultimo_fluxo == "escuta_ativa":
+        prompt_escuta_ativa = (
+            "O usuário acaba de fornecer mais contexto sobre um assunto importante ou sensível que você perguntou anteriormente. "
+            "Agora, com essa informação adicional, responda diretamente e de maneira acolhedora ao contexto específico apresentado pelo usuário. "
+            "Não repita perguntas. Ofereça orientações práticas e claras alinhadas aos valores cristãos, familiares e financeiros do método Matheus Campos, CFP®. "
+            "Utilize o estilo amigável, firme e interessado de Dale Carnegie. Seja breve, prático e direto ao ponto."
+        )
+        mensagens_gpt.append({"role": "system", "content": prompt_escuta_ativa})
+        estado["ultimo_fluxo"] = "cadastro_completo"
+        salvar_estado(from_number, estado)
     
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
