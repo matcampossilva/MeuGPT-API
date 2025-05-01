@@ -316,13 +316,9 @@ async def whatsapp_webhook(request: Request):
     
     # Mensagem padrão sobre funcionalidades
     if "o que você faz" in incoming_msg.lower() or "funcionalidades" in incoming_msg.lower():
-        resposta_interativa = (
-            f"Posso te ajudar em várias áreas, como controlar gastos, resolver dívidas, "
-            f"planejar investimentos e até te ajudar com orientações espirituais e familiares. "
-            f"Me diz primeiro, {name.split()[0]}, qual sua maior preocupação ou interesse hoje?"
-        )
-        send_message(from_number, mensagens.estilo_msg(resposta_interativa))
-        return {"status": "solicitado interesse usuário"}
+        resposta_funcionalidades = mensagens.funcionalidades()
+        send_message(from_number, mensagens.estilo_msg(resposta_funcionalidades))
+        return {"status": "funcionalidades informadas"}
 
     if incoming_msg.strip().lower() in ["/comandos", "/ajuda"]:
         comandos = (
@@ -558,16 +554,6 @@ async def whatsapp_webhook(request: Request):
         send_message(from_number, mensagens.estilo_msg(mensagem_final))
 
         return {"status": "gastos registrados"}
-    
-    def precisa_escuta_ativa(historico, assunto_atual):
-        return not any(assunto_atual in linha.lower() for linha in historico)
-
-    assuntos_sensiveis_escuta = ["casamento", "espiritualidade", "dívidas", "filosofia", "financeiro"]
-
-    if categoria_detectada in assuntos_sensiveis_escuta and precisa_escuta_ativa(historico_relevante, categoria_detectada):
-        resposta_escuta = mensagens.pergunta_escuta_ativa(categoria_detectada)
-        send_message(from_number, mensagens.estilo_msg(resposta_escuta))
-        return {"status": "aguardando mais contexto do usuário"}
 
     # === CONTINUA CONVERSA ===
     conversa_path = f"conversas/{from_number}.txt"
@@ -607,6 +593,16 @@ async def whatsapp_webhook(request: Request):
             categoria_detectada = categoria
             break
 
+    def precisa_escuta_ativa(historico, assunto_atual):
+        return not any(assunto_atual in linha.lower() for linha in historico)
+
+    assuntos_sensiveis_escuta = ["casamento", "espiritualidade", "dívidas", "filosofia", "financeiro"]
+
+    if categoria_detectada in assuntos_sensiveis_escuta and precisa_escuta_ativa(historico_relevante, categoria_detectada):
+        resposta_escuta = mensagens.pergunta_escuta_ativa(categoria_detectada)
+        send_message(from_number, mensagens.estilo_msg(resposta_escuta))
+        return {"status": "aguardando mais contexto do usuário"}
+    
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
 
