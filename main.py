@@ -506,7 +506,43 @@ async def whatsapp_webhook(request: Request):
         "controle de gastos"
     ]):
         send_message(from_number, mensagens.estilo_msg(mensagens.orientacao_controle_gastos()))
+        estado["ultimo_fluxo"] = "aguardando_opcao_controle_gastos"
+        salvar_estado(from_number, estado)
+
         return {"status": "orientacao controle gastos enviada"}
+
+    if estado.get("ultimo_fluxo") == "aguardando_opcao_controle_gastos":
+        if "1" in incoming_msg:
+            send_message(from_number, mensagens.estilo_msg(
+                "Ótima escolha! Vamos relacionar suas despesas fixas mensais.\n"
+                "Mande cada despesa fixa neste formato:\n"
+                "📌 Descrição – Valor – Dia do mês que vence\n\n"
+                "Exemplo:\n"
+                "Aluguel – 2500,00 – 05\n"
+                "Internet – 100,00 – 15"
+            ))
+            estado["ultimo_fluxo"] = "aguardando_gastos_fixos"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando gastos fixos"}
+
+        elif "2" in incoming_msg:
+            send_message(from_number, mensagens.estilo_msg(mensagens.registro_gastos_orientacao()))
+            estado["ultimo_fluxo"] = "registro_gastos_continuo"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando registro gastos"}
+
+        elif "3" in incoming_msg:
+            send_message(from_number, mensagens.estilo_msg(
+                "Perfeito! Vamos definir seus limites por categoria. Para isso, envie cada categoria e o valor mensal desejado assim:\n"
+                "📌 Categoria – Valor limite\n\n"
+                "Exemplo:\n"
+                "Alimentação – 1500,00\n"
+                "Lazer – 500,00\n"
+                "Transporte – 800,00"
+            ))
+            estado["ultimo_fluxo"] = "aguardando_limites_categoria"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando limites por categoria"}
     
     if detectar_gastos(incoming_msg):
         gastos_novos, erros = parsear_gastos_em_lote(incoming_msg)
