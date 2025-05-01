@@ -577,7 +577,9 @@ async def whatsapp_webhook(request: Request):
             "por onde quer começar"
         ])
     ]
-
+  
+    historico_relevante = historico_filtrado[-4:]
+  
     def precisa_escuta_ativa(historico, assunto_atual):
         return not any(assunto_atual in linha.lower() for linha in historico)
 
@@ -606,8 +608,6 @@ async def whatsapp_webhook(request: Request):
     
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
-
-    historico_relevante = historico_filtrado[-4:]
 
     mensagens_gpt = [
         {"role": "system", "content": prompt_base},
