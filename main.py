@@ -578,12 +578,15 @@ async def whatsapp_webhook(request: Request):
         ])
     ]
 
+    def precisa_escuta_ativa(historico, assunto_atual):
+        return not any(assunto_atual in linha.lower() for linha in historico)
+
     PALAVRAS_CHAVE_CATEGORIAS = {
-        "espiritualidade": ["oração", "culpa", "confissão", "direção espiritual", "vida espiritual", "fé", "Deus", "confessar"],
+        "espiritualidade": ["oração", "culpa", "confissão", "direção espiritual", "vida espiritual", "fé", "deus", "confessar"],
         "financeiro": ["gasto", "dinheiro", "investimento", "renda", "salário", "orçamento", "juros", "empréstimo"],
         "casamento": ["cônjuge", "esposa", "marido", "matrimônio", "casamento", "vida a dois", "parceiro"],
         "dívidas": ["dívida", "devendo", "nome sujo", "negativado", "cobrança", "boleto atrasado"],
-        "filosofia": ["virtude", "temperamento", "Aristóteles", "Santo Tomás", "ética", "filosofia", "psicologia"],
+        "filosofia": ["virtude", "temperamento", "aristóteles", "santo tomás", "ética", "filosofia", "psicologia"],
     }
 
     categoria_detectada = "geral"
@@ -593,15 +596,13 @@ async def whatsapp_webhook(request: Request):
             categoria_detectada = categoria
             break
 
-    def precisa_escuta_ativa(historico, assunto_atual):
-        return not any(assunto_atual in linha.lower() for linha in historico)
-
     assuntos_sensiveis_escuta = ["casamento", "espiritualidade", "dívidas", "filosofia", "financeiro"]
 
-    if categoria_detectada in assuntos_sensiveis_escuta and precisa_escuta_ativa(historico_relevante, categoria_detectada):
-        resposta_escuta = mensagens.pergunta_escuta_ativa(categoria_detectada)
-        send_message(from_number, mensagens.estilo_msg(resposta_escuta))
-        return {"status": "aguardando mais contexto do usuário"}
+    if categoria_detectada in assuntos_sensiveis_escuta:
+        if precisa_escuta_ativa(historico_relevante, categoria_detectada):
+            resposta_escuta = mensagens.pergunta_escuta_ativa(categoria_detectada)
+            send_message(from_number, mensagens.estilo_msg(resposta_escuta))
+            return {"status": "aguardando mais contexto do usuário"}
     
     with open("prompt.txt", "r") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
