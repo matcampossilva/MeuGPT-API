@@ -482,7 +482,7 @@ async def whatsapp_webhook(request: Request):
     if estado.get("ultimo_fluxo") == "cadastro_completo":
         interacoes = get_interactions(sheet_usuario, linha_index)
         if interacoes >= 10:
-            contexto_usuario = contexto_principal_usuario(from_number)
+            contexto_usuario = contexto_principal_usuario(from_number, ultima_msg=incoming_msg)
             mensagem_alerta = mensagens.alerta_limite_gratuito(contexto_usuario)
             send_message(from_number, mensagens.estilo_msg(mensagem_alerta, leve=False))
             return {"status": "limite atingido"}

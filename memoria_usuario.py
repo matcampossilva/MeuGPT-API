@@ -74,24 +74,24 @@ def verificar_limites(numero_usuario):
     except Exception as e:
         return f"[Erro ao verificar limites] {str(e)}"
 
-def contexto_principal_usuario(numero_usuario):
+def contexto_principal_usuario(numero_usuario, ultima_msg=None):
     historico = resumo_do_mes(numero_usuario).lower()
-    frequentes = palavras_frequentes_usuario(numero_usuario)
+    if ultima_msg:
+        historico += " " + ultima_msg.lower()
 
-    historico += " " + " ".join(frequentes)
+    palavras = {
+        "casamento": ["casamento", "esposa", "marido", "matrimônio", "cônjuge"],
+        "dívidas": ["dívida", "devendo", "juros", "negativado", "cobrança"],
+        "liberdade_espiritual": ["oração", "espiritualidade", "fé", "deus", "pecado"],
+        "controle_gastos": ["controle", "gasto", "gastos", "orçamento", "despesa", "despesas"],
+        "decisoes_financeiras": ["decisão", "decisões", "investimento", "financiamento", "empréstimo"],
+    }
 
-    if any(palavra in historico for palavra in ["casamento", "esposa", "marido", "cônjuge", "matrimônio"]):
-        return "casamento"
-    elif any(palavra in historico for palavra in ["dívida", "dívidas", "devendo", "juros", "negativado"]):
-        return "dívidas"
-    elif any(palavra in historico for palavra in ["oração", "espiritualidade", "fé", "deus", "moral", "pecado"]):
-        return "liberdade_espiritual"
-    elif any(palavra in historico for palavra in ["controle", "gasto", "gastos", "orçamento", "despesa", "despesas"]):
-        return "controle_gastos"
-    elif any(palavra in historico for palavra in ["decisão", "decisões", "investimento", "financiamento", "empréstimo", "consultoria"]):
-        return "decisoes_financeiras"
-    else:
-        return "geral"
+    for contexto, termos in palavras.items():
+        if any(termo in historico for termo in termos):
+            return contexto
+
+    return "geral"
     
 def palavras_frequentes_usuario(numero_usuario, top_n=5):
     gastos = get_gastos_usuario(numero_usuario)
