@@ -52,14 +52,14 @@ except Exception as e:
     client = None 
 
 try:
-    # Correção na linha abaixo: encoding='utf-8'
-    with open("prompt.txt", "r", encoding='utf-8') as arquivo_prompt:
+    with open("prompt.txt", "r", encoding="utf-8") as arquivo_prompt:
         prompt_base = arquivo_prompt.read().strip()
 except FileNotFoundError:
     logging.error("ERRO CRÍTICO: Arquivo prompt.txt não encontrado.")
-    prompt_base = "Você é um assistente financeiro." 
+    prompt_base = "Você é um assistente financeiro."
 except Exception as e:
     logging.error(f"ERRO CRÍTICO: Falha ao ler prompt.txt: {e}")
+    prompt_base = "Você é um assistente financeiro." # Fallback adicionado
     prompt_base = "Você é um assistente financeiro."
 
 # Complemento contextual (revisado para desencorajar menção a ferramentas externas)
@@ -69,7 +69,7 @@ complemento_contextual = (
     "O casamento é sagrado, indissolúvel e deve ser defendido com firmeza, clareza e profundidade espiritual. "
     "Seja sempre amigável, intimista, interessado e firme. Utilize explicitamente ensinamentos cristãos, católicos e do Opus Dei. "
     "Utilize o método de comunicação de Dale Carnegie, mostrando-se sempre interessado no usuário, demonstrando escuta ativa. "
-    "Não use 'olá' no início de uma resposta se o usuário já tiver feito a primeira interação. "
+    "Não use \'olá\' no início de uma resposta se o usuário já tiver feito a primeira interação. "
     "Nunca sugira imediatamente ajuda externa (como conselheiros matrimoniais), a não ser que seja estritamente necessário após várias interações. "
     "Trate crises financeiras conjugais com responsabilidade cristã e financeira, lembrando sempre que a cruz matrimonial é uma oportunidade de crescimento espiritual e amadurecimento na vocação do casamento."
     "Trate questoões de moral e ética com os ensinamentos de Santo Tomás de Aquino e da doutrina católica. "
@@ -90,7 +90,7 @@ Você é um assistente de finanças pessoais. Analise a seguinte mensagem do usu
 - Descrição do gasto (o que foi comprado/pago)
 - Valor do gasto (em formato numérico com ponto decimal, ex: 50.00)
 - Forma de pagamento (crédito, débito, pix, boleto, dinheiro. Se não mencionado, retorne N/A)
-- Categoria sugerida (escolha uma destas: Alimentação, Transporte, Moradia, Saúde, Lazer, Educação, Vestuário, Doações, Outros. Se não tiver certeza, retorne 'A DEFINIR')
+- Categoria sugerida (escolha uma destas: Alimentação, Transporte, Moradia, Saúde, Lazer, Educação, Vestuário, Doações, Outros. Se não tiver certeza, retorne \'A DEFINIR\')
 
 Mensagem do usuário: "{mensagem_usuario}"
 
@@ -103,7 +103,7 @@ Retorne a resposta APENAS no formato JSON, sem nenhum outro texto antes ou depoi
 }}
 """
     try:
-        logging.info(f"Chamando GPT para extrair gasto da mensagem: '{mensagem_usuario[:50]}...'")
+        logging.info(f"Chamando GPT para extrair gasto da mensagem: \'{mensagem_usuario[:50]}...\'")
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo", 
             messages=[{"role": "system", "content": prompt_extracao}],
@@ -216,7 +216,7 @@ def send_message(to, body):
     partes = [body[i:i+1500] for i in range(0, len(body), 1500)]
     success = True
     try:
-        logging.info(f"Tentando enviar mensagem para {to}: '{body[:50]}...' ({len(partes)} parte(s))")
+        logging.info(f"Tentando enviar mensagem para {to}: \'{body[:50]}...\' ({len(partes)} parte(s))")
         for i, parte in enumerate(partes):
             message = client.messages.create(
                 body=parte,
@@ -304,11 +304,11 @@ async def whatsapp_webhook(request: Request):
         from_number_raw = form.get("From", "")
         
         if not incoming_msg or not from_number_raw:
-            logging.warning("Requisição recebida sem 'Body' ou 'From'. Ignorando.")
+            logging.warning("Requisição recebida sem \'Body\' ou \'From\'. Ignorando.")
             return {"status": "requisição inválida"}
             
         from_number = format_number(from_number_raw)
-        logging.info(f"Mensagem recebida de {from_number}: '{incoming_msg[:50]}...'")
+        logging.info(f"Mensagem recebida de {from_number}: \'{incoming_msg[:50]}...\'")
 
     except Exception as e:
         logging.error(f"Erro ao processar formulário da requisição: {e}")
@@ -316,7 +316,6 @@ async def whatsapp_webhook(request: Request):
 
     try: # Bloco try principal
         estado = carregar_estado(from_number)
-        mensagem_tratada = False # <<< ADICIONADO: Garante que cada nova msg comece sem ser tratada
         ultima_msg_registrada = estado.get("ultima_msg", "")
 
         # Evita processar a mesma mensagem duas vezes (problema comum com webhooks)
@@ -437,9 +436,7 @@ async def whatsapp_webhook(request: Request):
                 estado["ultimo_fluxo"] = "aguardando_escolha_funcao_gastos"
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
-            else:
-                 logging.info(f"{from_number} mencionou controle de gastos, mas já está em um fluxo relacionado ({estado.get('ultimo_fluxo')}). Ignorando gatilho das 3 opções.")
-        
+            else:                 logging.info(f"{from_number} mencionou controle de gastos, mas já está em um fluxo relacionado ({estado.get('ultimo_fluxo')}). Ignorando gatilho das 3 opções.")        
         # Verifica se o usuário está respondendo qual função de gastos quer usar
         elif estado.get("ultimo_fluxo") == "aguardando_escolha_funcao_gastos":
             if "2" in msg_lower or "registrar gastos diários" in msg_lower or "gastos diários" in msg_lower:
@@ -457,18 +454,24 @@ async def whatsapp_webhook(request: Request):
                 estado["ultimo_fluxo"] = "aguardando_registro_gasto" # Estado para indicar que a próxima msg pode ser um gasto
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
+            elif "1" in msg_lower or "gastos fixos" in msg_lower:
+                 logging.info(f"{from_number} escolheu Gastos Fixos (Fluxo a implementar)." )
+                 # TODO: Implementar fluxo para gastos fixos
+                 send_message(from_number, mensagens.estilo_msg("Entendido! A função de registrar gastos fixos ainda está em desenvolvimento, mas logo estará disponível. Que tal começarmos com os gastos diários (opção 2)?"))
+                 # Mantém o estado aguardando_escolha_funcao_gastos para permitir escolher outra opção
+                 estado_modificado_fluxo = True
+                 mensagem_tratada = True
             elif "3" in msg_lower or "definir limites" in msg_lower or "limites por categoria" in msg_lower:
                  logging.info(f"{from_number} escolheu Definir Limites.")
                  msg_instrucao_limites = (
-                     "Ótimo! Para definir seus limites mensais por categoria, me diga quais são e os valores.\n\n"
-                     "Use o formato: *Categoria: Valor* (Ex: Lazer: 1500)\n"
-                     "Pode mandar vários de uma vez, um por linha:\n"
-                     "Alimentação: 800\n"
-                     "Transporte: 300\n"
-                     "Lazer: 500"
+                     "Ok, vamos definir os limites! 🎯\n\n"
+                     "Por favor, me envie uma lista com a categoria e o valor mensal desejado, um por linha. Exemplo:\n"
+                     "Lazer: 500\n"
+                     "Alimentação: 1500\n"
+                     "Transporte: 300"
                  )
                  send_message(from_number, mensagens.estilo_msg(msg_instrucao_limites))
-                 estado["ultimo_fluxo"] = "aguardando_definicao_limites"
+                 estado["ultimo_fluxo"] = "aguardando_definicao_limites" # Define o estado para aguardar a lista de limites
                  estado_modificado_fluxo = True
                  mensagem_tratada = True
             else:
@@ -480,126 +483,8 @@ async def whatsapp_webhook(request: Request):
                  mensagem_tratada = True
         # --- FIM FLUXO ESPECÍFICO: CONTROLE DE GASTOS ---
 
-        # --- INÍCIO NOVO BLOCO: GATILHO DIRETO PARA DEFINIR LIMITES ---
-        elif (("definir" in msg_lower and "limite" in msg_lower) or \
-              ("estabelecer" in msg_lower and "limite" in msg_lower) or \
-              ("limites" in msg_lower and "categoria" in msg_lower)) and \
-             estado.get("ultimo_fluxo") != "aguardando_definicao_limites": # Evita re-trigger
-                 logging.info(f"{from_number} indicou interesse em Definir Limites (gatilho direto).")
-                 msg_instrucao_limites = (
-                     "Ótimo! Para definir seus limites mensais por categoria, me diga quais são e os valores.\n\n"
-                     "Use o formato: *Categoria: Valor* (Ex: Lazer: 1500)\n"
-                     "Pode mandar vários de uma vez, um por linha:\n"
-                     "Alimentação: 800\n"
-                     "Transporte: 300\n"
-                     "Lazer: 500"
-                 )
-                 send_message(from_number, mensagens.estilo_msg(msg_instrucao_limites))
-                 estado["ultimo_fluxo"] = "aguardando_definicao_limites"
-                 estado_modificado_fluxo = True
-                 mensagem_tratada = True
-        # --- FIM NOVO BLOCO ---
-
-        # --- INÍCIO FLUXO DEFINIR LIMITES (Processamento da resposta) ---
-# === AJUSTE DEFINITIVO NO FLUXO DE DEFINIÇÃO DE LIMITES ===
-        elif estado.get("ultimo_fluxo") == "aguardando_definicao_limites":
-            logging.info(f"{from_number} enviou mensagem para definir limites.")
-            linhas_limites = incoming_msg.strip().split('\n')
-            limites_salvos, limites_erro = [], []
-            numero_usuario_fmt = format_number(from_number)
-
-            for linha in linhas_limites:
-                linha = linha.strip()
-                if not linha or re.match(r"^(certo|ok|limite|limites|entendido|beleza|blz|sim)\.?$", linha, re.I):
-                    logging.info(f"Ignorando linha irrelevante/comentário: '{linha}'")
-                    continue
-
-                match = re.match(r"^\s*([a-zA-ZÀ-ú\s]+?)\s*(R\$)?\s*([\d.,]+)\s*(/mês)?\s*$", linha, re.I)
-
-                if match:
-                    categoria = match.group(1).strip().capitalize()
-                    valor_str_raw = match.group(3).replace('.', '').replace(',', '.').strip()
-
-                    try:
-                        valor = float(valor_str_raw)
-                        if valor > 0:
-                            salvar_limite_usuario(numero_usuario_fmt, categoria, valor, "mensal")
-                            valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-                            limites_salvos.append(f"✅ {categoria}: {valor_fmt}/mês")
-                        else:
-                            limites_erro.append(f"❌ Valor inválido (não positivo) para '{categoria}': {valor_str_raw}")
-
-                    except ValueError:
-                        limites_erro.append(f"❌ Valor numérico inválido para '{categoria}': {valor_str_raw}")
-                    except Exception as e:
-                        limites_erro.append(f"❌ Erro inesperado ao salvar '{categoria}': {str(e)}")
-                        logging.error(f"Falha crítica ao salvar limite '{categoria}': {str(e)}")
-
-                else:
-                    limites_erro.append(f"❌ Formato inválido na linha: '{linha}' (Use Categoria: Valor)")
-
-            resposta = ""
-            if limites_salvos:
-                resposta += "\n💡 Limites definidos com sucesso:\n" + "\n".join(limites_salvos)
-
-            if limites_erro:
-                resposta += "\n⚠️ Itens com problema:\n" + "\n".join(limites_erro)
-
-            resposta += "\n\nLimites registrados. Vou ficar de olho neles pra você. 👀"
-
-            send_message(from_number, resposta)
-            resetar_estado(from_number)
-
-            logging.info("Fluxo de definição de limites concluído com sucesso.")
-
-            if not resposta_final: # Se nada foi processado
-                 send_message(from_number, mensagens.estilo_msg("Não consegui entender nenhum limite. Por favor, use o formato 'Categoria: Valor', um por linha."))
-                 # Mantém o estado aguardando_definicao_limites
-            else:
-                 # --- START MODIFICATION: Adjust confirmation tone ---
-                 # Original message was too reflective. Make it direct.
-                 msg_confirmacao = "\n".join(resposta_final)
-                 # Ajuste no tom da mensagem de confirmação
-                 msg_confirmacao += "\n\nBeleza! Limites registrados. Vou ficar de olho neles pra você. 👀"
-                 # --- END MODIFICATION ---
-                 send_message(from_number, mensagens.estilo_msg(msg_confirmacao))
-                 resetar_estado(from_number) # Limpa estado após processar limites
-
-            estado_modificado_fluxo = True # Indica que o estado foi modificado ou resetado
-            mensagem_tratada = True
-        # --- FIM FLUXO DEFINIR LIMITES ---
-
-        # --- INÍCIO FLUXO VERIFICAR ORÇAMENTO/LIMITES ---
-        elif "orçamento" in msg_lower or "limite" in msg_lower or "como estou" in msg_lower or "status" in msg_lower:
-             # Verifica se o usuário está perguntando sobre o status dos limites/orçamento
-             # Evita acionar se estiver em outro fluxo ativo
-             if not estado.get("ultimo_fluxo") or estado.get("ultimo_fluxo") in ["cadastro_completo", "aguardando_registro_gasto"]:
-                 logging.info(f"{from_number} perguntou sobre o status do orçamento/limites.")
-                 # Chama a função verificar_limites (que já existe em memoria_usuario.py)
-                 # Essa função busca limites e gastos atuais para comparar
-                 try:
-                     numero_usuario_fmt = format_number(from_number)
-                     status_limites = verificar_limites(numero_usuario_fmt)
-                     if "[Erro" in status_limites:
-                          send_message(from_number, mensagens.estilo_msg("Tive um problema ao verificar seus limites. Pode tentar de novo daqui a pouco?"))
-                          logging.error(f"Erro retornado por verificar_limites para {from_number}: {status_limites}")
-                     elif "Sem limites registrados" in status_limites:
-                          send_message(from_number, mensagens.estilo_msg("Você ainda não definiu nenhum limite de gastos. Quer definir agora? É só me pedir para \"definir limites\"."))
-                     else:
-                          send_message(from_number, mensagens.estilo_msg(status_limites))
-                     # Não reseta o estado aqui, pois pode ser uma pergunta pontual
-                     estado_modificado_fluxo = False # Não modificou o fluxo principal
-                     mensagem_tratada = True
-                 except Exception as e_verif:
-                     logging.error(f"Erro inesperado ao chamar verificar_limites para {from_number}: {e_verif}")
-                     send_message(from_number, mensagens.estilo_msg("Desculpe, ocorreu um erro inesperado ao verificar seus limites. Tente novamente."))
-                     mensagem_tratada = True
-             else:
-                  logging.info(f"Usuário {from_number} perguntou sobre orçamento/limites, mas está no fluxo {estado.get('ultimo_fluxo')}. Ignorando.")
-        # --- FIM FLUXO VERIFICAR ORÇAMENTO/LIMITES ---
-
         # --- INÍCIO FLUXO DE REGISTRO DE GASTOS (GPT + CONVERSACIONAL) ---
-        # Só entra aqui se não foi tratado pelos fluxos específicos acima
+        # Só entra aqui se não foi tratado pelo fluxo de escolha acima
         if not mensagem_tratada:
             ultimo_fluxo_gasto = estado.get("ultimo_fluxo")
             gasto_pendente = estado.get("gasto_pendente")
@@ -620,13 +505,13 @@ async def whatsapp_webhook(request: Request):
                         mensagem_confirmacao = f"Entendido: {gasto_pendente['descricao']} - {valor_formatado} ({forma_encontrada}).\nSugeri a categoria *{categoria_sugerida}*. Está correto? (Sim/Não/Ou diga a categoria certa)"
                         estado["ultimo_fluxo"] = "aguardando_confirmacao_categoria"
                     else:
-                         mensagem_confirmacao = f"Entendido: {gasto_pendente['descricao']} - {valor_formatado} ({forma_encontrada}).\nQual seria a categoria para este gasto? (Ex: Alimentação, Transporte, Lazer...)"
-                         estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
+                        mensagem_confirmacao = f"Entendido: {gasto_pendente['descricao']} - {valor_formatado} ({forma_encontrada}).\nQual seria a categoria para este gasto? (Ex: Alimentação, Transporte, Lazer...)"
+                        estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
                     estado_modificado_fluxo = True
                     send_message(from_number, mensagens.estilo_msg(mensagem_confirmacao))
                     mensagem_tratada = True
                 else:
-                    logging.warning(f"Forma de pagamento inválida ou não reconhecida de {from_number}: '{incoming_msg}'")
+                    logging.warning(f"Forma de pagamento inválida ou não reconhecida de {from_number}: \'{incoming_msg}\'")
                     send_message(from_number, mensagens.estilo_msg("Não entendi a forma de pagamento. Pode repetir? (crédito, débito, pix, etc.)"))
                     # Mantém o estado aguardando_forma_pagamento
                     estado_modificado_fluxo = True 
@@ -641,33 +526,32 @@ async def whatsapp_webhook(request: Request):
                     categoria_final = gasto_pendente.get("categoria_sugerida")
                 elif resposta_categoria not in ["não", "nao", "errado"]:
                     # Assume que a resposta é a categoria correta
-                    categoria_final = incoming_msg.strip().capitalize()                   # Remove prefixo \"Categoria:\" se existir (case-insensitive)\n                    if categoria_final.lower().startswith(\"categoria:\"):\n                        categoria_final = categoria_final[len(\"categoria:\"):].strip()
+                    categoria_final = incoming_msg.strip().capitalize()
+                    # Remove prefixo "Categoria:" se existir (case-insensitive)
                     if categoria_final.lower().startswith("categoria:"):
                         categoria_final = categoria_final[len("categoria:"):].strip()
+                
                 if categoria_final:
                     logging.info(f"Categoria final definida para gasto de {from_number}: {categoria_final}")
                     fuso = pytz.timezone("America/Sao_Paulo"); hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
                     resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=gasto_pendente["descricao"], valor=gasto_pendente["valor"], forma_pagamento=gasto_pendente["forma_pagamento"], data_gasto=hoje, categoria_manual=categoria_final)
                     if resposta_registro["status"] == "ok":
-                        valor_formatado = f"R${gasto_pendente['valor']:.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                         send_message(from_number, mensagens.estilo_msg(f"✅ Gasto registrado: {gasto_pendente['descricao']} ({valor_formatado}) em {categoria_final}."))
-                        resetar_estado(from_number) # Limpa estado após sucesso
+                        resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado após sucesso e recarrega
                     elif resposta_registro["status"] == "ignorado":
                          send_message(from_number, mensagens.estilo_msg("📝 Hmm, parece que esse gasto já foi registrado antes."))
-                         resetar_estado(from_number) # Limpa estado mesmo se ignorado
-                    else:
+                         resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado mesmo se ignorado e reca                    else:
                          send_message(from_number, mensagens.estilo_msg(f"⚠️ Tive um problema ao registrar o gasto na planilha: {resposta_registro.get('mensagem', 'Erro desconhecido')}. Por favor, tente de novo ou verifique mais tarde."))
                          logging.error(f"[ERRO REGISTRO GASTO] {resposta_registro.get('mensagem')}")
-                         resetar_estado(from_number) # Limpa estado após erro
+                         resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado após erro e recarrega
                     mensagem_tratada = True
-                else: # Usuário respondeu 'não' ou algo não reconhecido como categoria
-                    logging.info(f"{from_number} negou categoria sugerida ou respondeu 'não'. Pedindo a correta.")
+                else: # Usuário respondeu \'não\' ou algo não reconhecido como categoria
+                    logging.info(f"{from_number} negou categoria sugerida ou respondeu \'não\'. Pedindo a correta.")
                     send_message(from_number, mensagens.estilo_msg("Ok. Qual seria a categoria correta para este gasto?"))
                     estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
                     estado_modificado_fluxo = True
-                    mensagem_tratada = True
-
-            # 3. Resposta sobre DEFINIÇÃO DE CATEGORIA?
+                        # 3. Resposta sobre DEFINIÇÃO DE CATEGORIA?
             elif ultimo_fluxo_gasto == "aguardando_definicao_categoria" and gasto_pendente:
                 logging.info(f"{from_number} respondeu definindo a categoria.")
                 categoria_resposta = incoming_msg.strip().capitalize()
@@ -678,14 +562,14 @@ async def whatsapp_webhook(request: Request):
                     if resposta_registro["status"] == "ok":
                         valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                         send_message(from_number, mensagens.estilo_msg(f"✅ Gasto registrado: {gasto_pendente['descricao']} ({valor_formatado}) em {categoria_resposta}."))
-                        resetar_estado(from_number)
+                        resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado após sucesso e recarrega
                     elif resposta_registro["status"] == "ignorado":
                          send_message(from_number, mensagens.estilo_msg("📝 Hmm, parece que esse gasto já foi registrado antes."))
-                         resetar_estado(from_number)
+                         resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado mesmo se ignorado e recarrega
                     else:
                          send_message(from_number, mensagens.estilo_msg(f"⚠️ Tive um problema ao registrar o gasto na planilha: {resposta_registro.get('mensagem', 'Erro desconhecido')}. Por favor, tente de novo ou verifique mais tarde."))
                          logging.error(f"[ERRO REGISTRO GASTO] {resposta_registro.get('mensagem')}")
-                         resetar_estado(from_number)
+                         resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado após erro e recarrega
                     mensagem_tratada = True
                 else:
                     logging.warning(f"Categoria inválida ou muito curta de {from_number}: '{incoming_msg}'")
@@ -693,8 +577,71 @@ async def whatsapp_webhook(request: Request):
                     # Mantém o estado aguardando_definicao_categoria
                     estado_modificado_fluxo = True
                     mensagem_tratada = True
+
+            # === INÍCIO FLUXO DEFINIÇÃO DE LIMITES (Adaptado do ChatGPT) ===
+            elif estado.get("ultimo_fluxo") == "aguardando_definicao_limites":
+                logging.info(f"{from_number} enviou mensagem para definir limites.")
+                linhas_limites = incoming_msg.strip().split('\n')
+                limites_salvos, limites_erro = [], []
+                numero_usuario_fmt = format_number(from_number)
+
+                for linha in linhas_limites:
+                    linha = linha.strip()
+                    # Ignora linhas vazias ou comentários/confirmações simples
+                    if not linha or re.match(r"^(certo|ok|limite|limites|entendido|beleza|blz|sim|tá bom|tabom|tá|ta)\.?$", linha, re.I):
+                        logging.info(f"Ignorando linha irrelevante/comentário: '{linha}'")
+                        continue
+
+                    # Regex para capturar Categoria e Valor (mais tolerante)
+                    match = re.match(r"^\s*([a-zA-ZÀ-ú\s]+?)\s*[:\-]?\s*(R\$)?\s*([\d.,]+)\s*(/mês)?\s*$", linha, re.I)
+
+                    if match:
+                        categoria = match.group(1).strip().capitalize()
+                        valor_str_raw = match.group(3).replace('.', '').replace(',', '.').strip()
+
+                        try:
+                            valor = float(valor_str_raw)
+                            if valor > 0:
+                                # Chama a função para salvar o limite (precisa existir em definir_limite.py)
+                                salvar_limite_usuario(numero_usuario_fmt, categoria, valor, "mensal")
+                                # Formata valor para exibição (R$ 1.234,56)
+                                valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                                limites_salvos.append(f"✅ {categoria}: {valor_fmt}/mês")
+                            else:
+                                limites_erro.append(f"❌ Valor inválido (não positivo) para '{categoria}': {valor_str_raw}")
+
+                        except ValueError:
+                            limites_erro.append(f"❌ Valor numérico inválido para '{categoria}': {valor_str_raw}")
+                        except Exception as e:
+                            limites_erro.append(f"❌ Erro inesperado ao salvar '{categoria}': {str(e)}")
+                            logging.error(f"Falha crítica ao salvar limite '{categoria}': {str(e)}")
+
+                    else:
+                        limites_erro.append(f"❌ Formato inválido na linha: '{linha}' (Use: Categoria Valor. Ex: Lazer 500)")
+
+                resposta = ""
+                if limites_salvos:
+                    resposta += "\n💡 Limites definidos com sucesso:\n" + "\n".join(limites_salvos)
+
+                if limites_erro:
+                    # Mantendo a sugestão do ChatGPT para esta mensagem específica
+                    resposta += "\n⚠️ Itens com problema:\n" + "\n".join(limites_erro)
+
+                if not limites_salvos and not limites_erro:
+                    # Se nenhuma linha foi processada (talvez só comentários)
+                    resposta = "Não identifiquei nenhum limite para salvar. Pode me enviar no formato 'Categoria Valor', por favor? Ex: Lazer 500"
+                else:
+                    resposta += "\n\nLimites registrados. Vou ficar de olho neles pra você. 👀"
+
+                # Usa a função send_message e mensagens.estilo_msg
+                send_message(from_number, mensagens.estilo_msg(resposta))
+                resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado após sucesso/erro e recarrega
+                estado_modificado_fluxo = False # Estado foi resetado
+                mensagem_tratada = True
+                logging.info("Fluxo de definição de limites concluído.")
+            # === FIM FLUXO DEFINIÇÃO DE LIMITES ===
                     
-                        # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
+            # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
             # Só tenta se não estava em nenhum fluxo de gasto anterior E se o estado indica que pode ser um gasto
             elif estado.get("ultimo_fluxo") == "aguardando_registro_gasto" or not estado.get("ultimo_fluxo"):
                 linhas_mensagem = incoming_msg.strip().split('\n')
@@ -723,18 +670,6 @@ async def whatsapp_webhook(request: Request):
                         linha = linha.strip()
                         if not linha: continue # Pula linhas vazias
 
-                        # --- START MODIFICATION: Extract category from line first ---
-                        categoria_linha = None
-                        try:
-                            # Try to parse the line for an explicit category (similar to gastos.py)
-                            partes_linha = [p.strip() for p in re.split(r'[-–]', linha)]
-                            if len(partes_linha) > 3 and partes_linha[3]: # Assumes Desc - Val - Forma - Cat (and Cat is not empty)
-                                categoria_linha = partes_linha[3].capitalize()
-                                logging.info(f"Categoria explícita encontrada na linha: {categoria_linha}")
-                        except Exception as e:
-                            logging.warning(f"Erro ao tentar parsear categoria explícita da linha '{linha[:30]}...': {e}")
-                        # --- END MODIFICATION ---
-
                         # Heurística por linha (opcional, pode confiar apenas no GPT)
                         contem_valor_linha = any(char.isdigit() for char in linha)
                         if not contem_valor_linha and len(linhas_mensagem) > 1: # Só ignora se for multilinha
@@ -753,7 +688,7 @@ async def whatsapp_webhook(request: Request):
                             descricao = dados_gasto_gpt.get("descricao")
                             valor = dados_gasto_gpt.get("valor")
                             forma_pagamento = dados_gasto_gpt.get("forma_pagamento")
-                            categoria_sugerida_gpt = dados_gasto_gpt.get("categoria_sugerida") # Rename to avoid conflict
+                            categoria_sugerida = dados_gasto_gpt.get("categoria_sugerida")
 
                             # Verifica se temos informações mínimas
                             if not descricao or valor is None:
@@ -761,33 +696,21 @@ async def whatsapp_webhook(request: Request):
                                 linhas_com_erro.append(f"❓ Não consegui extrair detalhes de: '{linha}'")
                                 continue
 
-                            # --- START MODIFICATION: Determine final category ---
-                            categoria_final = None
-                            if categoria_linha:
-                                categoria_final = categoria_linha
-                            elif categoria_sugerida_gpt and categoria_sugerida_gpt != "A DEFINIR":
-                                categoria_final = categoria_sugerida_gpt
-                            # --- END MODIFICATION ---
-
                             if forma_pagamento and forma_pagamento != "N/A":
-                                # --- START MODIFICATION: Use categoria_final ---
-                                if categoria_final:
-                                    # Todas as informações presentes (ou categoria veio da linha), registra diretamente
-                                    logging.info(f"Gasto completo na linha '{linha[:30]}...' com categoria '{categoria_final}'. Registrando diretamente.")
+                                if categoria_sugerida and categoria_sugerida != "A DEFINIR":
+                                    # Todas as informações presentes, registra diretamente
+                                    logging.info(f"Gasto completo na linha '{linha[:30]}...'. Registrando diretamente.")
                                     fuso = pytz.timezone("America/Sao_Paulo"); hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-                                    # Use categoria_final here
-                                    resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=descricao, valor=valor, forma_pagamento=forma_pagamento, data_gasto=hoje, categoria_manual=categoria_final)
+                                    resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=descricao, valor=valor, forma_pagamento=forma_pagamento, data_gasto=hoje, categoria_manual=categoria_sugerida)
                                     valor_fmt_reg = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                                     if resposta_registro["status"] == "ok":
-                                        # Use categoria_final here
-                                        gastos_processados.append(f"✅ {descricao} ({valor_fmt_reg}) em {categoria_final}")
+                                        gastos_processados.append(f"✅ {descricao} ({valor_fmt_reg}) em {categoria_sugerida}")
                                     elif resposta_registro["status"] == "ignorado":
                                         gastos_processados.append(f"📝 {descricao} ({valor_fmt_reg}) - Já registrado")
                                     else:
                                         linhas_com_erro.append(f"⚠️ Erro ao registrar '{descricao}': {resposta_registro.get('mensagem', 'Desconhecido')}")
-                                # --- END MODIFICATION ---
                                 else:
-                                    # Falta categoria (nem na linha, nem sugerida pelo GPT)
+                                    # Falta categoria
                                     logging.info(f"Gasto na linha '{linha[:30]}...' precisa de categoria.")
                                     dados_gasto_gpt["linha_original"] = linha # Guarda linha original para contexto
                                     gastos_pendentes_confirmacao.append({"tipo": "definicao_categoria", "dados": dados_gasto_gpt})
@@ -803,18 +726,18 @@ async def whatsapp_webhook(request: Request):
                             linhas_com_erro.append(f"❓ Não entendi: '{linha}'")
                     
                     # Saiu do loop de linhas, agora compila a resposta
+                    resposta_final = [] # Inicializa aqui para garantir que sempre exista
                     if not mensagem_tratada: # Se foi revertido no loop (linha única sem valor)
                          logging.info(f"Mensagem '{incoming_msg[:50]}...' de {from_number} não parece ser um gasto novo. Seguindo para conversa/comandos.")
                     else:
                         # --- Processamento Pós-Loop ---
-                        resposta_final = []
                         if gastos_processados:
                             resposta_final.append("*Gastos Registrados:*")
                             resposta_final.extend(gastos_processados)
 
                         if linhas_com_erro:
                             if resposta_final: resposta_final.append("") # Adiciona separador
-                            resposta_final.append("*Itens com Problema:*")
+                            resposta_final.append("*Gastos que deram ruim:*")
                             resposta_final.extend(linhas_com_erro)
 
                         if primeiro_gasto_pendente:
@@ -846,7 +769,7 @@ async def whatsapp_webhook(request: Request):
                              mensagem_tratada = False # Deixa cair na conversa geral
                         elif not primeiro_gasto_pendente:
                              # Todos processados ou falharam, sem itens pendentes
-                             resetar_estado(from_number) # Reseta estado pois o processamento multilinha terminou
+                             resetar_estado(from_number); estado = carregar_estado(from_number) # Reseta estado pois o processamento multilinha terminou e recarrega
                              estado_modificado_fluxo = False # Estado foi resetado
 
                         if resposta_final:
@@ -878,7 +801,7 @@ async def whatsapp_webhook(request: Request):
                     "/limites – Mostrar seus limites por categoria\n"
                     "/ajuda – Mostrar esta lista de comandos\n\n"
                     "💡 *Para registrar gastos, apenas me diga o que gastou!*\n"
-                    "Ex: 'Gastei 50 reais no almoço com pix' ou 'Compra de pão por 10 reais no débito\'"
+                    "Ex: \'Gastei 50 reais no almoço com pix\' ou \'Compra de pão por 10 reais no débito\\'"
                 )
                 send_message(from_number, mensagens.estilo_msg(comandos_txt))
                 mensagem_tratada = True 
@@ -934,12 +857,11 @@ async def whatsapp_webhook(request: Request):
                 conversa_path = f"conversas/{from_number}.txt"
                 if not os.path.exists("conversas"): os.makedirs("conversas")
                 if not os.path.isfile(conversa_path): 
-                    with open(conversa_path, "w", encoding='utf-8') as f: f.write("")
-                
+                   with open(conversa_path, "w", encoding="utf-8") as f: f.write("")                
                 # Bloco try/except para leitura do histórico (CORRIGIDO)
                 linhas_conversa = []
                 try:
-                    with open(conversa_path, "r", encoding='utf-8') as f:
+                    with open(conversa_path, "r", encoding="utf-8") as f:
                         linhas_conversa = f.readlines()
                 except Exception as e:
                     logging.error(f"Falha ao ler histórico {conversa_path}: {e}")
@@ -962,7 +884,7 @@ async def whatsapp_webhook(request: Request):
                     if contexto_resgatado:
                         logging.info(f"Adicionando contexto Knowledge ({categoria_detectada_conversa}) para {from_number}.")
                         mensagens_para_gpt.append({"role": "system", "content": f"Contexto relevante:\n{contexto_resgatado}"}) 
-                    else: logging.info(f"Nenhum contexto Knowledge encontrado para '{incoming_msg[:30]}...' ({categoria_detectada_conversa}).")
+                    else: logging.info(f"Nenhum contexto Knowledge encontrado para \'{incoming_msg[:30]}...\' ({categoria_detectada_conversa}).")
                 
                 # Adiciona histórico da conversa
                 for linha in historico_relevante:
@@ -990,14 +912,12 @@ async def whatsapp_webhook(request: Request):
                     logging.info(f"Chamando GPT para conversa de {from_number} ({len(mensagens_para_gpt)} mensagens)." )
                     response = openai.ChatCompletion.create(model="gpt-4-turbo", messages=mensagens_para_gpt, temperature=0.7)
                     reply = response["choices"][0]["message"]["content"].strip()
-                    logging.info(f"Resposta GPT (conversa) para {from_number}: '{reply[:50]}...'")
+                    logging.info(f"Resposta GPT (conversa) para {from_number}: \'{reply[:50]}...\'")
                 except Exception as e:
                     logging.error(f"[ERRO OpenAI Conversa] {e}")
                     reply = "⚠️ Tive um problema ao processar sua mensagem agora. Poderia tentar de novo, por favor?"
                 
-                # Pós-processamento da resposta
-                reply = re.sub(r'^(oi|olá|opa|e aí)[,.!]?\s*', '', reply, flags=re.IGNORECASE).strip()
-                if "[Nome]" in reply:
+                # Pós-processamento da respo                reply = re.sub(r'^(oi|olá|opa|e aí)[,.!]?\s*', '', reply, flags=re.IGNORECASE).strip()                if "[Nome]" in reply:
                     primeiro_nome = name.split()[0] if name and name != "Usuário" else ""
                     reply = reply.replace("[Nome]", primeiro_nome)
                 
@@ -1009,8 +929,9 @@ async def whatsapp_webhook(request: Request):
                 
                 # Salva no histórico e envia
                 try:
-                    with open(conversa_path, "a", encoding='utf-8') as f:
-                        f.write(f"Usuário: {incoming_msg}\n"); f.write(f"Conselheiro: {reply}\n")
+                    with open(conversa_path, "a", encoding="utf-8") as f:
+                        f.write(f"Usuário: {incoming_msg}\n")
+                        f.write(f"Conselheiro: {reply}\n")
                 except Exception as e: logging.error(f"Falha ao salvar conversa {conversa_path}: {e}")
                 
                 if reply: send_message(from_number, mensagens.estilo_msg(reply))
@@ -1021,7 +942,7 @@ async def whatsapp_webhook(request: Request):
 
         # Fallback final se nada tratou a mensagem
         if not mensagem_tratada:
-             logging.warning(f"Mensagem de {from_number} não tratada por nenhum fluxo: '{incoming_msg}'")
+             logging.warning(f"Mensagem de {from_number} não tratada por nenhum fluxo: \'{incoming_msg}\'")
              send_message(from_number, mensagens.estilo_msg("Hmm, não tenho certeza de como ajudar com isso agora. Pode tentar de outra forma?"))
              resetar_estado(from_number) # Limpa estado em caso de falha total
 
