@@ -7,11 +7,16 @@ from planilhas import get_gastos_diarios
 
 load_dotenv()
 
+# Função auxiliar para consistência no formato do número
+def format_number(raw_number):
+    return raw_number.replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
+
 # === GERA RESUMO ===
 def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
-    numero_usuario = numero_usuario.replace("whatsapp:", "").replace("+", "").replace(" ", "").strip()
+    # Formata o número do usuário consistentemente
+    numero_usuario_fmt = format_number(numero_usuario)
     aba = get_gastos_diarios()
-    dados = aba.get_all_records()
+    dados = aba.get_all_records() # get_all_records lê baseado no cabeçalho
 
     hoje = datetime.now(pytz.timezone("America/Sao_Paulo"))
     print(f"[DEBUG] Hoje é {hoje.date()} no servidor")
@@ -20,8 +25,9 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
     total_geral = 0.0
 
     for linha in dados:
-        numero_linha = ''.join(filter(str.isdigit, linha.get("NÚMERO", "")))
-        if numero_linha != numero_usuario:
+        # Usa a função format_number para comparar
+        numero_linha_fmt = format_number(linha.get("NÚMERO", ""))
+        if numero_linha_fmt != numero_usuario_fmt:
             continue
 
         data_str = linha.get("DATA DO GASTO", "")
