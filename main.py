@@ -462,9 +462,9 @@ async def whatsapp_webhook(request: Request):
                      "Ótimo! Para definir seus limites mensais por categoria, me diga quais são e os valores.\n\n"
                      "Use o formato: *Categoria: Valor* (Ex: Lazer: 1500)\n"
                      "Pode mandar vários de uma vez, um por linha:\n"
-                     "Frédéric: 1000\n"
-                     "Lazer: 1500\n"
-                     "Presentes: 100"
+                     "Alimentação: 800\n"
+                     "Transporte: 300\n"
+                     "Lazer: 500"
                  )
                  send_message(from_number, mensagens.estilo_msg(msg_instrucao_limites))
                  estado["ultimo_fluxo"] = "aguardando_definicao_limites"
@@ -492,29 +492,40 @@ async def whatsapp_webhook(request: Request):
                 if not linha: continue
 
                 # Tenta extrair Categoria: Valor ou Categoria Valor, opcionalmente com /mês
-                match = re.match(r"^(.*?)(?::|\s+)(\d+(?:[.,]\d+)?)(?:\s*/\s*(mês|mes))?$", linha, re.IGNORECASE)
+                # Regex ajustado para ser um pouco mais flexível com espaços e separadores
+                match = re.match(r"^\s*([a-zA-ZÀ-ú\s]+?)\s*[:]?\s*(R\$\s*)?(\d{1,3}(?:[\.\s]?\d{3})*(?:,\d+)?|\d+(?:\.\d+)?)\s*(?:/\s*(mês|mes))?\s*$", linha, re.IGNORECASE)
+
                 if match:
                     categoria = match.group(1).strip().capitalize()
-                    valor_str = match.group(2).replace(",", ".").strip() # Padroniza para ponto decimal
+                    valor_str_raw = match.group(3).strip()
+
+                    # Ignora linhas que são apenas palavras comuns (evita "Certo", "Limites")
+                    if categoria.lower() in ["certo", "limites", "ok", "entendido"] and not any(char.isdigit() for char in valor_str_raw):
+                        logging.info(f"Ignorando linha provável de comentário: 	'{linha}'")
+                        continue
+
                     try:
-                        valor = float(valor_str)
+                        # Limpa o valor: remove R$, remove pontos ou espaços (milhar), troca vírgula (decimal) por ponto
+                        valor_str_clean = valor_str_raw.replace("R$", "").replace(".", "").replace(" ", "").replace(",", ".").strip()
+                        valor = float(valor_str_clean)
+
                         if valor > 0:
                             logging.info(f"Tentando salvar limite para {from_number}: {categoria} = {valor}")
-                            # Chama a função para salvar (já existente em definir_limite.py)
                             salvar_limite_usuario(numero=numero_usuario_fmt, categoria=categoria, valor=valor, tipo="mensal")
+                            # Formata para exibição correta em Reais
                             valor_fmt = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             limites_salvos.append(f"✅ {categoria}: {valor_fmt}/mês")
                         else:
-                            limites_erro.append(f"❓ Valor inválido para '{categoria}': {valor_str}")
+                            limites_erro.append(f"❓ Valor inválido (não positivo) para 	'{categoria}	': {valor_str_raw}")
                     except ValueError:
-                        limites_erro.append(f"❓ Valor inválido para '{categoria}': {valor_str}")
+                        limites_erro.append(f"❓ Valor numérico inválido para 	'{categoria}	': {valor_str_raw}")
                     except Exception as e_save:
-                         logging.error(f"Erro ao salvar limite '{categoria}' para {from_number}: {e_save}")
-                         limites_erro.append(f"⚠️ Erro ao salvar limite para '{categoria}'")
+                         logging.error(f"Erro ao salvar limite 	'{categoria}	' para {from_number}: {e_save}")
+                         limites_erro.append(f"⚠️ Erro ao salvar limite para 	'{categoria}	'")
                 else:
-                    limites_erro.append(f"❓ Não entendi a linha: '{linha}' (Use Categoria: Valor)")
-
-            # Compila a resposta
+                    # Adiciona erro apenas se a linha não estiver vazia e não corresponder ao padrão
+                    if linha:
+                        limites_erro.append(f"❓ Formato inválido na linha: 	'{linha}	' (Use Categoria: Valor)")        # Compila a resposta
             resposta_final = []
             if limites_salvos:
                 resposta_final.append("*Limites definidos:*")
@@ -567,8 +578,7 @@ async def whatsapp_webhook(request: Request):
                      send_message(from_number, mensagens.estilo_msg("Desculpe, ocorreu um erro inesperado ao verificar seus limites. Tente novamente."))
                      mensagem_tratada = True
              else:
-                  logging.info(f"Usuário {from_number} perguntou sobre orçamento/limites, mas está no fluxo {estado.get('ultimo_fluxo')}. Ignorando.")
-
+                  logging.info(f"Usuário {from_number} perguntou sobre orçamento/limites, mas está no fluxo {estado.get("ultimo_fluxo")}. Ignorando.")
         # --- FIM FLUXO VERIFICAR ORÇAMENTO/LIMITES ---
 
         # --- INÍCIO FLUXO DE REGISTRO DE GASTOS (GPT + CONVERSACIONAL) ---
