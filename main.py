@@ -479,7 +479,27 @@ async def whatsapp_webhook(request: Request):
                  mensagem_tratada = True
         # --- FIM FLUXO ESPECÍFICO: CONTROLE DE GASTOS ---
 
-        # --- INÍCIO FLUXO DEFINIR LIMITES ---
+        # --- INÍCIO NOVO BLOCO: GATILHO DIRETO PARA DEFINIR LIMITES ---
+        elif (("definir" in msg_lower and "limite" in msg_lower) or \
+              ("estabelecer" in msg_lower and "limite" in msg_lower) or \
+              ("limites" in msg_lower and "categoria" in msg_lower)) and \
+             estado.get("ultimo_fluxo") != "aguardando_definicao_limites": # Evita re-trigger
+                 logging.info(f"{from_number} indicou interesse em Definir Limites (gatilho direto).")
+                 msg_instrucao_limites = (
+                     "Ótimo! Para definir seus limites mensais por categoria, me diga quais são e os valores.\n\n"
+                     "Use o formato: *Categoria: Valor* (Ex: Lazer: 1500)\n"
+                     "Pode mandar vários de uma vez, um por linha:\n"
+                     "Alimentação: 800\n"
+                     "Transporte: 300\n"
+                     "Lazer: 500"
+                 )
+                 send_message(from_number, mensagens.estilo_msg(msg_instrucao_limites))
+                 estado["ultimo_fluxo"] = "aguardando_definicao_limites"
+                 estado_modificado_fluxo = True
+                 mensagem_tratada = True
+        # --- FIM NOVO BLOCO ---
+
+        # --- INÍCIO FLUXO DEFINIR LIMITES (Processamento da resposta) ---
         elif estado.get("ultimo_fluxo") == "aguardando_definicao_limites":
             logging.info(f"{from_number} enviou mensagem para definir limites.")
             linhas_limites = incoming_msg.strip().split('\n')
