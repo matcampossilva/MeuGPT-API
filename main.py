@@ -578,7 +578,7 @@ async def whatsapp_webhook(request: Request):
                      send_message(from_number, mensagens.estilo_msg("Desculpe, ocorreu um erro inesperado ao verificar seus limites. Tente novamente."))
                      mensagem_tratada = True
              else:
-                  logging.info(f"Usuário {from_number} perguntou sobre orçamento/limites, mas está no fluxo {estado.get("ultimo_fluxo")}. Ignorando.")
+                  logging.info(f"Usuário {from_number} perguntou sobre orçamento/limites, mas está no fluxo {estado.get('ultimo_fluxo')}. Ignorando.")
         # --- FIM FLUXO VERIFICAR ORÇAMENTO/LIMITES ---
 
         # --- INÍCIO FLUXO DE REGISTRO DE GASTOS (GPT + CONVERSACIONAL) ---
