@@ -26,7 +26,9 @@ def gerar_resumo(numero_usuario, periodo="mensal", data_personalizada=None):
 
     for linha in dados:
         # Usa a função format_number para comparar
-        numero_linha_fmt = format_number(linha.get("NÚMERO", ""))
+        numero_linha_raw = linha.get("NÚMERO", "")
+        numero_linha_str = str(numero_linha_raw) # Garante que é string antes de formatar
+        numero_linha_fmt = format_number(numero_linha_str)
         if numero_linha_fmt != numero_usuario_fmt:
             continue
 
