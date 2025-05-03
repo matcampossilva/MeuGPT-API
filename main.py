@@ -316,6 +316,7 @@ async def whatsapp_webhook(request: Request):
 
     try: # Bloco try principal
         estado = carregar_estado(from_number)
+        mensagem_tratada = False # <<< ADICIONADO: Garante que cada nova msg comece sem ser tratada
         ultima_msg_registrada = estado.get("ultima_msg", "")
 
         # Evita processar a mesma mensagem duas vezes (problema comum com webhooks)
