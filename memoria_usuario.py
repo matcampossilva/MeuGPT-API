@@ -26,7 +26,8 @@ def resumo_do_mes(numero_usuario, mes=None, ano=None):
         try:
             data = datetime.strptime(linha[6], "%d/%m/%Y")
             if data.month == mes and data.year == ano:
-                valor = float(linha[4])
+                valor_str = linha[4].replace("R$", "").replace(".", "").replace(",", ".").strip()
+                valor = float(valor_str)
                 total += valor
                 categorias.append(linha[3])
         except:
@@ -55,7 +56,8 @@ def verificar_limites(numero_usuario):
 
         for linha in gastos:
             categoria = linha[3]
-            valor = float(linha[4])
+            valor_str = linha[4].replace("R$", "").replace(".", "").replace(",", ".").strip()
+            valor = float(valor_str)
             total_por_categoria[categoria] = total_por_categoria.get(categoria, 0) + valor
 
         resposta = "🔎 *Status dos limites*\n"

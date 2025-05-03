@@ -604,6 +604,18 @@ async def whatsapp_webhook(request: Request):
                         linha = linha.strip()
                         if not linha: continue # Pula linhas vazias
 
+                        # --- START MODIFICATION: Extract category from line first ---
+                        categoria_linha = None
+                        try:
+                            # Try to parse the line for an explicit category (similar to gastos.py)
+                            partes_linha = [p.strip() for p in re.split(r'[-–]', linha)]
+                            if len(partes_linha) > 3 and partes_linha[3]: # Assumes Desc - Val - Forma - Cat (and Cat is not empty)
+                                categoria_linha = partes_linha[3].capitalize()
+                                logging.info(f"Categoria explícita encontrada na linha: {categoria_linha}")
+                        except Exception as e:
+                            logging.warning(f"Erro ao tentar parsear categoria explícita da linha '{linha[:30]}...': {e}")
+                        # --- END MODIFICATION ---
+
                         # Heurística por linha (opcional, pode confiar apenas no GPT)
                         contem_valor_linha = any(char.isdigit() for char in linha)
                         if not contem_valor_linha and len(linhas_mensagem) > 1: # Só ignora se for multilinha
@@ -622,7 +634,7 @@ async def whatsapp_webhook(request: Request):
                             descricao = dados_gasto_gpt.get("descricao")
                             valor = dados_gasto_gpt.get("valor")
                             forma_pagamento = dados_gasto_gpt.get("forma_pagamento")
-                            categoria_sugerida = dados_gasto_gpt.get("categoria_sugerida")
+                            categoria_sugerida_gpt = dados_gasto_gpt.get("categoria_sugerida") # Rename to avoid conflict
 
                             # Verifica se temos informações mínimas
                             if not descricao or valor is None:
@@ -630,21 +642,33 @@ async def whatsapp_webhook(request: Request):
                                 linhas_com_erro.append(f"❓ Não consegui extrair detalhes de: '{linha}'")
                                 continue
 
+                            # --- START MODIFICATION: Determine final category ---
+                            categoria_final = None
+                            if categoria_linha:
+                                categoria_final = categoria_linha
+                            elif categoria_sugerida_gpt and categoria_sugerida_gpt != "A DEFINIR":
+                                categoria_final = categoria_sugerida_gpt
+                            # --- END MODIFICATION ---
+
                             if forma_pagamento and forma_pagamento != "N/A":
-                                if categoria_sugerida and categoria_sugerida != "A DEFINIR":
-                                    # Todas as informações presentes, registra diretamente
-                                    logging.info(f"Gasto completo na linha '{linha[:30]}...'. Registrando diretamente.")
+                                # --- START MODIFICATION: Use categoria_final ---
+                                if categoria_final:
+                                    # Todas as informações presentes (ou categoria veio da linha), registra diretamente
+                                    logging.info(f"Gasto completo na linha '{linha[:30]}...' com categoria '{categoria_final}'. Registrando diretamente.")
                                     fuso = pytz.timezone("America/Sao_Paulo"); hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
-                                    resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=descricao, valor=valor, forma_pagamento=forma_pagamento, data_gasto=hoje, categoria_manual=categoria_sugerida)
+                                    # Use categoria_final here
+                                    resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=descricao, valor=valor, forma_pagamento=forma_pagamento, data_gasto=hoje, categoria_manual=categoria_final)
                                     valor_fmt_reg = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                                     if resposta_registro["status"] == "ok":
-                                        gastos_processados.append(f"✅ {descricao} ({valor_fmt_reg}) em {categoria_sugerida}")
+                                        # Use categoria_final here
+                                        gastos_processados.append(f"✅ {descricao} ({valor_fmt_reg}) em {categoria_final}")
                                     elif resposta_registro["status"] == "ignorado":
                                         gastos_processados.append(f"📝 {descricao} ({valor_fmt_reg}) - Já registrado")
                                     else:
                                         linhas_com_erro.append(f"⚠️ Erro ao registrar '{descricao}': {resposta_registro.get('mensagem', 'Desconhecido')}")
+                                # --- END MODIFICATION ---
                                 else:
-                                    # Falta categoria
+                                    # Falta categoria (nem na linha, nem sugerida pelo GPT)
                                     logging.info(f"Gasto na linha '{linha[:30]}...' precisa de categoria.")
                                     dados_gasto_gpt["linha_original"] = linha # Guarda linha original para contexto
                                     gastos_pendentes_confirmacao.append({"tipo": "definicao_categoria", "dados": dados_gasto_gpt})
