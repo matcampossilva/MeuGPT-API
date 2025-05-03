@@ -456,18 +456,18 @@ async def whatsapp_webhook(request: Request):
                 estado["ultimo_fluxo"] = "aguardando_registro_gasto" # Estado para indicar que a próxima msg pode ser um gasto
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
-            elif "1" in msg_lower or "gastos fixos" in msg_lower:
-                 logging.info(f"{from_number} escolheu Gastos Fixos (Fluxo a implementar)." )
-                 # TODO: Implementar fluxo para gastos fixos
-                 send_message(from_number, mensagens.estilo_msg("Entendido! A função de registrar gastos fixos ainda está em desenvolvimento, mas logo estará disponível. Que tal começarmos com os gastos diários (opção 2)?"))
-                 # Mantém o estado aguardando_escolha_funcao_gastos para permitir escolher outra opção
-                 estado_modificado_fluxo = True
-                 mensagem_tratada = True
             elif "3" in msg_lower or "definir limites" in msg_lower or "limites por categoria" in msg_lower:
-                 logging.info(f"{from_number} escolheu Definir Limites (Fluxo a implementar)." )
-                 # TODO: Implementar fluxo para definir limites
-                 send_message(from_number, mensagens.estilo_msg("Legal! A função de definir limites por categoria está quase pronta. Enquanto isso, podemos focar no registro dos gastos diários (opção 2)?"))
-                 # Mantém o estado aguardando_escolha_funcao_gastos
+                 logging.info(f"{from_number} escolheu Definir Limites.")
+                 msg_instrucao_limites = (
+                     "Ótimo! Para definir seus limites mensais por categoria, me diga quais são e os valores.\n\n"
+                     "Use o formato: *Categoria: Valor* (Ex: Lazer: 1500)\n"
+                     "Pode mandar vários de uma vez, um por linha:\n"
+                     "Frédéric: 1000\n"
+                     "Lazer: 1500\n"
+                     "Presentes: 100"
+                 )
+                 send_message(from_number, mensagens.estilo_msg(msg_instrucao_limites))
+                 estado["ultimo_fluxo"] = "aguardando_definicao_limites"
                  estado_modificado_fluxo = True
                  mensagem_tratada = True
             else:
@@ -479,8 +479,99 @@ async def whatsapp_webhook(request: Request):
                  mensagem_tratada = True
         # --- FIM FLUXO ESPECÍFICO: CONTROLE DE GASTOS ---
 
+        # --- INÍCIO FLUXO DEFINIR LIMITES ---
+        elif estado.get("ultimo_fluxo") == "aguardando_definicao_limites":
+            logging.info(f"{from_number} enviou mensagem para definir limites.")
+            linhas_limites = incoming_msg.strip().split('\n')
+            limites_salvos = []
+            limites_erro = []
+            numero_usuario_fmt = format_number(from_number) # Ensure consistent number format
+
+            for linha in linhas_limites:
+                linha = linha.strip()
+                if not linha: continue
+
+                # Tenta extrair Categoria: Valor ou Categoria Valor, opcionalmente com /mês
+                match = re.match(r"^(.*?)(?::|\s+)(\d+(?:[.,]\d+)?)(?:\s*/\s*(mês|mes))?$", linha, re.IGNORECASE)
+                if match:
+                    categoria = match.group(1).strip().capitalize()
+                    valor_str = match.group(2).replace(",", ".").strip() # Padroniza para ponto decimal
+                    try:
+                        valor = float(valor_str)
+                        if valor > 0:
+                            logging.info(f"Tentando salvar limite para {from_number}: {categoria} = {valor}")
+                            # Chama a função para salvar (já existente em definir_limite.py)
+                            salvar_limite_usuario(numero=numero_usuario_fmt, categoria=categoria, valor=valor, tipo="mensal")
+                            valor_fmt = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                            limites_salvos.append(f"✅ {categoria}: {valor_fmt}/mês")
+                        else:
+                            limites_erro.append(f"❓ Valor inválido para '{categoria}': {valor_str}")
+                    except ValueError:
+                        limites_erro.append(f"❓ Valor inválido para '{categoria}': {valor_str}")
+                    except Exception as e_save:
+                         logging.error(f"Erro ao salvar limite '{categoria}' para {from_number}: {e_save}")
+                         limites_erro.append(f"⚠️ Erro ao salvar limite para '{categoria}'")
+                else:
+                    limites_erro.append(f"❓ Não entendi a linha: '{linha}' (Use Categoria: Valor)")
+
+            # Compila a resposta
+            resposta_final = []
+            if limites_salvos:
+                resposta_final.append("*Limites definidos:*")
+                resposta_final.extend(limites_salvos)
+            if limites_erro:
+                if resposta_final: resposta_final.append("") # Separador
+                resposta_final.append("*Itens com problema:*")
+                resposta_final.extend(limites_erro)
+
+            if not resposta_final: # Se nada foi processado
+                 send_message(from_number, mensagens.estilo_msg("Não consegui entender nenhum limite. Por favor, use o formato 'Categoria: Valor', um por linha."))
+                 # Mantém o estado aguardando_definicao_limites
+            else:
+                 # --- START MODIFICATION: Adjust confirmation tone ---
+                 # Original message was too reflective. Make it direct.
+                 msg_confirmacao = "\n".join(resposta_final)
+                 # Ajuste no tom da mensagem de confirmação
+                 msg_confirmacao += "\n\nBeleza! Limites registrados. Vou ficar de olho neles pra você. 👀"
+                 # --- END MODIFICATION ---
+                 send_message(from_number, mensagens.estilo_msg(msg_confirmacao))
+                 resetar_estado(from_number) # Limpa estado após processar limites
+
+            estado_modificado_fluxo = True # Indica que o estado foi modificado ou resetado
+            mensagem_tratada = True
+        # --- FIM FLUXO DEFINIR LIMITES ---
+
+        # --- INÍCIO FLUXO VERIFICAR ORÇAMENTO/LIMITES ---
+        elif "orçamento" in msg_lower or "limite" in msg_lower or "como estou" in msg_lower or "status" in msg_lower:
+             # Verifica se o usuário está perguntando sobre o status dos limites/orçamento
+             # Evita acionar se estiver em outro fluxo ativo
+             if not estado.get("ultimo_fluxo") or estado.get("ultimo_fluxo") in ["cadastro_completo", "aguardando_registro_gasto"]:
+                 logging.info(f"{from_number} perguntou sobre o status do orçamento/limites.")
+                 # Chama a função verificar_limites (que já existe em memoria_usuario.py)
+                 # Essa função busca limites e gastos atuais para comparar
+                 try:
+                     numero_usuario_fmt = format_number(from_number)
+                     status_limites = verificar_limites(numero_usuario_fmt)
+                     if "[Erro" in status_limites:
+                          send_message(from_number, mensagens.estilo_msg("Tive um problema ao verificar seus limites. Pode tentar de novo daqui a pouco?"))
+                          logging.error(f"Erro retornado por verificar_limites para {from_number}: {status_limites}")
+                     elif "Sem limites registrados" in status_limites:
+                          send_message(from_number, mensagens.estilo_msg("Você ainda não definiu nenhum limite de gastos. Quer definir agora? É só me pedir para \"definir limites\"."))
+                     else:
+                          send_message(from_number, mensagens.estilo_msg(status_limites))
+                     # Não reseta o estado aqui, pois pode ser uma pergunta pontual
+                     estado_modificado_fluxo = False # Não modificou o fluxo principal
+                     mensagem_tratada = True
+                 except Exception as e_verif:
+                     logging.error(f"Erro inesperado ao chamar verificar_limites para {from_number}: {e_verif}")
+                     send_message(from_number, mensagens.estilo_msg("Desculpe, ocorreu um erro inesperado ao verificar seus limites. Tente novamente."))
+                     mensagem_tratada = True
+             else:
+                  logging.info(f"Usuário {from_number} perguntou sobre orçamento/limites, mas está no fluxo {estado.get("ultimo_fluxo")}. Ignorando.")
+        # --- FIM FLUXO VERIFICAR ORÇAMENTO/LIMITES ---
+
         # --- INÍCIO FLUXO DE REGISTRO DE GASTOS (GPT + CONVERSACIONAL) ---
-        # Só entra aqui se não foi tratado pelo fluxo de escolha acima
+        # Só entra aqui se não foi tratado pelos fluxos específicos acima
         if not mensagem_tratada:
             ultimo_fluxo_gasto = estado.get("ultimo_fluxo")
             gasto_pendente = estado.get("gasto_pendente")
