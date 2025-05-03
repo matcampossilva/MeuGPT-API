@@ -464,8 +464,7 @@ async def whatsapp_webhook(request: Request):
             elif "3" in msg_lower or "definir limites" in msg_lower or "limites por categoria" in msg_lower:
                  logging.info(f"{from_number} escolheu Definir Limites.")
                  msg_instrucao_limites = (
-                     "Ok, vamos definir os limites! 🎯\n\n"
-                     "Por favor, me envie uma lista com a categoria e o valor mensal desejado, um por linha. Exemplo:\n"
+                     "Entendido! Para definir seus limites, envie a categoria e o valor mensal, um por linha. Exemplo:\n"
                      "Lazer: 500\n"
                      "Alimentação: 1500\n"
                      "Transporte: 300"
@@ -587,9 +586,13 @@ async def whatsapp_webhook(request: Request):
 
                 for linha in linhas_limites:
                     linha = linha.strip()
-                    # Ignora linhas vazias ou comentários/confirmações simples
-                    if not linha or re.match(r"^(certo|ok|limite|limites|entendido|beleza|blz|sim|tá bom|tabom|tá|ta)\.?$", linha, re.I):
+                    # Ignora linhas vazias ou comentários/confirmações simples (mais específico)
+                    if not linha or re.match(r"^(certo|ok|entendido|beleza|blz|sim|tá bom|tabom|tá|ta)\.?$", linha, re.I):
                         logging.info(f"Ignorando linha irrelevante/comentário: '{linha}'")
+                        continue
+                    # Ignora explicitamente o cabeçalho "Limites:" (case-insensitive)
+                    if linha.strip().lower() == "limites:":
+                        logging.info(f"Ignorando cabeçalho 'Limites:': '{linha}'")
                         continue
 
                     # Regex para capturar Categoria e Valor (mais tolerante)
@@ -624,8 +627,8 @@ async def whatsapp_webhook(request: Request):
                     resposta += "\n💡 Limites definidos com sucesso:\n" + "\n".join(limites_salvos)
 
                 if limites_erro:
-                    # Mantendo a sugestão do ChatGPT para esta mensagem específica
-                    resposta += "\n⚠️ Itens com problema:\n" + "\n".join(limites_erro)
+                    # Usando uma mensagem mais direta para erros
+                    resposta += "\n❌ Linhas com erro:\n" + "\n".join(limites_erro)
 
                 if not limites_salvos and not limites_erro:
                     # Se nenhuma linha foi processada (talvez só comentários)
