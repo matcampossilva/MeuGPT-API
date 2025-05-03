@@ -917,7 +917,9 @@ async def whatsapp_webhook(request: Request):
                     logging.error(f"[ERRO OpenAI Conversa] {e}")
                     reply = "⚠️ Tive um problema ao processar sua mensagem agora. Poderia tentar de novo, por favor?"
                 
-                # Pós-processamento da respo                reply = re.sub(r'^(oi|olá|opa|e aí)[,.!]?\s*', '', reply, flags=re.IGNORECASE).strip()                if "[Nome]" in reply:
+                # Pós-processamento da resposta
+                # reply = re.sub(r'^(oi|olá|opa|e aí)[,.!]?\s*', '', reply, flags=re.IGNORECASE).strip() # REMOVIDO - Pode causar problemas com respostas curtas
+                if "[Nome]" in reply:
                     primeiro_nome = name.split()[0] if name and name != "Usuário" else ""
                     reply = reply.replace("[Nome]", primeiro_nome)
                 
