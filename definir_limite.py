@@ -98,7 +98,8 @@ def salvar_limite_usuario(numero, categoria, valor, tipo="mensal"):
     linha_existente = None
 
     for i, linha in enumerate(linhas, start=2):
-        if linha["NÚMERO"].strip() == numero and linha["CATEGORIA"].strip().lower() == categoria.lower():
+        # Convert to string before stripping/lowering to handle potential integer values from sheet
+        if str(linha["NÚMERO"]).strip() == numero and str(linha["CATEGORIA"]).strip().lower() == categoria.lower():
             linha_existente = i
             break
 
