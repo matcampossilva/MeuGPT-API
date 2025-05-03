@@ -497,7 +497,6 @@ async def whatsapp_webhook(request: Request):
                     gasto_pendente["forma_pagamento"] = forma_encontrada
                     categoria_sugerida = gasto_pendente.get("categoria_sugerida", "A DEFINIR")
                     valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
                     if categoria_sugerida != "A DEFINIR":
                         mensagem_confirmacao = f"Entendido: {gasto_pendente['descricao']} - {valor_formatado} ({forma_encontrada}).\nSugeri a categoria *{categoria_sugerida}*. Está correto? (Sim/Não/Ou diga a categoria certa)"
                         estado["ultimo_fluxo"] = "aguardando_confirmacao_categoria"
@@ -523,15 +522,16 @@ async def whatsapp_webhook(request: Request):
                     categoria_final = gasto_pendente.get("categoria_sugerida")
                 elif resposta_categoria not in ["não", "nao", "errado"]:
                     # Assume que a resposta é a categoria correta
-                    categoria_final = incoming_msg.strip().capitalize()
-                
+                    categoria_final = incoming_msg.strip().capitalize()                   # Remove prefixo \"Categoria:\" se existir (case-insensitive)\n                    if categoria_final.lower().startswith(\"categoria:\"):\n                        categoria_final = categoria_final[len(\"categoria:\"):].strip()
+                    if categoria_final.lower().startswith("categoria:"):
+                        categoria_final = categoria_final[len("categoria:"):].strip()
                 if categoria_final:
                     logging.info(f"Categoria final definida para gasto de {from_number}: {categoria_final}")
                     fuso = pytz.timezone("America/Sao_Paulo"); hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
                     resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=gasto_pendente["descricao"], valor=gasto_pendente["valor"], forma_pagamento=gasto_pendente["forma_pagamento"], data_gasto=hoje, categoria_manual=categoria_final)
                     if resposta_registro["status"] == "ok":
-                        valor_formatado = f"R${gasto_pendente['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        send_message(from_number, mensagens.estilo_msg(f"✅ Gasto registrado: {gasto_pendente['descricao']} ({valor_formatado})"))
+                        valor_formatado = f"R${gasto_pendente['valor']:.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        send_message(from_number, mensagens.estilo_msg(f"✅ Gasto registrado: {gasto_pendente['descricao']} ({valor_formatado}) em {categoria_final}."))
                         resetar_estado(from_number) # Limpa estado após sucesso
                     elif resposta_registro["status"] == "ignorado":
                          send_message(from_number, mensagens.estilo_msg("📝 Hmm, parece que esse gasto já foi registrado antes."))
@@ -575,55 +575,152 @@ async def whatsapp_webhook(request: Request):
                     estado_modificado_fluxo = True
                     mensagem_tratada = True
                     
-            # 4. TENTA INTERPRETAR COMO NOVO GASTO
+                        # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
             # Só tenta se não estava em nenhum fluxo de gasto anterior E se o estado indica que pode ser um gasto
-            elif estado.get("ultimo_fluxo") == "aguardando_registro_gasto" or not estado.get("ultimo_fluxo"): 
+            elif estado.get("ultimo_fluxo") == "aguardando_registro_gasto" or not estado.get("ultimo_fluxo"):
+                linhas_mensagem = incoming_msg.strip().split('\n')
+                gastos_processados = []
+                gastos_pendentes_confirmacao = []
+                linhas_com_erro = []
+                primeiro_gasto_pendente = None # Para lidar com o fluxo conversacional do primeiro item pendente
+                mensagem_tratada = False # Inicializa como False, será True se algum gasto for processado ou pendente
+
+                # Verifica se a mensagem provavelmente contém gastos (heurística na mensagem inteira primeiro)
                 contem_valor = any(char.isdigit() for char in incoming_msg)
                 palavras_chave_gasto = ["gastei", "paguei", "comprei", "custou", "foi R$", "deu R$", "gasto de", "compra de"]
                 pediu_resumo = quer_resumo_mensal(incoming_msg) or any(t in incoming_msg.lower() for t in ["resumo do dia", "resumo de hoje", "/resumo"])
                 pediu_comandos = quer_lista_comandos(incoming_msg)
-                
-                # Heurística mais forte para identificar um gasto
-                indica_gasto = contem_valor and not pediu_resumo and not pediu_comandos and (
-                    re.search(r'R\$\s*\d+|\d+\s*(reais|real)', incoming_msg, re.IGNORECASE) or
-                    any(p in incoming_msg.lower() for p in palavras_chave_gasto)
-                )
 
-                if indica_gasto:
-                    logging.info(f"Mensagem de {from_number} parece ser um gasto. Tentando interpretar via GPT...")
-                    dados_gasto_gpt = interpretar_gasto_com_gpt(incoming_msg)
-                    if dados_gasto_gpt: 
-                        descricao = dados_gasto_gpt.get("descricao"); valor = dados_gasto_gpt.get("valor"); forma_pagamento = dados_gasto_gpt.get("forma_pagamento"); categoria_sugerida = dados_gasto_gpt.get("categoria_sugerida")
-                        valor_formatado = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        if forma_pagamento and forma_pagamento != "N/A":
-                            logging.info(f"Gasto interpretado para {from_number}. Perguntando sobre categoria.")
-                            if categoria_sugerida and categoria_sugerida != "A DEFINIR":
-                                mensagem = f"Entendi: {descricao} - {valor_formatado} ({forma_pagamento}).\nSugeri a categoria *{categoria_sugerida}*. Está correto? (Sim/Não/Ou diga a categoria certa)"
-                                estado["ultimo_fluxo"] = "aguardando_confirmacao_categoria"
+                indica_gasto_geral = contem_valor and not pediu_resumo and not pediu_comandos and \
+                                       (re.search(r'R\$\s*\d|\d+\s*(reais|real)', incoming_msg, re.IGNORECASE) or \
+                                        any(p in incoming_msg.lower() for p in palavras_chave_gasto))
+
+                # Só prossegue se parecer conter gastos e tiver mais de uma linha OU a linha única parecer um gasto
+                if indica_gasto_geral and (len(linhas_mensagem) > 1 or (len(linhas_mensagem) == 1 and indica_gasto_geral)):
+                    logging.info(f"Mensagem de {from_number} parece conter gasto(s). Processando {len(linhas_mensagem)} linha(s)...")
+                    mensagem_tratada = True # Assume que vamos tratar isso, mesmo que algumas linhas falhem
+
+                    for linha in linhas_mensagem:
+                        linha = linha.strip()
+                        if not linha: continue # Pula linhas vazias
+
+                        # Heurística por linha (opcional, pode confiar apenas no GPT)
+                        contem_valor_linha = any(char.isdigit() for char in linha)
+                        if not contem_valor_linha and len(linhas_mensagem) > 1: # Só ignora se for multilinha
+                             logging.info(f"Linha '{linha[:30]}...' ignorada (sem valor numérico em contexto multilinha).")
+                             continue
+                        elif not contem_valor_linha and len(linhas_mensagem) == 1:
+                             # Se for linha única e não tiver valor, provavelmente não é gasto
+                             logging.info(f"Linha única '{linha[:30]}...' sem valor numérico. Não parece gasto.")
+                             mensagem_tratada = False # Reverte, deixa cair na conversa geral
+                             break # Sai do loop de linhas
+
+                        logging.info(f"Tentando interpretar linha via GPT: '{linha[:50]}...'" )
+                        dados_gasto_gpt = interpretar_gasto_com_gpt(linha)
+
+                        if dados_gasto_gpt:
+                            descricao = dados_gasto_gpt.get("descricao")
+                            valor = dados_gasto_gpt.get("valor")
+                            forma_pagamento = dados_gasto_gpt.get("forma_pagamento")
+                            categoria_sugerida = dados_gasto_gpt.get("categoria_sugerida")
+
+                            # Verifica se temos informações mínimas
+                            if not descricao or valor is None:
+                                logging.warning(f"GPT retornou dados incompletos para linha '{linha[:30]}...': {dados_gasto_gpt}")
+                                linhas_com_erro.append(f"❓ Não consegui extrair detalhes de: '{linha}'")
+                                continue
+
+                            if forma_pagamento and forma_pagamento != "N/A":
+                                if categoria_sugerida and categoria_sugerida != "A DEFINIR":
+                                    # Todas as informações presentes, registra diretamente
+                                    logging.info(f"Gasto completo na linha '{linha[:30]}...'. Registrando diretamente.")
+                                    fuso = pytz.timezone("America/Sao_Paulo"); hoje = datetime.datetime.now(fuso).strftime("%d/%m/%Y")
+                                    resposta_registro = registrar_gasto(nome_usuario=name, numero_usuario=from_number, descricao=descricao, valor=valor, forma_pagamento=forma_pagamento, data_gasto=hoje, categoria_manual=categoria_sugerida)
+                                    valor_fmt_reg = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                                    if resposta_registro["status"] == "ok":
+                                        gastos_processados.append(f"✅ {descricao} ({valor_fmt_reg}) em {categoria_sugerida}")
+                                    elif resposta_registro["status"] == "ignorado":
+                                        gastos_processados.append(f"📝 {descricao} ({valor_fmt_reg}) - Já registrado")
+                                    else:
+                                        linhas_com_erro.append(f"⚠️ Erro ao registrar '{descricao}': {resposta_registro.get('mensagem', 'Desconhecido')}")
+                                else:
+                                    # Falta categoria
+                                    logging.info(f"Gasto na linha '{linha[:30]}...' precisa de categoria.")
+                                    dados_gasto_gpt["linha_original"] = linha # Guarda linha original para contexto
+                                    gastos_pendentes_confirmacao.append({"tipo": "definicao_categoria", "dados": dados_gasto_gpt})
+                                    if not primeiro_gasto_pendente: primeiro_gasto_pendente = gastos_pendentes_confirmacao[-1]
                             else:
-                                mensagem = f"Entendi: {descricao} - {valor_formatado} ({forma_pagamento}).\nQual seria a categoria para este gasto? (Ex: Alimentação, Transporte, Lazer...)"
-                                estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
-                            estado["gasto_pendente"] = dados_gasto_gpt
-                            estado_modificado_fluxo = True
-                            send_message(from_number, mensagens.estilo_msg(mensagem))
-                            mensagem_tratada = True
+                                # Falta forma de pagamento (pode faltar categoria também)
+                                logging.info(f"Gasto na linha '{linha[:30]}...' precisa de forma de pagamento.")
+                                dados_gasto_gpt["linha_original"] = linha # Guarda linha original para contexto
+                                gastos_pendentes_confirmacao.append({"tipo": "forma_pagamento", "dados": dados_gasto_gpt})
+                                if not primeiro_gasto_pendente: primeiro_gasto_pendente = gastos_pendentes_confirmacao[-1]
                         else:
-                            logging.info(f"Gasto interpretado para {from_number}. Perguntando sobre forma de pagamento.")
-                            mensagem = f"Entendi: {descricao} - {valor_formatado}. Como você pagou (crédito, débito, pix, etc.)?"
-                            estado["ultimo_fluxo"] = "aguardando_forma_pagamento"
-                            estado["gasto_pendente"] = dados_gasto_gpt
-                            estado_modificado_fluxo = True
-                            send_message(from_number, mensagens.estilo_msg(mensagem))
-                            mensagem_tratada = True
+                            logging.warning(f"GPT não conseguiu interpretar a linha: '{linha[:50]}...'" )
+                            linhas_com_erro.append(f"❓ Não entendi: '{linha}'")
+                    
+                    # Saiu do loop de linhas, agora compila a resposta
+                    if not mensagem_tratada: # Se foi revertido no loop (linha única sem valor)
+                         logging.info(f"Mensagem '{incoming_msg[:50]}...' de {from_number} não parece ser um gasto novo. Seguindo para conversa/comandos.")
                     else:
-                        logging.info(f"GPT não conseguiu interpretar '{incoming_msg[:50]}...' como gasto para {from_number}. Seguindo para conversa.")
-                        # Não define mensagem_tratada = True para cair na conversa geral
-                else:
+                        # --- Processamento Pós-Loop ---
+                        resposta_final = []
+                        if gastos_processados:
+                            resposta_final.append("*Gastos Registrados:*")
+                            resposta_final.extend(gastos_processados)
+
+                        if linhas_com_erro:
+                            if resposta_final: resposta_final.append("") # Adiciona separador
+                            resposta_final.append("*Itens com Problema:*")
+                            resposta_final.extend(linhas_com_erro)
+
+                        if primeiro_gasto_pendente:
+                            # Pergunta sobre o primeiro item pendente
+                            if resposta_final: resposta_final.append("") # Adiciona separador
+                            gasto_pend = primeiro_gasto_pendente["dados"]
+                            valor_fmt = f"R${gasto_pend['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+                            if primeiro_gasto_pendente["tipo"] == "forma_pagamento":
+                                pergunta = f"Para o gasto '{gasto_pend['descricao']}' ({valor_fmt}), como você pagou (crédito, débito, pix, etc.)?"
+                                estado["ultimo_fluxo"] = "aguardando_forma_pagamento"
+                            elif primeiro_gasto_pendente["tipo"] == "definicao_categoria":
+                                 cat_sug = gasto_pend.get("categoria_sugerida") # Verifica se GPT sugeriu algo
+                                 if cat_sug and cat_sug != "A DEFINIR":
+                                      pergunta = f"Para '{gasto_pend['descricao']}' ({valor_fmt}, {gasto_pend['forma_pagamento']}), sugeri a categoria *{cat_sug}*. Está correto? (Sim/Não/Ou diga a categoria certa)"
+                                      estado["ultimo_fluxo"] = "aguardando_confirmacao_categoria"
+                                 else:
+                                      pergunta = f"Para '{gasto_pend['descricao']}' ({valor_fmt}, {gasto_pend['forma_pagamento']}), qual seria a categoria? (Ex: Alimentação, Transporte...)"
+                                      estado["ultimo_fluxo"] = "aguardando_definicao_categoria"
+
+                            resposta_final.append(pergunta)
+                            estado["gasto_pendente"] = gasto_pend # Guarda o primeiro item pendente
+                            # Guarda os itens pendentes restantes para processamento posterior (se necessário, complexo)
+                            # estado["gastos_pendentes_lista"] = gastos_pendentes_confirmacao[1:]
+                            estado_modificado_fluxo = True
+                        elif not gastos_processados and not linhas_com_erro:
+                             # Caso estranho: indica_gasto_geral foi True, mas nada processado/pendente/erro
+                             logging.info(f"Mensagem de {from_number} parecia gasto, mas nenhuma linha resultou em ação.")
+                             mensagem_tratada = False # Deixa cair na conversa geral
+                        elif not primeiro_gasto_pendente:
+                             # Todos processados ou falharam, sem itens pendentes
+                             resetar_estado(from_number) # Reseta estado pois o processamento multilinha terminou
+                             estado_modificado_fluxo = False # Estado foi resetado
+
+                        if resposta_final:
+                            send_message(from_number, mensagens.estilo_msg("\n".join(resposta_final)))
+                        elif not mensagem_tratada: # Se chegou aqui sem resposta final e msg não tratada
+                             pass # Deixa cair na conversa geral
+                        # Se só houve erros, a resposta_final já contém os erros e será enviada
+
+                # Se a verificação inicial não indicou gastos
+                elif not indica_gasto_geral:
                      logging.info(f"Mensagem '{incoming_msg[:50]}...' de {from_number} não parece ser um gasto novo. Seguindo para conversa/comandos.")
-                     # Não define mensagem_tratada = True
+                     # mensagem_tratada permanece False
+
+            # Fallback se não tratado pelo fluxo de registro de gastos
             else:
                  logging.info(f"Mensagem de {from_number} não tratada pelo fluxo de registro de gastos (estado atual: {estado.get('ultimo_fluxo')}). Seguindo...")
-                 # Não define mensagem_tratada = True
+                 # mensagem_tratada permanece Falseue
         # --- FIM FLUXO DE REGISTRO DE GASTOS ---
 
         # --- FLUXOS DE COMANDOS E CONVERSA GERAL (Só entra se não foi tratado antes) ---
