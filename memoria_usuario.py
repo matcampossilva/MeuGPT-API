@@ -43,7 +43,7 @@ def resumo_do_mes(numero_usuario, mes=None, ano=None):
     resumo += "Categorias mais frequentes:\n"
 
     for cat, qtd in mais_frequentes:
-        total_cat = sum(float(linha[4]) for linha in gastos if linha[3] == cat)
+        total_cat = sum(float(linha[4].replace("R$", "").replace(".", "").replace(",", ".").strip()) for linha in gastos if linha[3] == cat and data.strptime(linha[6], "%d/%m/%Y").month == mes and data.strptime(linha[6], "%d/%m/%Y").year == ano)
         resumo += f"- {cat}: R${total_cat:.2f} ({qtd}x)\n"
 
     return resumo
