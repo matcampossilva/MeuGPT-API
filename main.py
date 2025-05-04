@@ -28,6 +28,7 @@ from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 from enviar_alertas import verificar_alertas
 from enviar_lembretes import enviar_lembretes
+from consultas import consultar_status_limites # Importa a nova função
 
 # Configuração básica de logging (CORRIGIDAlogging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -644,6 +645,7 @@ async def whatsapp_webhook(request: Request):
                     else:
                         limites_erro.append(f"❌ Formato inválido na linha: '{linha}' (Use: Categoria Valor. Ex: Lazer 500)")
 
+                # Se chegou aqui, a mensagem foi processada (com sucesso ou erro de formato)
                 resposta = ""
                 if limites_salvos:
                     # Mantém a lista de sucessos
@@ -652,16 +654,14 @@ async def whatsapp_webhook(request: Request):
                 if limites_erro:
                     # Mantém a lista de erros
                     resposta += "\n❌ Linhas com erro:\n" + "\n".join(limites_erro)
-
-                if not limites_salvos and not limites_erro:
-                    # Mensagem se nada foi processado
-                    resposta = "Não identifiquei nenhum limite válido para salvar. Use o formato: Categoria Valor (Ex: Lazer 500)"
-                elif not limites_erro: # Adiciona a frase final apenas se não houver erros graves
-                    # Frase final curta e objetiva
+                
+                # Adiciona frase final apenas se houve sucesso e nenhum erro de formato
+                if limites_salvos and not limites_erro:
                     resposta += "\n\nOk! Limites registrados. 👀"
-                # Se houver erros, a mensagem já os contém e não adiciona a frase final positiva.
+                # Se só houve erros, a resposta já os contém.
+                # Se não houve nem sucesso nem erro (caso tratado acima), esta parte não é executada.
 
-                # Reset state BEFORE sending the final message for this flow
+                # Reset state ONLY because we processed the expected list (or found format errors in it)
                 resetar_estado(from_number)
                 estado = carregar_estado(from_number) # Reload local state
 
@@ -670,7 +670,7 @@ async def whatsapp_webhook(request: Request):
 
                 estado_modificado_fluxo = False # State was reset
                 mensagem_tratada = True
-                logging.info("Fluxo de definição de limites concluído.")
+                logging.info("Fluxo de definição de limites concluído (sucesso ou erro de formato).")
             # === FIM FLUXO DEFINIÇÃO DE LIMITES ===
                     
             # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
@@ -866,6 +866,16 @@ async def whatsapp_webhook(request: Request):
                 send_message(from_number, mensagens.estilo_msg(resumo))
                 mensagem_tratada = True
                 resetar_estado(from_number) # Limpa estado após comando
+
+            # --- NOVO: Consulta Status dos Limites ---
+            elif any(t in msg_lower for t in ["como estão meus limites", "status dos limites", "limites gastos", "ver limites", "meus limites"]):
+                logging.info(f"Consultando status dos limites para {from_number}.")
+                numero_usuario_fmt = format_number(from_number)
+                status_limites_msg = consultar_status_limites(numero_usuario_fmt)
+                send_message(from_number, mensagens.estilo_msg(status_limites_msg))
+                mensagem_tratada = True
+                resetar_estado(from_number) # Limpa estado após comando
+            # --- FIM Consulta Status dos Limites ---
                 
             # Lógica de Upgrade (mantida)
             if not mensagem_tratada and verificar_upgrade_automatico(from_number):
