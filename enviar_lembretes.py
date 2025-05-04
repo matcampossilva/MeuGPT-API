@@ -22,7 +22,12 @@ def enviar_lembretes():
         dia_pagamento = int(gasto["DIA_DO_MÊS"])
         numero_usuario = gasto["NÚMERO"]
         descricao = gasto["DESCRIÇÃO"]
-        valor = gasto["VALOR"]
+        valor_str = str(gasto["VALOR"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
+        try:
+            valor_float = float(valor_str)
+        except ValueError:
+            print(f"[Erro Lembrete] Valor inválido para {descricao} do usuário {numero_usuario}: {gasto['VALOR']}")
+            continue # Pula este gasto se o valor for inválido
 
         # Calcula a data do lembrete (um dia antes do pagamento)
         data_pagamento = hoje.replace(day=dia_pagamento)
@@ -32,7 +37,7 @@ def enviar_lembretes():
         if hoje == data_lembrete or hoje == data_pagamento:
             lembretes_por_usuario[numero_usuario].append({
                 "descricao": descricao,
-                "valor": valor,
+                "valor": valor_float, # Usa a variável corrigida
                 "data_pagamento": data_pagamento.strftime("%d/%m/%Y")
             })
 

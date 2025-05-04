@@ -8,13 +8,14 @@ from planilhas import get_gastos_fixos, formatar_numero
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def salvar_gasto_fixo(numero_usuario, descricao, valor, dia_vencimento):
+def salvar_gasto_fixo(numero_usuario, descricao, valor, categoria, dia_vencimento):
     """Salva um gasto fixo na aba 'Gastos Fixos'.
 
     Args:
         numero_usuario (str): Número do usuário (já formatado).
         descricao (str): Descrição do gasto.
         valor (float): Valor do gasto.
+        categoria (str): Categoria do gasto.
         dia_vencimento (int): Dia do mês para o vencimento.
 
     Returns:
@@ -22,16 +23,13 @@ def salvar_gasto_fixo(numero_usuario, descricao, valor, dia_vencimento):
     """
     try:
         aba_gastos_fixos = get_gastos_fixos()
-        # Verifica se já existe um gasto fixo com a mesma descrição para o usuário
-        # (Pode ser útil para evitar duplicatas ou permitir atualização - por ora, apenas adiciona)
-        # TODO: Considerar lógica de atualização ou verificação de duplicatas no futuro.
-        
-        # Formata os dados para a linha da planilha
-        # Colunas esperadas: NÚMERO, DESCRIÇÃO, VALOR, DIA_DO_MÊS (conforme enviar_lembretes.py)
+        # Colunas esperadas: NÚMERO, DESCRIÇÃO, VALOR, FORMA_PGTO, CATEGORIA, DIA_DO_MÊS
         linha = [
             numero_usuario,
             descricao.strip().capitalize(),
             f'{valor:.2f}'.replace('.', ','), # Formata como string BRL para a planilha
+            "", # FORMA_PGTO (deixar em branco por enquanto)
+            categoria.strip().capitalize(),
             str(dia_vencimento) # Dia como string
         ]
         aba_gastos_fixos.append_row(linha)

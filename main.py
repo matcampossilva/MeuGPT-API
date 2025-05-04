@@ -500,11 +500,11 @@ async def whatsapp_webhook(request: Request):
                  logging.info(f"{from_number} escolheu Registrar Gastos Fixos.")
                  # Mensagem de instrução para registrar gastos fixos
                  msg_instrucao_gastos_fixos = (
-                     "Ótimo! Para registrar seus gastos fixos mensais, me envie a lista com a descrição, o valor e o dia do vencimento, um por linha.\n\n"
+                     "Ótimo! Para registrar seus gastos fixos mensais, me envie a lista com a descrição, o valor, a categoria e o dia do vencimento, um por linha.\n\n"
                      "*Exemplo:*\n"
-                     "Aluguel - 1500 - dia 10\n"
-                     "Condomínio - 500 - dia 5\n"
-                     "Escola Crianças - 2000 - dia 15"
+                     "Aluguel - 1500 - Moradia - dia 10\n"
+                     "Condomínio - 500 - Moradia - dia 5\n"
+                     "Escola Crianças - 2000 - Educação - dia 15"
                  )
                  send_message(from_number, mensagens.estilo_msg(msg_instrucao_gastos_fixos))
                  estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos" # Novo estado
@@ -728,23 +728,25 @@ async def whatsapp_webhook(request: Request):
                     linha = linha.strip()
                     if not linha: continue # Ignora linhas vazias
 
-                    # Regex para capturar Descrição, Valor e Dia (formato: Desc - Valor - dia Dia)
-                    match = re.match(r"^\s*(.+?)\s*[-–—]\s*(?:R\$)?\s*([\d.,]+)\s*[-–—]\s*dia\s*(\d{1,2})\s*$", linha, re.I)
+                    # Regex para capturar Descrição, Valor, Categoria e Dia (formato: Desc - Valor - Categoria - dia Dia)
+                    match = re.match(r"^\s*(.+?)\s*[-–—]\s*(?:R\$)?\s*([\d.,]+)\s*[-–—]\s*(.+?)\s*[-–—]\s*dia\s*(\d{1,2})\s*$", linha, re.I)
 
                     if match:
                         descricao = match.group(1).strip()
-                        valor_str_raw = match.group(2).replace('.', '').replace(',', '.').strip()
-                        dia_str = match.group(3).strip()
+                        valor_str_raw = match.group(2).replace(".", "").replace(",", ".").strip()
+                        categoria = match.group(3).strip() # Captura a categoria
+                        dia_str = match.group(4).strip()
 
                         try:
                             valor = float(valor_str_raw)
                             dia_vencimento = int(dia_str)
 
                             if valor > 0 and 1 <= dia_vencimento <= 31:
-                                sucesso_salvar = salvar_gasto_fixo(numero_usuario_fmt, descricao, valor, dia_vencimento)
+                                # Passa a categoria para a função de salvar
+                                sucesso_salvar = salvar_gasto_fixo(numero_usuario_fmt, descricao, valor, categoria, dia_vencimento)
                                 if sucesso_salvar:
                                     valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-                                    gastos_fixos_salvos.append(f"✅ {descricao}: {valor_fmt} (Vence dia {dia_vencimento})")
+                                    gastos_fixos_salvos.append(f"✅ {descricao} ({categoria}): {valor_fmt} (Vence dia {dia_vencimento})") # Inclui categoria na confirmação
                                     algum_sucesso = True
                                 else:
                                     gastos_fixos_erro.append(f"❌ Erro ao salvar 	\'{descricao}\'. Verifique os logs.")
@@ -768,7 +770,7 @@ async def whatsapp_webhook(request: Request):
 
                 # Sugere ativar lembretes se algo foi salvo com sucesso
                 if algum_sucesso:
-                    resposta += "\n\n👍 Gastos fixos registrados! Gostaria de ativar lembretes automáticos para ser avisado um dia antes do vencimento? (Sim/Não)"
+                    resposta += "\n\n👍 Gastos fixos registrados! Gostaria de ativar lembretes automáticos para ser avisado *um dia antes e também no dia do vencimento*? (Sim/Não)"
                     estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
                     estado_modificado_fluxo = True
                 else:
@@ -781,6 +783,35 @@ async def whatsapp_webhook(request: Request):
                 mensagem_tratada = True
                 logging.info("Processamento da lista de gastos fixos concluído.")
             # === FIM FLUXO REGISTRO GASTOS FIXOS ===
+
+            # === INÍCIO FLUXO CONFIRMAÇÃO LEMBRETES FIXOS ===
+            elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_lembretes_fixos":
+                logging.info(f"Processando confirmação de lembretes fixos de {from_number}.")
+                resposta_usuario = incoming_msg.strip().lower()
+
+                if resposta_usuario == "sim":
+                    # TODO: Implementar lógica real de ativação se necessário (pode ser apenas garantir que os dados estão na planilha)
+                    logging.info(f"Usuário {from_number} confirmou ativação de lembretes fixos.")
+                    send_message(from_number, mensagens.estilo_msg("Ok! Lembretes ativados. Você será notificado um dia antes e no dia do vencimento dos seus gastos fixos registrados."))
+                    resetar_estado(from_number) # Reseta o estado para fluxo normal
+                    estado = carregar_estado(from_number) # Recarrega estado local
+                    estado_modificado_fluxo = False # Estado foi resetado
+                    mensagem_tratada = True
+                elif resposta_usuario == "não" or resposta_usuario == "nao":
+                    logging.info(f"Usuário {from_number} não confirmou ativação de lembretes fixos.")
+                    send_message(from_number, mensagens.estilo_msg("Entendido. Os lembretes automáticos não foram ativados."))
+                    resetar_estado(from_number) # Reseta o estado para fluxo normal
+                    estado = carregar_estado(from_number) # Recarrega estado local
+                    estado_modificado_fluxo = False # Estado foi resetado
+                    mensagem_tratada = True
+                else:
+                    # Resposta inválida, pede novamente sem resetar o estado
+                    logging.info(f"Resposta inválida de {from_number} para confirmação de lembretes.")
+                    send_message(from_number, mensagens.estilo_msg("Desculpe, não entendi. Por favor, responda com \'Sim\' ou \'Não\' para ativar os lembretes."))
+                    # Mantém o estado aguardando_confirmacao_lembretes_fixos
+                    estado_modificado_fluxo = True # Estado não mudou, mas a interação ocorreu
+                    mensagem_tratada = True
+            # === FIM FLUXO CONFIRMAÇÃO LEMBRETES FIXOS ===
 
             # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
             # Só tenta se não estava em nenhum fluxo de gasto anterior E se o estado indica que pode ser um gasto
