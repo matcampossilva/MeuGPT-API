@@ -779,8 +779,7 @@ async def whatsapp_webhook(request: Request):
                              gastos_fixos_erro.append(f"❌ Erro inesperado ao salvar 	\'{descricao}\': {str(e)}")
                              logging.error(f"Falha crítica ao salvar gasto fixo 	\'{descricao}\': {str(e)}")
                     else:
-                        gastos_fixos_erro.append(f"❌ Formato inválido: 	\'{linha}\' (Use: Descrição - Valor - dia Dia                # Monta a resposta final
-                resposta = ""
+                        gastos_fixos_erro.append(f"❌ Formato inválido: \t\'{linha}\' (Use: Descrição - Valor - dia Dia)") # Monta a resposta final                resposta = ""
                 if gastos_fixos_salvos:
                     resposta += "\n📝 *Gastos Fixos Registrados:*\n" + "\n".join(gastos_fixos_salvos)
                 if gastos_fixos_erro:
@@ -798,7 +797,8 @@ async def whatsapp_webhook(request: Request):
                 if algum_sucesso:
                     resposta += "\n\n👍 Gastos fixos registrados! Gostaria de ativar lembretes automáticos para ser avisado *um dia antes e também no dia do vencimento*? (Sim/Não)"
                     estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
-                    estado_modificado_fluxo = True                else:
+                    estado_modificado_fluxo = True
+                else:
                     # Se só deu erro, reseta o estado para não ficar preso
                     resetar_estado(from_number)
                     estado = carregar_estado(from_number) # Recarrega estado local
