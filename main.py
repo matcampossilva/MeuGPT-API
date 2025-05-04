@@ -360,17 +360,16 @@ async def whatsapp_webhook(request: Request):
                 else: 
                     logging.info(f"Usuário {from_number} já estava aguardando cadastro.")
                 return {"status": "aguardando nome e email"}
-            if estado.get("saudacao_realizada"):
-                logging.info(f"Saudação repetida de {from_number} ignorada.")
-            else:
-                logging.info(f"Completando saudação para {from_number}.")
+            else: # Usuário conhecido
+                logging.info(f"Saudação de usuário conhecido: {from_number} ({name}).")
                 primeiro_nome = name.split()[0] if name != "Usuário" else ""
-                resposta_curta = mensagens.cadastro_completo(primeiro_nome)
+                # Envia uma saudação curta e personalizada
+                resposta_curta = f"Olá, {primeiro_nome}! Como posso te ajudar hoje?"
                 send_message(from_number, mensagens.estilo_msg(resposta_curta))
-                estado["ultimo_fluxo"] = "cadastro_completo" 
-                estado["saudacao_realizada"] = True
-                salvar_estado(from_number, estado)
-                return {"status": "cadastro completo e saudação feita"}
+                # Marca a mensagem como tratada para não cair em outros fluxos
+                mensagem_tratada = True
+                # Não precisa definir estado["saudacao_realizada"] aqui, pois é só uma resposta a uma saudação.
+                # O estado será salvo no final se 'mensagem_tratada' ou 'estado_modificado_fluxo' for True.
 
         if not name or name == "Usuário" or not email:
             logging.info(f"Processando possível resposta de cadastro de {from_number}.")
@@ -636,10 +635,14 @@ async def whatsapp_webhook(request: Request):
                 else:
                     resposta += "\n\nLimites registrados. Vou ficar de olho neles pra você. 👀"
 
-                # Usa a função send_message e mensagens.estilo_msg
+                # Reset state BEFORE sending the final message for this flow
+                resetar_estado(from_number)
+                estado = carregar_estado(from_number) # Reload local state
+
+                # Send the final confirmation/error message
                 send_message(from_number, mensagens.estilo_msg(resposta))
-                resetar_estado(from_number); estado = carregar_estado(from_number) # Limpa estado após sucesso/erro e recarrega
-                estado_modificado_fluxo = False # Estado foi resetado
+
+                estado_modificado_fluxo = False # State was reset
                 mensagem_tratada = True
                 logging.info("Fluxo de definição de limites concluído.")
             # === FIM FLUXO DEFINIÇÃO DE LIMITES ===
