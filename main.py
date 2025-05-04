@@ -368,6 +368,7 @@ async def whatsapp_webhook(request: Request):
                 send_message(from_number, mensagens.estilo_msg(resposta_curta))
                 # Marca a mensagem como tratada para não cair em outros fluxos
                 mensagem_tratada = True
+                estado_modificado_fluxo = True # Garante que o estado (ultima_msg) seja salvo
                 # Não precisa definir estado["saudacao_realizada"] aqui, pois é só uma resposta a uma saudação.
                 # O estado será salvo no final se 'mensagem_tratada' ou 'estado_modificado_fluxo' for True.
 
@@ -460,7 +461,7 @@ async def whatsapp_webhook(request: Request):
                  # Mantém o estado aguardando_escolha_funcao_gastos para permitir escolher outra opção
                  estado_modificado_fluxo = True
                  mensagem_tratada = True
-            elif "3" in msg_lower or "definir limites" in msg_lower or "limites por categoria" in msg_lower:
+            elif "3" in msg_lower or any(term in msg_lower for term in ["definir limites", "limites por categoria", "colocar limites", "estabelecer limites", "limite de gasto"]):
                  logging.info(f"{from_number} escolheu Definir Limites.")
                  msg_instrucao_limites = (
                      "Entendido! Para definir seus limites, envie a categoria e o valor mensal, um por linha. Exemplo:\n"
