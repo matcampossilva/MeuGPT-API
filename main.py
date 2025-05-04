@@ -348,6 +348,28 @@ async def whatsapp_webhook(request: Request):
         tokens_msg = count_tokens(incoming_msg)
         total_tokens = increment_tokens(sheet_usuario, linha_index, tokens_msg)
         logging.info(f"Tokens para {from_number}: +{tokens_msg} = {total_tokens}")
+
+        # --- VERIFICA LIMITE DE INTERAÇÕES PARA USUÁRIOS GRATUITOS ---
+        if passou_limite(sheet_usuario, linha_index):
+            logging.info(f"Usuário gratuito {from_number} atingiu o limite de {interactions} interações.")
+            primeiro_nome = name.split()[0] if name != "Usuário" else ""
+            # Verifica se o convite já foi enviado recentemente para evitar spam
+            if estado.get("ultimo_fluxo") != "convite_premium_enviado":
+                # Usa a função do mensagens.py para obter a mensagem de convite (contexto geral por padrão)
+                # TODO: Considerar passar um contexto mais específico se possível
+                msg_convite = mensagens.alerta_limite_gratuito(contexto='geral')
+                send_message(from_number, mensagens.estilo_msg(msg_convite)) # estilo_msg pode ser opcional aqui, dependendo do formato da msg_convite
+                estado["ultimo_fluxo"] = "convite_premium_enviado"
+                salvar_estado(from_number, estado)
+                logging.info(f"Convite premium enviado para {from_number}. Bloqueando processamento adicional.")
+                # Retorna para bloquear o processamento da mensagem atual
+                return {"status": "limite gratuito atingido, convite enviado"}
+            else:
+                logging.info(f"Usuário {from_number} já recebeu o convite premium. Bloqueando processamento.")
+                # Retorna para bloquear o processamento da mensagem atual
+                return {"status": "limite gratuito atingido, convite já enviado"}
+        # --- FIM VERIFICA LIMITE ---
+
         # --- FIM SETUP USUÁRIO ---
 
         # --- ALTA PRIORIDADE: DETECTAR INTENÇÃO DE DEFINIR LIMITES ---
