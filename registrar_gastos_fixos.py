@@ -62,3 +62,8 @@ if __name__ == '__main__':
     print(salvar_gasto_fixo("5511999998888", "Condomínio", 500.50, 5))
     print(salvar_gasto_fixo("5511999998888", "Internet", 99.90, 20))
     # print(salvar_gasto_fixo("5511999998888", "Erro Simulado", 10.0, 1))
+
+
+
+# Alias para compatibilidade com import antigo
+salvar_gastos_fixos = salvar_gasto_fixo
