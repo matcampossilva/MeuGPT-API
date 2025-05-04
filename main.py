@@ -366,9 +366,11 @@ async def whatsapp_webhook(request: Request):
                 # Envia uma saudação curta e personalizada
                 resposta_curta = f"Olá, {primeiro_nome}! Como posso te ajudar hoje?"
                 send_message(from_number, mensagens.estilo_msg(resposta_curta))
-                # Marca a mensagem como tratada para não cair em outros fluxos
+                # Marca a mensagem como tratada e retorna para evitar duplicidade
                 mensagem_tratada = True
                 estado_modificado_fluxo = True # Garante que o estado (ultima_msg) seja salvo
+                salvar_estado(from_number, estado) # Salva o estado aqui para registrar ultima_msg
+                return {"status": "saudação enviada para usuário conhecido"}
                 # Não precisa definir estado["saudacao_realizada"] aqui, pois é só uma resposta a uma saudação.
                 # O estado será salvo no final se 'mensagem_tratada' ou 'estado_modificado_fluxo' for True.
 
@@ -605,12 +607,18 @@ async def whatsapp_webhook(request: Request):
                         try:
                             valor = float(valor_str_raw)
                             if valor > 0:
-                                # Chama a função para salvar o limite (precisa existir em definir_limite.py)
-                                salvar_limite_usuario(numero_usuario_fmt, categoria, valor, "mensal")
-                                # Formata valor para exibição (R$ 1.234,56)
-                                valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-                                limites_salvos.append(f"✅ {categoria}: {valor_fmt}/mês")
-                            else:
+                                # Chama a função para salvar o limite (agora retorna True/False)
+                                sucesso_salvar = salvar_limite_usuario(numero_usuario_fmt, categoria, valor, "mensal")
+                                
+                                if sucesso_salvar:
+                                    # Formata valor para exibição (R$ 1.234,56)
+                                    valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                                    limites_salvos.append(f"✅ {categoria}: {valor_fmt}/mês")
+                                else:
+                                    # Adiciona erro específico de falha ao salvar
+                                    limites_erro.append(f"❌ Erro ao salvar limite para '{categoria}'. Verifique os logs ou tente novamente.")
+                                    logging.error(f"Falha retornada por salvar_limite_usuario para {categoria} do usuário {numero_usuario_fmt}.")
+                            else: # Este else corresponde ao if valor > 0
                                 limites_erro.append(f"❌ Valor inválido (não positivo) para '{categoria}': {valor_str_raw}")
 
                         except ValueError:
