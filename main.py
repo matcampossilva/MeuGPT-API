@@ -31,7 +31,7 @@ from enviar_lembretes import enviar_lembretes
 from consultas import consultar_status_limites # Importa a nova função
 from registrar_gastos_fixos import salvar_gasto_fixo # Importa a nova função
 
-# Configuração básica de logging (CORRIGIDAlogging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 load_dotenv()
 app = FastAPI()
@@ -779,7 +779,9 @@ async def whatsapp_webhook(request: Request):
                              gastos_fixos_erro.append(f"❌ Erro inesperado ao salvar 	\'{descricao}\': {str(e)}")
                              logging.error(f"Falha crítica ao salvar gasto fixo 	\'{descricao}\': {str(e)}")
                     else:
-                        gastos_fixos_erro.append(f"❌ Formato inválido: \t\'{linha}\' (Use: Descrição - Valor - dia Dia)") # Monta a resposta final                resposta = ""
+                        gastos_fixos_erro.append(f"❌ Formato inválido: \t\'{linha}\' (Use: Descrição - Valor - dia Dia)") # Monta a resposta final
+
+                resposta = "" # Inicializa a variável resposta aqui
                 if gastos_fixos_salvos:
                     resposta += "\n📝 *Gastos Fixos Registrados:*\n" + "\n".join(gastos_fixos_salvos)
                 if gastos_fixos_erro:
