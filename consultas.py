@@ -7,7 +7,7 @@ import datetime
 import pytz
 # Assumindo que existe um módulo para operações com Google Sheets
 # Se o nome for diferente, precisará ser ajustado.
-from google_sheets_operations import ler_limites_usuario, ler_gastos_usuario_periodo
+from planilhas import ler_limites_usuario, ler_gastos_usuario_periodo
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
