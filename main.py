@@ -366,8 +366,10 @@ async def whatsapp_webhook(request: Request):
              estado["ultimo_fluxo"] = "aguardando_definicao_limites"
              estado_modificado_fluxo = True
              mensagem_tratada = True
-             # Não retorna, permite que o resto do código verifique se há mais algo a fazer (embora improvável)
-
+             # Salva o estado imediatamente para garantir que o fluxo seja definido
+             salvar_estado(from_number, estado)
+             logging.info(f"Instruções para definir limites enviadas para {from_number}. Estado definido como 'aguardando_definicao_limites'. Retornando.")
+             return {"status": "instruções de limite enviadas, aguardando lista"}
         # --- FLUXO ONBOARDING/CADASTRO ---
         elif is_boas_vindas(incoming_msg): # Mudado para elif
             if not name or name == "Usuário" or not email:
@@ -490,6 +492,10 @@ async def whatsapp_webhook(request: Request):
                  estado["ultimo_fluxo"] = "aguardando_definicao_limites" # Define o estado para aguardar a lista de limites
                  estado_modificado_fluxo = True
                  mensagem_tratada = True
+                 # Salva o estado imediatamente e retorna para aguardar a lista
+                 salvar_estado(from_number, estado)
+                 logging.info(f"Instruções para definir limites enviadas para {from_number} via menu. Estado definido como \'aguardando_definicao_limites\'. Retornando.")
+                 return {"status": "instruções de limite enviadas via menu, aguardando lista"}
             else:
                  # Não entendeu a escolha, pede de novo
                  logging.warning(f"{from_number} respondeu algo inesperado à escolha da função de gastos: {incoming_msg}")
@@ -661,16 +667,18 @@ async def whatsapp_webhook(request: Request):
                 # Se só houve erros, a resposta já os contém.
                 # Se não houve nem sucesso nem erro (caso tratado acima), esta parte não é executada.
 
-                # Reset state ONLY because we processed the expected list (or found format errors in it)
+                # Reset state because we processed the expected list (or found format errors in it)
+                logging.info(f"Resetando estado para {from_number} após processar/tentar processar limites.")
                 resetar_estado(from_number)
-                estado = carregar_estado(from_number) # Reload local state
+                estado = carregar_estado(from_number) # Reload local state to reflect the reset immediately
 
-                # Send the final confirmation/error message
+                # Send the final confirmation/error message AFTER resetting the state
                 send_message(from_number, mensagens.estilo_msg(resposta))
 
-                estado_modificado_fluxo = False # State was reset
-                mensagem_tratada = True
-                logging.info("Fluxo de definição de limites concluído (sucesso ou erro de formato).")
+                # No need to set estado_modificado_fluxo = False, as the state IS modified (reset)
+                # Let the final save handle it if needed, though reset should persist.
+                mensagem_tratada = True # Mark message as handled by this block
+                logging.info("Fluxo de definição de limites concluído (sucesso ou erro de formato), estado resetado.")
             # === FIM FLUXO DEFINIÇÃO DE LIMITES ===
                     
             # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
