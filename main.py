@@ -755,9 +755,20 @@ async def whatsapp_webhook(request: Request):
                                     else:
                                         gastos_fixos_erro.append(f"❌ Erro ao salvar 	\'{descricao}\'. Verifique os logs.")
                                 else:
-                                    # Falha na categorização automática
-                                    # TODO: Implementar pergunta ao usuário se categoria for None
-                                    gastos_fixos_erro.append(f"❓ Não consegui identificar a categoria para 	\'{descricao}\'. Gasto não registrado.")
+                                    # Falha na categorização automática - Salva como "A definir" e prepara para perguntar
+                                    categoria_padrao = "A definir"
+                                    sucesso_salvar = salvar_gasto_fixo(numero_usuario_fmt, descricao, valor, categoria_padrao, dia_vencimento)
+                                    if sucesso_salvar:
+                                        # Adiciona à lista para perguntar depois
+                                        if "gastos_fixos_sem_categoria" not in estado:
+                                            estado["gastos_fixos_sem_categoria"] = []
+                                        # Armazena dados suficientes para identificar e atualizar depois
+                                        estado["gastos_fixos_sem_categoria"].append({"descricao": descricao, "valor": valor, "dia": dia_vencimento})
+                                        valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                                        gastos_fixos_salvos.append(f"⚠️ {descricao}: {valor_fmt} (Vence dia {dia_vencimento}) - *Categoria pendente*.")
+                                        algum_sucesso = True # Considera sucesso parcial para seguir fluxo
+                                    else:
+                                        gastos_fixos_erro.append(f"❌ Erro ao salvar 	\'{descricao}\' (mesmo sem categoria). Verifique os logs.")
 
                             else:
                                 gastos_fixos_erro.append(f"❌ Valor ou dia inválido para 	\'{descricao}\': Valor={valor_str_raw}, Dia={dia_str}")
@@ -768,21 +779,26 @@ async def whatsapp_webhook(request: Request):
                              gastos_fixos_erro.append(f"❌ Erro inesperado ao salvar 	\'{descricao}\': {str(e)}")
                              logging.error(f"Falha crítica ao salvar gasto fixo 	\'{descricao}\': {str(e)}")
                     else:
-                        gastos_fixos_erro.append(f"❌ Formato inválido: 	\'{linha}\' (Use: Descrição - Valor - dia Dia)")
-
-                # Monta a resposta
+                        gastos_fixos_erro.append(f"❌ Formato inválido: 	\'{linha}\' (Use: Descrição - Valor - dia Dia                # Monta a resposta final
                 resposta = ""
                 if gastos_fixos_salvos:
                     resposta += "\n📝 *Gastos Fixos Registrados:*\n" + "\n".join(gastos_fixos_salvos)
                 if gastos_fixos_erro:
                     resposta += "\n❌ *Linhas com erro:*\n" + "\n".join(gastos_fixos_erro)
 
-                # Sugere ativar lembretes se algo foi salvo com sucesso
+                # Verifica se há categorias pendentes
+                categorias_pendentes = estado.get("gastos_fixos_sem_categoria", [])
+                if categorias_pendentes:
+                    resposta += "\n\n⚠️ Alguns gastos foram registrados com *categoria pendente*. Precisaremos definir isso depois para que os limites funcionem corretamente."
+                    # Limpa a lista temporária do estado após informar
+                    del estado["gastos_fixos_sem_categoria"]
+                    estado_modificado_fluxo = True # Garante que o estado (sem a lista) seja salvo
+
+                # Sugere ativar lembretes se algo foi salvo com sucesso (mesmo com categoria pendente)
                 if algum_sucesso:
                     resposta += "\n\n👍 Gastos fixos registrados! Gostaria de ativar lembretes automáticos para ser avisado *um dia antes e também no dia do vencimento*? (Sim/Não)"
                     estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
-                    estado_modificado_fluxo = True
-                else:
+                    estado_modificado_fluxo = True                else:
                     # Se só deu erro, reseta o estado para não ficar preso
                     resetar_estado(from_number)
                     estado = carregar_estado(from_number) # Recarrega estado local
@@ -814,12 +830,12 @@ async def whatsapp_webhook(request: Request):
                     estado_modificado_fluxo = False # Estado foi resetado
                     mensagem_tratada = True
                 else:
-                    # Resposta inválida, pede novamente sem resetar o estado
-                    logging.info(f"Resposta inválida de {from_number} para confirmação de lembretes.")
-                    send_message(from_number, mensagens.estilo_msg("Desculpe, não entendi. Por favor, responda com \'Sim\' ou \'Não\' para ativar os lembretes."))
-                    # Mantém o estado aguardando_confirmacao_lembretes_fixos
-                    estado_modificado_fluxo = True # Estado não mudou, mas a interação ocorreu
-                    mensagem_tratada = True
+                    # Resposta não é 'sim' ou 'não'. Assume que o usuário quer fazer outra coisa.
+                    logging.info(f"Resposta não reconhecida ({resposta_usuario}) para confirmação de lembretes de {from_number}. Resetando fluxo e reprocessando mensagem.")
+                    resetar_estado(from_number) # Reseta o estado para fluxo normal
+                    estado = carregar_estado(from_number) # Recarrega estado local
+                    estado_modificado_fluxo = False # Estado foi resetado
+                    mensagem_tratada = False # IMPORTANTE: Permite que a mensagem seja reprocessada pelo loop principal
             # === FIM FLUXO CONFIRMAÇÃO LEMBRETES FIXOS ===
 
             # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
