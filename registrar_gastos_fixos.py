@@ -1,53 +1,64 @@
-import datetime
-import pytz
-from planilhas import get_gastos_diarios, gs
-from dotenv import load_dotenv
-import os
-load_dotenv()
+# -*- coding: utf-8 -*-
+"""
+Função para registrar gastos fixos mensais na planilha.
+"""
+import logging
+import re
+from planilhas import get_gastos_fixos, formatar_numero
 
-GOOGLE_SHEET_GASTOS_ID = os.getenv("GOOGLE_SHEET_GASTOS_ID")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def registrar_gastos_fixos():
-    aba_fixos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Fixos")
-    gastos_fixos = aba_fixos.get_all_records()
+def salvar_gasto_fixo(numero_usuario, descricao, valor, dia_vencimento):
+    """Salva um gasto fixo na aba 'Gastos Fixos'.
 
-    aba_diarios = get_gastos_diarios()
+    Args:
+        numero_usuario (str): Número do usuário (já formatado).
+        descricao (str): Descrição do gasto.
+        valor (float): Valor do gasto.
+        dia_vencimento (int): Dia do mês para o vencimento.
 
-    hoje = datetime.datetime.now(pytz.timezone("America/Sao_Paulo"))
-    dia_atual = hoje.day
-    mes_atual = hoje.month
-    ano_atual = hoje.year
-
-    for gasto in gastos_fixos:
-        if gasto["DIA_DO_MÊS"] == dia_atual:
-            aba_diarios.append_row([
-                "",  # Nome vazio ou preencha automaticamente se desejar
-                gasto["NÚMERO"],
-                gasto["DESCRIÇÃO"],
-                gasto["CATEGORIA"],
-                gasto["VALOR"],
-                gasto["FORMA_PGTO"],
-                hoje.strftime("%d/%m/%Y"),
-                hoje.strftime("%d/%m/%Y %H:%M:%S"),
-                f"fixo-{mes_atual}-{ano_atual}-{gasto['DESCRIÇÃO']}-{gasto['VALOR']}"
-            ])
-    print("Gastos fixos registrados com sucesso!")
-
-if __name__ == "__main__":
-    registrar_gastos_fixos()
-
-def salvar_gastos_fixos(numero_usuario, gastos_fixos):
-    aba_fixos = gs.open_by_key(GOOGLE_SHEET_GASTOS_ID).worksheet("Gastos Fixos")
-    hoje = datetime.datetime.now(pytz.timezone("America/Sao_Paulo"))
-    dia_atual = hoje.day
-
-    for gasto in gastos_fixos:
-        aba_fixos.append_row([
+    Returns:
+        bool: True se salvou com sucesso, False caso contrário.
+    """
+    try:
+        aba_gastos_fixos = get_gastos_fixos()
+        # Verifica se já existe um gasto fixo com a mesma descrição para o usuário
+        # (Pode ser útil para evitar duplicatas ou permitir atualização - por ora, apenas adiciona)
+        # TODO: Considerar lógica de atualização ou verificação de duplicatas no futuro.
+        
+        # Formata os dados para a linha da planilha
+        # Colunas esperadas: NÚMERO, DESCRIÇÃO, VALOR, DIA_DO_MÊS (conforme enviar_lembretes.py)
+        linha = [
             numero_usuario,
-            gasto["descricao"],
-            gasto["valor"],
-            gasto["forma_pagamento"],
-            gasto.get("categoria", "A DEFINIR"),
-            dia_atual
-        ])
-    print("Novos gastos fixos salvos com sucesso.")
+            descricao.strip().capitalize(),
+            f'{valor:.2f}'.replace('.', ','), # Formata como string BRL para a planilha
+            str(dia_vencimento) # Dia como string
+        ]
+        aba_gastos_fixos.append_row(linha)
+        logging.info(f"Gasto fixo '{descricao}' para {numero_usuario} salvo com sucesso.")
+        return True
+    except Exception as e:
+        logging.error(f"Erro ao salvar gasto fixo '{descricao}' para {numero_usuario}: {e}", exc_info=True)
+        return False
+
+# Exemplo de uso (para teste local, se necessário)
+if __name__ == '__main__':
+    # Mock da função get_gastos_fixos para teste
+    class MockAba:
+        def append_row(self, data):
+            print(f"[MOCK] Appending row: {data}")
+            # Simula erro ocasional
+            # if data[1] == "Erro Simulado": raise Exception("Erro simulado no append")
+            return {"updates": {"updatedRange": "Gastos Fixos!A10:D10"}}
+
+    def mock_get_gastos_fixos():
+        return MockAba()
+
+    # Substitui a função real pela mock
+    get_gastos_fixos = mock_get_gastos_fixos
+
+    # Testes
+    print(salvar_gasto_fixo("5511999998888", "Aluguel", 1500.0, 10))
+    print(salvar_gasto_fixo("5511999998888", "Condomínio", 500.50, 5))
+    print(salvar_gasto_fixo("5511999998888", "Internet", 99.90, 20))
+    # print(salvar_gasto_fixo("5511999998888", "Erro Simulado", 10.0, 1))

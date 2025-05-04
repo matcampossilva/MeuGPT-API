@@ -29,6 +29,7 @@ from indicadores import get_indicadores
 from enviar_alertas import verificar_alertas
 from enviar_lembretes import enviar_lembretes
 from consultas import consultar_status_limites # Importa a nova função
+from registrar_gastos_fixos import salvar_gasto_fixo # Importa a nova função
 
 # Configuração básica de logging (CORRIGIDAlogging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -496,12 +497,23 @@ async def whatsapp_webhook(request: Request):
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
             elif "1" in msg_lower or "gastos fixos" in msg_lower:
-                 logging.info(f"{from_number} escolheu Gastos Fixos (Fluxo a implementar)." )
-                 # TODO: Implementar fluxo para gastos fixos
-                 send_message(from_number, mensagens.estilo_msg("Entendido! A função de registrar gastos fixos ainda está em desenvolvimento, mas logo estará disponível. Que tal começarmos com os gastos diários (opção 2)?"))
-                 # Mantém o estado aguardando_escolha_funcao_gastos para permitir escolher outra opção
+                 logging.info(f"{from_number} escolheu Registrar Gastos Fixos.")
+                 # Mensagem de instrução para registrar gastos fixos
+                 msg_instrucao_gastos_fixos = (
+                     "Ótimo! Para registrar seus gastos fixos mensais, me envie a lista com a descrição, o valor e o dia do vencimento, um por linha.\n\n"
+                     "*Exemplo:*\n"
+                     "Aluguel - 1500 - dia 10\n"
+                     "Condomínio - 500 - dia 5\n"
+                     "Escola Crianças - 2000 - dia 15"
+                 )
+                 send_message(from_number, mensagens.estilo_msg(msg_instrucao_gastos_fixos))
+                 estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos" # Novo estado
                  estado_modificado_fluxo = True
                  mensagem_tratada = True
+                 # Salva o estado imediatamente e retorna para aguardar a lista
+                 salvar_estado(from_number, estado)
+                 logging.info(f"Instruções para registrar gastos fixos enviadas para {from_number}. Estado definido como \'aguardando_registro_gastos_fixos\'. Retornando.")
+                 return {"status": "instruções de gastos fixos enviadas, aguardando lista"}
             elif "3" in msg_lower or any(term in msg_lower for term in ["definir limites", "limites por categoria", "colocar limites", "estabelecer limites", "limite de gasto"]):
                  logging.info(f"{from_number} escolheu Definir Limites.")
                  msg_instrucao_limites = (
@@ -702,7 +714,74 @@ async def whatsapp_webhook(request: Request):
                 mensagem_tratada = True # Mark message as handled by this block
                 logging.info("Fluxo de definição de limites concluído (sucesso ou erro de formato), estado resetado.")
             # === FIM FLUXO DEFINIÇÃO DE LIMITES ===
-                    
+
+            # === INÍCIO FLUXO REGISTRO GASTOS FIXOS ===
+            elif estado.get("ultimo_fluxo") == "aguardando_registro_gastos_fixos":
+                logging.info(f"Processando lista de gastos fixos de {from_number}.")
+                linhas_gastos_fixos = incoming_msg.strip().split('\n')
+                gastos_fixos_salvos = []
+                gastos_fixos_erro = []
+                numero_usuario_fmt = format_number(from_number)
+                algum_sucesso = False
+
+                for linha in linhas_gastos_fixos:
+                    linha = linha.strip()
+                    if not linha: continue # Ignora linhas vazias
+
+                    # Regex para capturar Descrição, Valor e Dia (formato: Desc - Valor - dia Dia)
+                    match = re.match(r"^\s*(.+?)\s*[-–—]\s*(?:R\$)?\s*([\d.,]+)\s*[-–—]\s*dia\s*(\d{1,2})\s*$", linha, re.I)
+
+                    if match:
+                        descricao = match.group(1).strip()
+                        valor_str_raw = match.group(2).replace('.', '').replace(',', '.').strip()
+                        dia_str = match.group(3).strip()
+
+                        try:
+                            valor = float(valor_str_raw)
+                            dia_vencimento = int(dia_str)
+
+                            if valor > 0 and 1 <= dia_vencimento <= 31:
+                                sucesso_salvar = salvar_gasto_fixo(numero_usuario_fmt, descricao, valor, dia_vencimento)
+                                if sucesso_salvar:
+                                    valor_fmt = f"R${valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                                    gastos_fixos_salvos.append(f"✅ {descricao}: {valor_fmt} (Vence dia {dia_vencimento})")
+                                    algum_sucesso = True
+                                else:
+                                    gastos_fixos_erro.append(f"❌ Erro ao salvar 	\'{descricao}\'. Verifique os logs.")
+                            else:
+                                gastos_fixos_erro.append(f"❌ Valor ou dia inválido para 	\'{descricao}\': Valor={valor_str_raw}, Dia={dia_str}")
+
+                        except ValueError:
+                            gastos_fixos_erro.append(f"❌ Valor ou dia numérico inválido para 	\'{descricao}\': Valor={valor_str_raw}, Dia={dia_str}")
+                        except Exception as e:
+                             gastos_fixos_erro.append(f"❌ Erro inesperado ao salvar 	\'{descricao}\': {str(e)}")
+                             logging.error(f"Falha crítica ao salvar gasto fixo 	\'{descricao}\': {str(e)}")
+                    else:
+                        gastos_fixos_erro.append(f"❌ Formato inválido: 	\'{linha}\' (Use: Descrição - Valor - dia Dia)")
+
+                # Monta a resposta
+                resposta = ""
+                if gastos_fixos_salvos:
+                    resposta += "\n📝 *Gastos Fixos Registrados:*\n" + "\n".join(gastos_fixos_salvos)
+                if gastos_fixos_erro:
+                    resposta += "\n❌ *Linhas com erro:*\n" + "\n".join(gastos_fixos_erro)
+
+                # Sugere ativar lembretes se algo foi salvo com sucesso
+                if algum_sucesso:
+                    resposta += "\n\n👍 Gastos fixos registrados! Gostaria de ativar lembretes automáticos para ser avisado um dia antes do vencimento? (Sim/Não)"
+                    estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
+                    estado_modificado_fluxo = True
+                else:
+                    # Se só deu erro, reseta o estado para não ficar preso
+                    resetar_estado(from_number)
+                    estado = carregar_estado(from_number) # Recarrega estado local
+                    estado_modificado_fluxo = False # Estado foi resetado
+
+                send_message(from_number, mensagens.estilo_msg(resposta.strip()))
+                mensagem_tratada = True
+                logging.info("Processamento da lista de gastos fixos concluído.")
+            # === FIM FLUXO REGISTRO GASTOS FIXOS ===
+
             # 4. TENTA INTERPRETAR COMO NOVO GASTO(S)
             # Só tenta se não estava em nenhum fluxo de gasto anterior E se o estado indica que pode ser um gasto
             elif estado.get("ultimo_fluxo") == "aguardando_registro_gasto" or not estado.get("ultimo_fluxo"):
