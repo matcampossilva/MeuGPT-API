@@ -55,11 +55,10 @@ except Exception as e:
     client = None 
 
 try:
-    # Usar o prompt atualizado que inclui restrições de citação
-    with open("/home/ubuntu/upload/prompt.txt", "r", encoding="utf-8") as arquivo_prompt:
-        prompt_base = arquivo_prompt.read().strip()
+    # Usar o prompt atualizado que inclui restrições de citação    with open("prompt.txt", "r", encoding="utf-8") as f:
+        prompt_base = f.read().strip()
 except FileNotFoundError:
-    logging.error("ERRO CRÍTICO: Arquivo prompt.txt não encontrado em /home/ubuntu/upload/prompt.txt.")
+    logging.error("ERRO CRÍTICO: Arquivo prompt.txt não encontrado. Verifique se ele está na mesma pasta que main.py.")
     prompt_base = "Você é um assistente financeiro."
 except Exception as e:
     logging.error(f"ERRO CRÍTICO: Falha ao ler prompt.txt: {e}")
