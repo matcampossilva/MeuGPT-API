@@ -158,7 +158,7 @@ def get_user_sheet(user_number):
             return aba_gratuitos
         else:
             logging.info(f"Usuário {user_number_fmt} não encontrado. Adicionando à aba Gratuitos.")
-            now = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
+            now = datetime.datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M:%S")
             aba_gratuitos.append_row(["", user_number_fmt, "", now, 0, 0]) 
             logging.info(f"Usuário {user_number_fmt} adicionado com sucesso.")
             return aba_gratuitos
