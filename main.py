@@ -24,7 +24,7 @@ from definir_limite import salvar_limite_usuario
 from memoria_usuario import resumo_do_mes, verificar_limites, contexto_principal_usuario
 from emocional import detectar_emocao, aumento_pos_emocao
 # Importa função de registrar_gastos_fixos.py - Renomeada para clareza
-from registrar_gastos_fixos import salvar_gasto_fixo, atualizar_categoria_gasto_fixo 
+from registrar_gastos_fixos import salvar_gasto_fixo 
 from planilhas import get_pagantes, get_gratuitos
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
