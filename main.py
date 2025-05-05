@@ -299,6 +299,7 @@ async def whatsapp_webhook(request: Request):
         form = await request.form()
         incoming_msg = form.get("Body", "").strip()
         from_number_raw = form.get("From", "")
+        msg_lower = incoming_msg.lower() # Definir msg_lower aqui
         
         if not incoming_msg or not from_number_raw:
             logging.warning("Requisição recebida sem 'Body' ou 'From'. Ignorando.")
