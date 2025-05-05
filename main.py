@@ -21,7 +21,7 @@ from resgatar_contexto import buscar_conhecimento_relevante
 from upgrade import verificar_upgrade_automatico
 from armazenar_mensagem import armazenar_mensagem
 # Importa funções de definir_limite.py
-from definir_limite import salvar_limite_usuario, deletar_limite_usuario # Adicionado deletar
+from definir_limite import salvar_limite_usuario
 from memoria_usuario import resumo_do_mes, verificar_limites, contexto_principal_usuario
 from emocional import detectar_emocao, aumento_pos_emocao
 # Importa função de registrar_gastos_fixos.py - Renomeada para clareza
