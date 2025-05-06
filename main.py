@@ -499,6 +499,29 @@ async def whatsapp_webhook(request: Request):
             salvar_estado(from_number, estado)
             return {"status": "menu controle gastos enviado"}
 
+        # --- FLUXO: INICIAR REGISTRO DE GASTOS FIXOS ---
+        elif any(term in msg_lower for term in ["gastos fixos", "fixos mensais", "relacionar gastos", "opção 1", "primeira opção"]) and not mensagem_tratada:
+             # Check if the user is likely responding to the menu or explicitly asking
+             if estado.get("ultimo_fluxo") == "menu_controle_gastos" or "gasto" in msg_lower: # Basic check
+                 logging.info(f"{from_number} pediu para registrar gastos fixos.")
+                 # !!! GET THIS MESSAGE FROM mensagens.py LATER !!!
+                 msg_instrucao_gastos_fixos = (
+                     "Ótimo! Para registrar seus gastos fixos mensais, me envie a lista com a descrição, o valor e o dia do vencimento, um por linha, separados por hífen.\n\n"
+                     "*Exemplo:*\n"
+                     "Aluguel - 1500 - dia 10\n"
+                     "Condomínio - 500 - dia 5\n"
+                     "Escola Crianças - 2000 - dia 15\n\n"
+                     "Eu tentarei identificar a categoria automaticamente. Se não conseguir, pedirei sua ajuda!\n\n"
+                     "Tô com você! 👍"
+                 )
+                 send_message(from_number, mensagens.estilo_msg(msg_instrucao_gastos_fixos))
+                 estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos" # Define o estado
+                 estado_modificado_fluxo = True
+                 mensagem_tratada = True
+                 salvar_estado(from_number, estado)
+                 logging.info(f"Instruções para registrar gastos fixos enviadas para {from_number}. Estado definido como 'aguardando_registro_gastos_fixos'. Retornando.")
+                 return {"status": "instruções de gastos fixos enviadas, aguardando lista"}
+
         # --- FLUXO: DEFINIR LIMITES --- 
         if estado.get("ultimo_fluxo") == "aguardando_definicao_limites":
             logging.info(f"Processando lista de limites enviada por {from_number}.")
@@ -528,8 +551,7 @@ async def whatsapp_webhook(request: Request):
                         logging.error(f"Erro ao salvar limite {categoria} para {from_number}: {e}")
                 else:
                     if linha.strip(): # Ignora linhas vazias
-                        limites_erro.append(f"❌ Formato inválido: '{linha}' (Use: Categoria: Valor)")
-            
+                        limites_erro.append(f"Opa, parece que a linha 	'{linha}	' não seguiu o formato esperado (Categoria: Valor). Poderia ajustar e tentar novamente? 😊")           
             resposta = ""
             if limites_salvos:
                 resposta += "\n📊 *Limites Definidos:*\n" + "\n".join(limites_salvos)
@@ -723,13 +745,31 @@ async def whatsapp_webhook(request: Request):
                 send_message(from_number, mensagens.estilo_msg(resposta))
                 logging.info(f"Registro de gastos fixos confirmado por {from_number} concluído.")
             
-            elif "editar" in resposta_usuario_lower or "não" in resposta_usuario_lower or "nao" in resposta_usuario_lower:
-                logging.info(f"{from_number} pediu para editar ou cancelou o registro dos gastos fixos.")
-                # AQUI entraria a lógica de edição (Passo 004)
-                # Por enquanto, apenas cancela e limpa o estado
-                send_message(from_number, mensagens.estilo_msg("Ok, cancelado. Se quiser tentar registrar novamente, é só me enviar a lista corrigida."))
-                estado["ultimo_fluxo"] = None
-                if "gastos_fixos_pendentes_confirmacao" in estado: del estado["gastos_fixos_pendentes_confirmacao"]
+            elif "editar" in resposta_usuario_lower or "corrigir" in resposta_usuario_lower:
+                logging.info(f"{from_number} pediu para editar os gastos fixos pendentes.")
+                # Monta a lista novamente para referência
+                linhas_para_editar = []
+                for i, gasto in enumerate(gastos_pendentes):
+                    cat_status = gasto["categoria_status"]
+                    cat_display = f"({cat_status})" if cat_status != "A definir" and not cat_status.startswith("AMBIGUO:") else "(A definir)"
+                    if cat_status.startswith("AMBIGUO:"): 
+                        opcoes_ambiguas = cat_status.split(":")[2]
+                        cat_display = f"❓ ({opcoes_ambiguas}?)"
+                    gasto_valor = gasto["valor"]
+                    gasto_descricao = gasto["descricao"]
+                    gasto_dia = gasto["dia"]
+                    valor_fmt = f"R$ {gasto_valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    linhas_para_editar.append(f"{i+1}. {gasto_descricao} {cat_display} - {valor_fmt} - dia {gasto_dia}")
+                
+                texto_itens_para_editar = "\n".join(linhas_para_editar)
+                msg_editar = (
+                    f"Ok, vamos corrigir! Qual item você quer alterar?\n\n"
+                    f"{texto_itens_para_editar}\n\n"
+                    f"Você pode me dizer o número do item e o que corrigir (ex: \"1, o valor é 1600\", \"2, a categoria é Moradia\") ou enviar a linha inteira corrigida."
+                )
+                send_message(from_number, mensagens.estilo_msg(msg_editar))
+                estado["ultimo_fluxo"] = "aguardando_edicao_gasto_fixo" # Novo estado
+                # Mantém gastos_fixos_pendentes_confirmacao no estado
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
             else:
@@ -742,6 +782,94 @@ async def whatsapp_webhook(request: Request):
             
             salvar_estado(from_number, estado)
             return {"status": "confirmação de gastos fixos processada"}
+
+        # --- FLUXO: PROCESSANDO EDIÇÃO DE GASTO FIXO ---
+        elif estado.get("ultimo_fluxo") == "aguardando_edicao_gasto_fixo":
+            logging.info(f"Processando edição de gasto fixo solicitada por {from_number}.")
+            gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
+            correcao_msg = incoming_msg.strip()
+
+            # Basic parsing attempt (can be improved)
+            match_num_correcao = re.match(r"(\\d+)\\s*[,.:]?\\s*(.*)", correcao_msg)
+            item_index = -1
+            correcao_texto = ""
+
+            if match_num_correcao:
+                try:
+                    item_num = int(match_num_correcao.group(1))
+                    if 1 <= item_num <= len(gastos_pendentes):
+                        item_index = item_num - 1
+                        correcao_texto = match_num_correcao.group(2).strip()
+                    else:
+                        logging.warning(f"Índice inválido {item_num} fornecido por {from_number} para edição.")
+                except ValueError:
+                    logging.warning(f"Não foi possível extrair índice numérico da correção: {correcao_msg}")
+            
+            # TODO: Add more robust parsing for different correction formats (e.g., full line replacement)
+
+            gasto_editado = False
+            if item_index != -1 and correcao_texto:
+                gasto_original = gastos_pendentes[item_index]
+                # Try to apply correction (simple example: update value or category)
+                match_valor = re.search(r"(?:valor|preço|custo)\\s*(?:é|eh|sera|será)\\s*(?:R\\$)?\\s*([\\d,.]+)", correcao_texto, re.IGNORECASE)
+                match_categoria = re.search(r"(?:categoria|tipo)\\s*(?:é|eh|sera|será)\\s*(\\w+)", correcao_texto, re.IGNORECASE)
+                # TODO: Add matching for description and day
+
+                if match_valor:
+                    try:
+                        novo_valor_str = match_valor.group(1).replace(".", "").replace(",", ".")
+                        novo_valor = float(novo_valor_str)
+                        if novo_valor >= 0:
+                            gasto_original["valor"] = novo_valor
+                            gasto_editado = True
+                            logging.info(f"Valor do item {item_index+1} atualizado para {novo_valor}.")
+                        else:
+                            logging.warning("Valor negativo fornecido na correção.")
+                    except ValueError:
+                         logging.warning(f"Valor inválido fornecido na correção: {match_valor.group(1)}")
+                elif match_categoria:
+                    nova_categoria = match_categoria.group(1).strip().capitalize()
+                    if nova_categoria in CATEGORIAS_VALIDAS: # Reuse existing validation list
+                         # Update status directly, might need re-categorization logic if description changes
+                         gasto_original["categoria_status"] = nova_categoria
+                         gasto_editado = True
+                         logging.info(f"Categoria do item {item_index+1} atualizada para {nova_categoria}.")
+                    else:
+                         logging.warning(f"Categoria inválida fornecida na correção: {nova_categoria}")
+                # TODO: Add handling for description/day changes and full line replacement
+
+            if gasto_editado:
+                # Re-display confirmation message with updated list
+                resposta_confirmacao = "Ok, item atualizado. Confira a lista corrigida:\\n"
+                linhas_confirmacao = []
+                for gasto in gastos_pendentes: # Use the updated list
+                    cat_status = gasto['categoria_status']
+                    cat_display = f"({cat_status})" if cat_status != "A definir" and not cat_status.startswith("AMBIGUO:") else "(A definir)"
+                    if cat_status.startswith("AMBIGUO:"): 
+                        opcoes_ambiguas = cat_status.split(":")[2]
+                        cat_display = f"❓ ({opcoes_ambiguas}?)"
+                    valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    linhas_confirmacao.append(f"- {gasto['descricao']} {cat_display} - {valor_fmt} - dia {gasto['dia']}")
+                
+                resposta_confirmacao += "\\n".join(linhas_confirmacao)
+                resposta_confirmacao += "\\n\\nConfirma o registro? (Sim / Editar)"
+                
+                estado["gastos_fixos_pendentes_confirmacao"] = gastos_pendentes # Save updated list
+                estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos" # Go back to confirmation
+                estado_modificado_fluxo = True
+                mensagem_tratada = True
+                send_message(from_number, mensagens.estilo_msg(resposta_confirmacao))
+                logging.info(f"Lista de gastos fixos atualizada enviada para confirmação de {from_number}.")
+            else:
+                # Failed to parse or apply edit
+                logging.warning(f"Não foi possível aplicar a edição solicitada por {from_number}: {correcao_msg}")
+                send_message(from_number, mensagens.estilo_msg("Não consegui entender ou aplicar a correção. Poderia tentar novamente? Lembre-se do formato: número do item, o que corrigir (ex: '1, valor 1600') ou a linha inteira corrigida."))
+                # Keep state as aguardando_edicao_gasto_fixo
+                estado_modificado_fluxo = True # Save ultima_msg
+                mensagem_tratada = True
+
+            salvar_estado(from_number, estado)
+            return {"status": "processamento de edição de gasto fixo concluído"}
 
         # --- FLUXO: DECISÃO SOBRE CORREÇÃO DE CATEGORIAS FIXAS --- 
         elif estado.get("ultimo_fluxo") == "aguardando_decisao_correcao_cat_fixa":
