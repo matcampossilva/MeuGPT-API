@@ -605,11 +605,29 @@ async def whatsapp_webhook(request: Request):
                         dia = int(dia_str)
                         if not 1 <= dia <= 31: raise ValueError("Dia inválido")
                         
-                        # Tenta categorizar automaticamente
-                        categoria_status = categorizar(descricao)
+                        # Tenta extrair categoria da descrição e depois categorizar
+                        match_categoria_parenteses = re.match(r"^(.*?)(?:\s*\((.*?)\))?$", descricao.strip())
+                        descricao_principal = descricao # Default
+                        categoria_fornecida = None
+
+                        if match_categoria_parenteses:
+                            descricao_principal = match_categoria_parenteses.group(1).strip()
+                            if match_categoria_parenteses.group(2):
+                                categoria_fornecida = match_categoria_parenteses.group(2).strip().capitalize()
+                                # Validar se a categoria fornecida é conhecida
+                                if categoria_fornecida not in CATEGORIAS_VALIDAS:
+                                    logging.warning(f"Categoria fornecida entre parênteses 	'{categoria_fornecida}	' não é válida. Será tratada como 'A definir'.")
+                                    categoria_fornecida = "A definir" # Ou poderia ser None para forçar categorização
+                        
+                        categoria_status = ""
+                        if categoria_fornecida and categoria_fornecida != "A definir":
+                            categoria_status = categoria_fornecida
+                        else:
+                            # Tenta categorizar automaticamente a descrição principal
+                            categoria_status = categorizar(descricao_principal)
                         
                         gasto_interpretado = {
-                            "descricao": descricao,
+                            "descricao": descricao_principal, # Usa a descrição sem a categoria em parênteses
                             "valor": valor,
                             "dia": dia,
                             "categoria_status": categoria_status # Pode ser 'A definir', 'AMBIGUO:...' ou a categoria
