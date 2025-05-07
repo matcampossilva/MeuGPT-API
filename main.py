@@ -483,17 +483,9 @@ async def whatsapp_webhook(request: Request):
              return {"status": "primeira saudação pós-cadastro respondida"}
 
         # --- FLUXO: RESPOSTA OBJETIVA PARA CONTROLE DE GASTOS ---
-        elif "controle inteligente e automático de gastos" in msg_lower and not mensagem_tratada:
-            logging.info(f"Usuário {from_number} selecionou 'Controle inteligente e automático de gastos'. Enviando opções objetivas.")
-            resposta_objetiva = (
-                "Para um controle eficiente das suas finanças, temos três funções importantes:\n\n"
-                "1️⃣ *Relacionar gastos fixos mensais:* ajuda a entender o seu padrão de vida e garante que você não perca datas importantes, evitando atrasos e juros desnecessários.\n"
-                "2️⃣ *Registrar gastos diários:* permite acompanhar de perto seu comportamento financeiro em tempo real, corrigindo pequenos hábitos antes que eles se tornem grandes problemas na fatura.\n"
-                "3️⃣ *Definir limites por categoria:* receba alertas automáticos quando estiver próximo do seu limite definido, facilitando ajustes rápidos e mantendo sua vida financeira organizada e equilibrada.\n\n"
-                "Por qual dessas funções gostaria de começar? Para melhor resultado, recomendo utilizar todas!\n\n"
-                "Tô com você! 👊🏼"
-            )
-            send_message(from_number, mensagens.estilo_msg(resposta_objetiva))
+        elif ("controle de gastos" in msg_lower or "controlar gastos" in msg_lower or "controle inteligente e automático de gastos" in msg_lower) and not mensagem_tratada:
+            logging.info(f"Usuário {from_number} ({name}) selecionou 'Controle de Gastos'. Enviando opções objetivas.")
+            send_message(from_number, mensagens.estilo_msg(mensagens.orientacao_controle_gastos()))
             mensagem_tratada = True
             estado["ultimo_fluxo"] = "menu_controle_gastos" # Define um estado para saber que o menu foi mostrado
             salvar_estado(from_number, estado)
@@ -1267,4 +1259,3 @@ if __name__ == "__main__":
     logging.info("Iniciando servidor Uvicorn para desenvolvimento local...")
     # Adiciona reload=True para desenvolvimento
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
