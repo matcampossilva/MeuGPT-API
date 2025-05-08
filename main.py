@@ -607,30 +607,35 @@ async def whatsapp_webhook(request: Request):
                         
                         # Tenta extrair categoria da descrição e depois categorizar
                         match_categoria_parenteses = re.match(r"^(.*?)(?:\s*\((.*?)\))?$", descricao.strip())
-                        descricao_principal = descricao # Default
-                        categoria_fornecida = None
+                        descricao_principal = descricao.strip() # Default para descrição completa
+                        categoria_extraida_parenteses = None
 
                         if match_categoria_parenteses:
+                            # group(1) é a descrição antes dos parênteses (ou a string toda se não houver parênteses)
                             descricao_principal = match_categoria_parenteses.group(1).strip()
+                            if not descricao_principal: # Caso a descrição seja SÓ a categoria, ex: "(Moradia)"
+                                descricao_principal = match_categoria_parenteses.group(2).strip() if match_categoria_parenteses.group(2) else descricao.strip()
+
                             if match_categoria_parenteses.group(2):
-                                categoria_fornecida = match_categoria_parenteses.group(2).strip().capitalize()
-                                # Validar se a categoria fornecida é conhecida
-                                if categoria_fornecida not in CATEGORIAS_VALIDAS:
-                                    logging.warning(f"Categoria fornecida entre parênteses 	'{categoria_fornecida}	' não é válida. Será tratada como 'A definir'.")
-                                    categoria_fornecida = "A definir" # Ou poderia ser None para forçar categorização
+                                # group(2) é a categoria dentro dos parênteses
+                                categoria_extraida_parenteses = match_categoria_parenteses.group(2).strip().capitalize()
                         
-                        categoria_status = ""
-                        if categoria_fornecida and categoria_fornecida != "A definir":
-                            categoria_status = categoria_fornecida
-                        else:
-                            # Tenta categorizar automaticamente a descrição principal
-                            categoria_status = categorizar(descricao_principal)
+                        categoria_final = None
+                        if categoria_extraida_parenteses:
+                            if categoria_extraida_parenteses in CATEGORIAS_VALIDAS:
+                                categoria_final = categoria_extraida_parenteses
+                            else:
+                                logging.warning(f"Categoria fornecida entre parênteses 	'{categoria_extraida_parenteses}	' para 	'{descricao_principal}	' não é uma categoria válida. Tentando categorizar a descrição.")
+                                # Deixa categoria_final como None para que categorizar(descricao_principal) seja chamado
+
+                        if not categoria_final: # Se não foi extraída uma categoria válida dos parênteses ou não havia parênteses
+                            categoria_final = categorizar(descricao_principal) # Tenta categorizar a descrição limpa
                         
                         gasto_interpretado = {
-                            "descricao": descricao_principal, # Usa a descrição sem a categoria em parênteses
+                            "descricao": descricao_principal, # Salva a descrição limpa
                             "valor": valor,
                             "dia": dia,
-                            "categoria_status": categoria_status # Pode ser 'A definir', 'AMBIGUO:...' ou a categoria
+                            "categoria_status": categoria_final # Pode ser 'A definir', 'AMBIGUO:...' ou a categoria
                         }
                         gastos_fixos_pendentes.append(gasto_interpretado)
                         
@@ -696,8 +701,17 @@ async def whatsapp_webhook(request: Request):
             gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
             resposta_usuario_lower = incoming_msg.lower()
 
-            if "sim" in resposta_usuario_lower or "yes" in resposta_usuario_lower or "confirmo" in resposta_usuario_lower:
-                logging.info(f"{from_number} confirmou o registro dos gastos fixos pendentes.")
+            # VERIFICA SE O USUÁRIO QUER SAIR DO FLUXO OU MUDAR DE ASSUNTO
+            if (any(keyword in resposta_usuario_lower for keyword in ["voltar", "menu", "cancelar", "outro assunto", "parar", "sair"])
+                or any(comando_chave in resposta_usuario_lower for comando_chave in ["gastos diários", "gasto diário", "registrar gasto diário", "item 2", "opção 2", "segunda opção"])):
+                logging.info(f"{from_number} solicitou sair do fluxo de confirmação de gastos fixos. Resetando fluxo.")
+                send_message(from_number, mensagens.estilo_msg("Ok! Voltando ao menu anterior ou aguardando seu novo comando."))
+                estado["ultimo_fluxo"] = None
+                if "gastos_fixos_pendentes_confirmacao" in estado: del estado["gastos_fixos_pendentes_confirmacao"]
+                mensagem_tratada = False # Para reprocessar a mensagem original e pegar o novo comando
+                estado_modificado_fluxo = True # Indica que o estado foi modificado
+            
+            elif "sim" in resposta_usuario_lower or "yes" in resposta_usuario_lower or "confirmo" in resposta_usuario_lower:
                 gastos_fixos_salvos = []
                 gastos_fixos_erro = []
                 categorias_pendentes_definir = [] # Guarda descrição e dia para correção
@@ -753,22 +767,23 @@ async def whatsapp_webhook(request: Request):
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
                 send_message(from_number, mensagens.estilo_msg(resposta))
-                logging.info(f"Registro de gastos fixos confirmado por {from_number} concluído.")
-            
+                logging.info(f"Registro de gastos fixos finalizado para {from_number}. Sucessos: {len(gastos_fixos_salvos)}, Erros: {len(gastos_fixos_erro)}")
+
             elif "editar" in resposta_usuario_lower or "corrigir" in resposta_usuario_lower:
                 logging.info(f"{from_number} pediu para editar os gastos fixos pendentes.")
                 # Monta a lista novamente para referência
                 linhas_para_editar = []
-                for i, gasto in enumerate(gastos_pendentes):
-                    cat_status = gasto["categoria_status"]
-                    cat_display = f"({cat_status})" if cat_status != "A definir" and not cat_status.startswith("AMBIGUO:") else "(A definir)"
-                    if cat_status.startswith("AMBIGUO:"): 
+                for i, gasto_item in enumerate(gastos_pendentes):
+                    cat_status = gasto_item["categoria_status"]
+                    cat_display = f"({cat_status})" if cat_status != "A definir" and not cat_status.startswith("AMBIGUO:") else "(A DEFINIR)"
+                    if cat_status.startswith("AMBIGUO:"):
                         opcoes_ambiguas = cat_status.split(":")[2]
-                        cat_display = f"❓ ({opcoes_ambiguas}?)"
-                    gasto_valor = gasto["valor"]
-                    gasto_descricao = gasto["descricao"]
-                    gasto_dia = gasto["dia"]
-                    valor_fmt = f"R$ {gasto_valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        cat_display = f"? ({opcoes_ambiguas})"
+                    
+                    gasto_valor = gasto_item["valor"]
+                    gasto_descricao = gasto_item["descricao"]
+                    gasto_dia = gasto_item["dia"]
+                    valor_fmt = f"R$ {gasto_valor:.2f}".replace(".", ",") # Formato BRL
                     linhas_para_editar.append(f"{i+1}. {gasto_descricao} {cat_display} - {valor_fmt} - dia {gasto_dia}")
                 
                 texto_itens_para_editar = "\n".join(linhas_para_editar)
@@ -785,11 +800,10 @@ async def whatsapp_webhook(request: Request):
             else:
                 # Resposta não reconhecida, pede novamente
                 logging.warning(f"{from_number} respondeu algo inesperado à confirmação de gastos fixos: {incoming_msg}")
-                send_message(from_number, mensagens.estilo_msg("Não entendi sua resposta. Por favor, diga 'Sim' para confirmar ou 'Editar' para corrigir."))
-                # Mantém o estado aguardando_confirmacao_gastos_fixos
-                estado_modificado_fluxo = True # Salva ultima_msg
+                send_message(from_number, mensagens.estilo_msg("Não entendi sua resposta. Por favor, diga 'Sim' para confirmar o registro, ou 'Editar' para fazer alterações."))
+                estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos" 
+                estado_modificado_fluxo = True 
                 mensagem_tratada = True
-            
             salvar_estado(from_number, estado)
             return {"status": "confirmação de gastos fixos processada"}
 
@@ -799,70 +813,148 @@ async def whatsapp_webhook(request: Request):
             gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
             correcao_msg = incoming_msg.strip()
 
-            # Basic parsing attempt (can be improved)
-            match_num_correcao = re.match(r"(\\d+)\\s*[,.:]?\\s*(.*)", correcao_msg)
             item_index = -1
-            correcao_texto = ""
+            gasto_editado = False
 
-            if match_num_correcao:
+            # Tenta extrair o número do item primeiro (ex: "1, ...", "item 2 ...", "2 - ...")
+            match_item_num = re.match(r"^(?:item)?\s*(\d+)\s*[,.:\-]?\s*(.*)", correcao_msg, re.IGNORECASE)
+            
+            if match_item_num:
                 try:
-                    item_num = int(match_num_correcao.group(1))
+                    item_num = int(match_item_num.group(1))
                     if 1 <= item_num <= len(gastos_pendentes):
                         item_index = item_num - 1
-                        correcao_texto = match_num_correcao.group(2).strip()
+                        correcao_texto = match_item_num.group(2).strip()
+                        gasto_original = gastos_pendentes[item_index]
+
+                        # Tenta aplicar correção de CATEGORIA
+                        # Ex: "a categoria é Moradia", "categoria Saude", "tipo Lazer"
+                        match_categoria = re.search(r"(?:categoria|tipo|cat\.?)\s*(?:é|eh|sera|será|é de|para|pra)\s*([\w\sáçãõéíóúàèìòùâêîôûü]+)", correcao_texto, re.IGNORECASE)
+                        if match_categoria:
+                            nova_categoria = match_categoria.group(1).strip().capitalize()
+                            if nova_categoria in CATEGORIAS_VALIDAS:
+                                gasto_original["categoria_status"] = nova_categoria
+                                gasto_editado = True
+                                logging.info(f"Edição: Item {item_num}, Categoria atualizada para {nova_categoria}.")
+                            else:
+                                logging.warning(f"Edição: Categoria inválida 	'{nova_categoria}	' fornecida para item {item_num}.")
+                        
+                        # Tenta aplicar correção de VALOR (se não for categoria)
+                        # Ex: "o valor é 1500", "valor 250,50", "R$ 100"
+                        if not gasto_editado:
+                            match_valor = re.search(r"(?:valor|preço|custo|é|eh|sera|será)(?:\s*de)?\s*(?:R\$)?\s*([\d.,]+)", correcao_texto, re.IGNORECASE)
+                            if match_valor:
+                                try:
+                                    novo_valor_str = match_valor.group(1).replace(".", "").replace(",", ".")
+                                    novo_valor = float(novo_valor_str)
+                                    if novo_valor >= 0:
+                                        gasto_original["valor"] = novo_valor
+                                        gasto_editado = True
+                                        logging.info(f"Edição: Item {item_num}, Valor atualizado para {novo_valor}.")
+                                    else:
+                                        logging.warning(f"Edição: Valor negativo 	'{novo_valor}	' fornecido para item {item_num}.")
+                                except ValueError:
+                                    logging.warning(f"Edição: Valor inválido 	'{match_valor.group(1)}	' fornecido para item {item_num}.")
+                        
+                        # Tenta aplicar correção de DESCRIÇÃO (se não for categoria nem valor)
+                        # Ex: "descrição Aluguel Casa", "o nome é Luz Elétrica"
+                        if not gasto_editado:
+                            match_descricao = re.search(r"(?:descrição|descricao|desc\.?|nome|item)\s*(?:é|eh|sera|será|é de|para|pra)\s*(.+)", correcao_texto, re.IGNORECASE)
+                            if match_descricao:
+                                nova_descricao = match_descricao.group(1).strip()
+                                if nova_descricao:
+                                    gasto_original["descricao"] = nova_descricao
+                                    # Se a descrição mudou, a categoria pode precisar ser reavaliada se não foi explicitamente dada
+                                    if not match_categoria: # Só re-categoriza se a categoria não foi o foco da edição
+                                        gasto_original["categoria_status"] = categorizar(nova_descricao)
+                                    gasto_editado = True
+                                    logging.info(f"Edição: Item {item_num}, Descrição atualizada para 	'{nova_descricao}	'. Categoria reavaliada para 	'{gasto_original['categoria_status']}	'.")
+
+                        # Tenta aplicar correção de DIA (se não for categoria, valor nem descrição)
+                        # Ex: "dia 15", "o dia é 5", "vencimento 20"
+                        if not gasto_editado:
+                            match_dia = re.search(r"(?:dia|vencimento|vence)\s*(?:é|eh|sera|será|é de|para|pra)?\s*(\d{1,2})", correcao_texto, re.IGNORECASE)
+                            if match_dia:
+                                try:
+                                    novo_dia = int(match_dia.group(1))
+                                    if 1 <= novo_dia <= 31:
+                                        gasto_original["dia"] = novo_dia
+                                        gasto_editado = True
+                                        logging.info(f"Edição: Item {item_num}, Dia atualizado para {novo_dia}.")
+                                    else:
+                                        logging.warning(f"Edição: Dia inválido 	'{novo_dia}	' fornecido para item {item_num}.")
+                                except ValueError:
+                                    logging.warning(f"Edição: Dia inválido 	'{match_dia.group(1)}	' fornecido para item {item_num}.")
+                        
+                        # Se ainda não foi editado e há texto de correção, pode ser uma linha inteira
+                        if not gasto_editado and correcao_texto:
+                            # Tenta reinterpretar a linha inteira
+                            # Formato esperado: Descrição (Categoria Opcional) - Valor - dia Dia
+                            partes_linha = re.match(r"^(.*?)(?:\s*-\s*R?\$?([\d.,]+))?(?:\s*-\s*dia\s*(\d{1,2}))?$", correcao_texto)
+                            if partes_linha:
+                                nova_desc_completa = partes_linha.group(1).strip() if partes_linha.group(1) else gasto_original["descricao"]
+                                novo_valor_str_linha = partes_linha.group(2)
+                                novo_dia_str_linha = partes_linha.group(3)
+                                
+                                # Extrai categoria da nova descrição completa, se houver
+                                match_cat_linha = re.match(r"^(.*?)(?:\s*\((.*?)\))?$", nova_desc_completa)
+                                nova_desc_principal_linha = nova_desc_completa
+                                nova_cat_extraida_linha = None
+                                if match_cat_linha:
+                                    nova_desc_principal_linha = match_cat_linha.group(1).strip()
+                                    if match_cat_linha.group(2):
+                                        nova_cat_extraida_linha = match_cat_linha.group(2).strip().capitalize()
+                                
+                                gasto_original["descricao"] = nova_desc_principal_linha
+                                
+                                if novo_valor_str_linha:
+                                    try:
+                                        valor_corrigido = float(novo_valor_str_linha.replace(".", "").replace(",", "."))
+                                        if valor_corrigido >=0:
+                                            gasto_original["valor"] = valor_corrigido
+                                    except ValueError:
+                                        logging.warning(f"Edição (linha inteira): Valor inválido 	'{novo_valor_str_linha}	' para item {item_num}.")
+                                
+                                if novo_dia_str_linha:
+                                    try:
+                                        dia_corrigido = int(novo_dia_str_linha)
+                                        if 1 <= dia_corrigido <= 31:
+                                            gasto_original["dia"] = dia_corrigido
+                                    except ValueError:
+                                        logging.warning(f"Edição (linha inteira): Dia inválido 	'{novo_dia_str_linha}	' para item {item_num}.")
+                                
+                                # Define a categoria
+                                if nova_cat_extraida_linha and nova_cat_extraida_linha in CATEGORIAS_VALIDAS:
+                                    gasto_original["categoria_status"] = nova_cat_extraida_linha
+                                else:
+                                    gasto_original["categoria_status"] = categorizar(nova_desc_principal_linha)
+                                
+                                gasto_editado = True
+                                logging.info(f"Edição: Item {item_num} atualizado por linha inteira: 	'{correcao_texto}	'.")
                     else:
-                        logging.warning(f"Índice inválido {item_num} fornecido por {from_number} para edição.")
+                        logging.warning(f"Edição: Índice inválido {item_num} fornecido por {from_number}.")
                 except ValueError:
-                    logging.warning(f"Não foi possível extrair índice numérico da correção: {correcao_msg}")
-            
-            # TODO: Add more robust parsing for different correction formats (e.g., full line replacement)
-
-            gasto_editado = False
-            if item_index != -1 and correcao_texto:
-                gasto_original = gastos_pendentes[item_index]
-                # Try to apply correction (simple example: update value or category)
-                match_valor = re.search(r"(?:valor|preço|custo)\\s*(?:é|eh|sera|será)\\s*(?:R\\$)?\\s*([\\d,.]+)", correcao_texto, re.IGNORECASE)
-                match_categoria = re.search(r"(?:categoria|tipo)\\s*(?:é|eh|sera|será)\\s*(\\w+)", correcao_texto, re.IGNORECASE)
-                # TODO: Add matching for description and day
-
-                if match_valor:
-                    try:
-                        novo_valor_str = match_valor.group(1).replace(".", "").replace(",", ".")
-                        novo_valor = float(novo_valor_str)
-                        if novo_valor >= 0:
-                            gasto_original["valor"] = novo_valor
-                            gasto_editado = True
-                            logging.info(f"Valor do item {item_index+1} atualizado para {novo_valor}.")
-                        else:
-                            logging.warning("Valor negativo fornecido na correção.")
-                    except ValueError:
-                         logging.warning(f"Valor inválido fornecido na correção: {match_valor.group(1)}")
-                elif match_categoria:
-                    nova_categoria = match_categoria.group(1).strip().capitalize()
-                    if nova_categoria in CATEGORIAS_VALIDAS: # Reuse existing validation list
-                         # Update status directly, might need re-categorization logic if description changes
-                         gasto_original["categoria_status"] = nova_categoria
-                         gasto_editado = True
-                         logging.info(f"Categoria do item {item_index+1} atualizada para {nova_categoria}.")
-                    else:
-                         logging.warning(f"Categoria inválida fornecida na correção: {nova_categoria}")
-                # TODO: Add handling for description/day changes and full line replacement
+                    logging.warning(f"Edição: Não foi possível extrair índice numérico da correção: {correcao_msg}")
+            else:
+                 # Se não conseguiu nem extrair o número do item, tenta ver se é uma correção de linha inteira sem o número
+                 # Isso é mais complexo e pode ser adicionado depois se necessário.
+                 logging.info(f"Edição: Não foi possível identificar o número do item na mensagem: {correcao_msg}")
 
             if gasto_editado:
                 # Re-display confirmation message with updated list
-                resposta_confirmacao = "Ok, item atualizado. Confira a lista corrigida:\\n"
+                resposta_confirmacao = "Ok, item atualizado. Confira a lista corrigida:\n"
                 linhas_confirmacao = []
-                for gasto in gastos_pendentes: # Use the updated list
-                    cat_status = gasto['categoria_status']
+                for i_gasto, gasto_atualizado in enumerate(gastos_pendentes): # Use the updated list
+                    cat_status = gasto_atualizado["categoria_status"]
                     cat_display = f"({cat_status})" if cat_status != "A definir" and not cat_status.startswith("AMBIGUO:") else "(A definir)"
                     if cat_status.startswith("AMBIGUO:"): 
                         opcoes_ambiguas = cat_status.split(":")[2]
                         cat_display = f"❓ ({opcoes_ambiguas}?)"
-                    valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    linhas_confirmacao.append(f"- {gasto['descricao']} {cat_display} - {valor_fmt} - dia {gasto['dia']}")
+                    valor_fmt = f"R$ {gasto_atualizado['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    linhas_confirmacao.append(f"{i_gasto+1}. {gasto_atualizado['descricao']} {cat_display} - {valor_fmt} - dia {gasto_atualizado['dia']}")
                 
-                resposta_confirmacao += "\\n".join(linhas_confirmacao)
-                resposta_confirmacao += "\\n\\nConfirma o registro? (Sim / Editar)"
+                resposta_confirmacao += "\n".join(linhas_confirmacao)
+                resposta_confirmacao += "\n\nConfirma o registro? (Sim / Editar)"
                 
                 estado["gastos_fixos_pendentes_confirmacao"] = gastos_pendentes # Save updated list
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos" # Go back to confirmation
@@ -873,7 +965,7 @@ async def whatsapp_webhook(request: Request):
             else:
                 # Failed to parse or apply edit
                 logging.warning(f"Não foi possível aplicar a edição solicitada por {from_number}: {correcao_msg}")
-                send_message(from_number, mensagens.estilo_msg("Não consegui entender ou aplicar a correção. Poderia tentar novamente? Lembre-se do formato: número do item, o que corrigir (ex: '1, valor 1600') ou a linha inteira corrigida."))
+                send_message(from_number, mensagens.estilo_msg(mensagens.erro_edicao_gasto_fixo())) # Usando mensagem de mensagens.py
                 # Keep state as aguardando_edicao_gasto_fixo
                 estado_modificado_fluxo = True # Save ultima_msg
                 mensagem_tratada = True
