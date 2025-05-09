@@ -976,7 +976,10 @@ async def whatsapp_webhook(request: Request):
         # --- FLUXO: RECEBENDO CATEGORIA PARA CORREÇÃO (GASTO FIXO) ---
         elif estado.get("ultimo_fluxo") == "aguardando_categoria_para_correcao_fixa":
             categorias_pendentes = estado.get("categorias_fixas_a_definir", [])
+            logging.info(f"Categorias pendentes antes do processamento: {categorias_pendentes}")
+
             linhas = incoming_msg.strip().split("\n")
+            logging.info(f"Linhas recebidas para correção: {linhas}")
 
             categorias_corrigidas = []
             erros_categorias = []
@@ -985,10 +988,11 @@ async def whatsapp_webhook(request: Request):
                 match = re.match(r"(\d+), a categoria é ([\w\s]+)\.", linha.strip(), re.IGNORECASE)
                 if match:
                     indice_str, categoria_informada = match.groups()
-                    indice = int(indice_str) - 1  # Ajuste para índice Python
+                    indice = int(indice_str) - 1
                     if 0 <= indice < len(categorias_pendentes):
                         gasto_atual = categorias_pendentes[indice]
                         categoria_informada = categoria_informada.capitalize()
+                        logging.info(f"Tentando corrigir índice {indice}: {gasto_atual}, nova categoria: {categoria_informada}")
 
                         if categoria_informada in CATEGORIAS_VALIDAS:
                             try:
@@ -996,13 +1000,14 @@ async def whatsapp_webhook(request: Request):
                                     from_number, gasto_atual['descricao'], gasto_atual['dia'], categoria_informada
                                 )
                                 if sucesso_update:
-                                    logging.info(f"Categoria atualizada para '{categoria_informada}' - {gasto_atual['descricao']}.")
+                                    logging.info(f"Sucesso: '{categoria_informada}' em '{gasto_atual['descricao']}'.")
                                     categorias_corrigidas.append(indice)
                                 else:
-                                    erros_categorias.append(gasto_atual['descricao'])
+                                    logging.warning(f"Falha ao atualizar planilha para: {gasto_atual}")
+                                    erros_categorias.append(f"{gasto_atual['descricao']} (erro na planilha)")
                             except Exception as e:
-                                logging.error(f"Erro ao atualizar categoria fixa: {e}")
-                                erros_categorias.append(gasto_atual['descricao'])
+                                logging.error(f"Exceção ao atualizar categoria fixa: {e}")
+                                erros_categorias.append(f"{gasto_atual['descricao']} (exceção)")
                         else:
                             erros_categorias.append(f"{gasto_atual['descricao']} (categoria inválida '{categoria_informada}')")
                     else:
@@ -1010,11 +1015,11 @@ async def whatsapp_webhook(request: Request):
                 else:
                     erros_categorias.append(f"Formato inválido: {linha}")
 
-            # Remove itens corrigidos, ordenados do maior índice para o menor para evitar erros de indexação
             for idx in sorted(categorias_corrigidas, reverse=True):
                 categorias_pendentes.pop(idx)
 
             estado["categorias_fixas_a_definir"] = categorias_pendentes
+            logging.info(f"Categorias pendentes após processamento: {categorias_pendentes}")
 
             if erros_categorias:
                 msg_erros = "⚠️ Algumas correções não foram feitas:\n" + "\n".join(f"- {erro}" for erro in erros_categorias)
