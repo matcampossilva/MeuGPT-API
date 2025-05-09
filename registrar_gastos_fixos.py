@@ -7,36 +7,44 @@ from planilhas import get_gastos_fixos, formatar_numero
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def salvar_gasto_fixo(numero_usuario, descricao, valor, categoria, dia_vencimento):
-    """Salva um gasto fixo na aba 'Gastos Fixos'.
+CATEGORIAS_VALIDAS = [
+    'Moradia', 'Educação', 'Cartão', 'Saúde', 'Lazer', 'Transporte',
+    'Alimentação', 'Utilidades', 'Investimentos', 'Outros'
+]
 
-    Args:
-        numero_usuario (str): Número do usuário (já formatado).
-        descricao (str): Descrição do gasto.
-        valor (float): Valor do gasto.
-        categoria (str): Categoria do gasto.
-        dia_vencimento (int or str): Dia do mês para o vencimento.
-
-    Returns:
-        dict: {"status": "ok"} ou {"status": "erro", "mensagem": ...}
-    """
+def salvar_gasto_fixo(numero_usuario, descricao, valor, dia_vencimento, categoria):
     try:
-        # Garante que descrição e categoria sejam strings antes de usar .strip()
-        descricao_str = str(descricao)
-        categoria_str = str(categoria)
+        # Validação ROBUSTA
+        try:
+            valor_float = float(valor)
+            if valor_float < 0: raise ValueError("Valor negativo")
+        except ValueError:
+            logging.error(f"Valor inválido '{valor}' para gasto fixo '{descricao}' do usuário {numero_usuario}.")
+            return {"status": "erro", "mensagem": f"O valor '{valor}' não é válido. Use o formato 1234.56"}
+
+        try:
+            dia_int = int(dia_vencimento)
+            if not 1 <= dia_int <= 31: raise ValueError("Dia inválido")
+        except ValueError:
+            logging.error(f"Dia inválido '{dia_vencimento}' para gasto fixo '{descricao}' do usuário {numero_usuario}.")
+            return {"status": "erro", "mensagem": f"O dia '{dia_vencimento}' não é válido. Deve ser um número entre 1 e 31."}
+
+        if categoria not in CATEGORIAS_VALIDAS:
+            logging.error(f"Categoria inválida '{categoria}' para gasto fixo '{descricao}' do usuário {numero_usuario}.")
+            return {"status": "erro", "mensagem": f"A categoria '{categoria}' não é válida. Escolha uma categoria da lista."}
 
         aba_gastos_fixos = get_gastos_fixos()
         # Colunas esperadas: NÚMERO, DESCRIÇÃO, VALOR, FORMA_PGTO, CATEGORIA, DIA_DO_MÊS
         linha = [
             str(numero_usuario), # Garante que seja string
-            descricao_str.strip().capitalize(),
-            f'{float(valor):.2f}'.replace('.', ','), # Formata como string BRL para a planilha
+            str(descricao).strip().capitalize(),
+            f'{valor_float:.2f}'.replace('.', ','), # Usa valor_float validado
             "", # FORMA_PGTO (deixar em branco por enquanto)
-            categoria_str.strip().capitalize(),
-            str(dia_vencimento) # Dia como string
+            str(categoria).strip().capitalize(),
+            str(dia_int) # Usa dia_int validado
         ]
         aba_gastos_fixos.append_row(linha)
-        logging.info(f"Gasto fixo '{descricao_str}' para {numero_usuario} salvo com sucesso.")
+        logging.info(f"Gasto fixo '{str(descricao)}' para {numero_usuario} salvo com sucesso.")
         return {"status": "ok"}
     except Exception as e:
         logging.error(f"Erro ao salvar gasto fixo '{str(descricao)}' para {numero_usuario}: {e}", exc_info=True)
@@ -47,17 +55,6 @@ def salvar_gasto_fixo(numero_usuario, descricao, valor, categoria, dia_venciment
         }
 
 def atualizar_categoria_gasto_fixo(numero_usuario, descricao_gasto, dia_gasto, nova_categoria):
-    """Atualiza a categoria de um gasto fixo específico na planilha.
-
-    Args:
-        numero_usuario (str): Número do usuário (já formatado).
-        descricao_gasto (str): Descrição original do gasto.
-        dia_gasto (int or str): Dia do vencimento original do gasto.
-        nova_categoria (str): Nova categoria a ser definida.
-
-    Returns:
-        bool: True se a categoria foi atualizada com sucesso, False caso contrário.
-    """
     try:
         aba_gastos_fixos = get_gastos_fixos()
         
@@ -108,52 +105,3 @@ def atualizar_categoria_gasto_fixo(numero_usuario, descricao_gasto, dia_gasto, n
 
 # Alias para compatibilidade com import antigo, se necessário
 salvar_gastos_fixos = salvar_gasto_fixo
-
-# Exemplo de uso (para teste local, se necessário)
-if __name__ == '__main__':
-    # Mock da função get_gastos_fixos para teste
-    class MockAba:
-        def __init__(self):
-            self.data = [
-                ['NÚMERO', 'DESCRIÇÃO', 'VALOR', 'FORMA_PGTO', 'CATEGORIA', 'DIA_DO_MÊS'],
-                ['5511999998888', 'Aluguel', '1500,00', '', 'Moradia', '10'],
-                ['5511999998888', 'Condomínio', '500,50', '', 'Moradia', '5'],
-                ['5511999998888', 'Internet', '99,90', '', 'Utilidades', '20'],
-                ['5511999998888', 'Escola Teste', '100,00', '', 'A definir', '15']
-            ]
-
-        def append_row(self, data_row):
-            print(f"[MOCK] Appending row: {data_row}")
-            self.data.append(data_row)
-            return {"updates": {"updatedRange": "Gastos Fixos!A10:D10"}}
-        
-        def get_all_values(self):
-            print("[MOCK] get_all_values() chamado")
-            return self.data
-
-        def update_cell(self, row, col, value):
-            print(f"[MOCK] Updating cell ({row}, {col}) to: {value}")
-            if row > 0 and row <= len(self.data) and col > 0 and col <= len(self.data[0]):
-                self.data[row-1][col-1] = value
-                return True
-            return False
-
-    _original_get_gastos_fixos = get_gastos_fixos 
-    def mock_get_gastos_fixos():
-        return MockAba()
-
-    get_gastos_fixos = mock_get_gastos_fixos
-
-    print("--- Testando salvar_gasto_fixo ---")
-    print(salvar_gasto_fixo("5511999998888", "Luz", 150.00, "Moradia", 25))
-    print(salvar_gasto_fixo("5511999998888", "Academia", 120.00, "Saúde", 1))
-    print(salvar_gasto_fixo("5511999998888", 123, 120.00, 456, 1)) # Testando com int
-    
-    print("\n--- Testando atualizar_categoria_gasto_fixo ---")
-    print("Antes da atualização:", mock_get_gastos_fixos().data)
-    print(f"Atualizando 'Escola Teste' dia 15 para 'Educação': {atualizar_categoria_gasto_fixo('5511999998888', 'Escola Teste', 15, 'Educação')}")
-    print(f"Tentando atualizar inexistente: {atualizar_categoria_gasto_fixo('5511999998888', 'Gasto X', 10, 'Lazer')}")
-    print("Depois da atualização:", mock_get_gastos_fixos().data)
-
-    # Restaurar a função original se necessário em um contexto maior
-    get_gastos_fixos = _original_get_gastos_fixos

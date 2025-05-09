@@ -973,116 +973,73 @@ async def whatsapp_webhook(request: Request):
             salvar_estado(from_number, estado)
             return {"status": "processamento de edição de gasto fixo concluído"}
 
-        # --- FLUXO: DECISÃO SOBRE CORREÇÃO DE CATEGORIAS FIXAS --- 
-        elif estado.get("ultimo_fluxo") == "aguardando_decisao_correcao_cat_fixa":
-            resposta_usuario_lower = incoming_msg.lower()
+        # --- FLUXO: RECEBENDO CATEGORIA PARA CORREÇÃO (GASTO FIXO) ---
+        elif estado.get("ultimo_fluxo") == "aguardando_categoria_para_correcao_fixa":
             categorias_pendentes = estado.get("categorias_fixas_a_definir", [])
+            linhas = incoming_msg.strip().split("\n")
 
-            if "sim" in resposta_usuario_lower or "yes" in resposta_usuario_lower or "ajustar" in resposta_usuario_lower:
-                if categorias_pendentes:
-                    logging.info(f"{from_number} quer corrigir as categorias fixas pendentes.")
-                    # Pega o primeiro item da lista para corrigir
-                    gasto_para_corrigir = categorias_pendentes[0]
-                    estado["corrigindo_cat_fixa_atual"] = gasto_para_corrigir # Guarda o item atual
-                    msg_pergunta = f"Ok. Qual categoria você define para '{gasto_para_corrigir['descricao']}' (venc. dia {gasto_para_corrigir['dia']})?"
-                    send_message(from_number, mensagens.estilo_msg(msg_pergunta))
-                    estado["ultimo_fluxo"] = "aguardando_categoria_para_correcao_fixa"
-                    estado_modificado_fluxo = True
-                    mensagem_tratada = True
+            categorias_corrigidas = []
+            erros_categorias = []
+
+            for linha in linhas:
+                match = re.match(r"(\d+), a categoria é ([\w\s]+)\.", linha.strip(), re.IGNORECASE)
+                if match:
+                    indice_str, categoria_informada = match.groups()
+                    indice = int(indice_str) - 1  # Ajuste para índice Python
+                    if 0 <= indice < len(categorias_pendentes):
+                        gasto_atual = categorias_pendentes[indice]
+                        categoria_informada = categoria_informada.capitalize()
+
+                        if categoria_informada in CATEGORIAS_VALIDAS:
+                            try:
+                                sucesso_update = atualizar_categoria_gasto_fixo(
+                                    from_number, gasto_atual['descricao'], gasto_atual['dia'], categoria_informada
+                                )
+                                if sucesso_update:
+                                    logging.info(f"Categoria atualizada para '{categoria_informada}' - {gasto_atual['descricao']}.")
+                                    categorias_corrigidas.append(indice)
+                                else:
+                                    erros_categorias.append(gasto_atual['descricao'])
+                            except Exception as e:
+                                logging.error(f"Erro ao atualizar categoria fixa: {e}")
+                                erros_categorias.append(gasto_atual['descricao'])
+                        else:
+                            erros_categorias.append(f"{gasto_atual['descricao']} (categoria inválida '{categoria_informada}')")
+                    else:
+                        erros_categorias.append(f"Índice inválido: {indice_str}")
                 else:
-                    # Caso estranho: chegou aqui sem pendências?
-                    logging.warning(f"{from_number} quis corrigir categorias fixas, mas a lista estava vazia.")
-                    send_message(from_number, mensagens.estilo_msg("Parece que não há mais categorias pendentes para ajustar."))
-                    estado["ultimo_fluxo"] = None # Limpa o fluxo
-                    if "categorias_fixas_a_definir" in estado: del estado["categorias_fixas_a_definir"]
-                    estado_modificado_fluxo = True
-                    mensagem_tratada = True
-            elif "não" in resposta_usuario_lower or "nao" in resposta_usuario_lower:
-                logging.info(f"{from_number} não quis corrigir as categorias fixas agora.")
-                send_message(from_number, mensagens.estilo_msg("Entendido. Você pode pedir para ajustar as categorias pendentes a qualquer momento."))
-                estado["ultimo_fluxo"] = None # Limpa o fluxo de correção
-                # Mantém a lista 'categorias_fixas_a_definir' no estado para correção futura
-                estado_modificado_fluxo = True
-                mensagem_tratada = True
-                # Pergunta sobre lembretes (se aplicável - verificar se algo foi salvo antes)
-                # Para simplificar, vamos assumir que se chegou aqui, algo foi salvo.
+                    erros_categorias.append(f"Formato inválido: {linha}")
+
+            # Remove itens corrigidos, ordenados do maior índice para o menor para evitar erros de indexação
+            for idx in sorted(categorias_corrigidas, reverse=True):
+                categorias_pendentes.pop(idx)
+
+            estado["categorias_fixas_a_definir"] = categorias_pendentes
+
+            if erros_categorias:
+                msg_erros = "⚠️ Algumas correções não foram feitas:\n" + "\n".join(f"- {erro}" for erro in erros_categorias)
+                send_message(from_number, mensagens.estilo_msg(msg_erros))
+
+            if categorias_pendentes:
+                proximo_gasto = categorias_pendentes[0]
+                estado["corrigindo_cat_fixa_atual"] = proximo_gasto
+                msg_proximo = f"✅ Feito! Agora, informe a categoria para '{proximo_gasto['descricao']}' (venc. dia {proximo_gasto['dia']}) ou envie mais correções no mesmo formato."
+                send_message(from_number, mensagens.estilo_msg(msg_proximo))
+                estado["ultimo_fluxo"] = "aguardando_categoria_para_correcao_fixa"
+            else:
+                send_message(from_number, mensagens.estilo_msg("✅ Ótimo! Todas as categorias pendentes foram ajustadas."))
+                estado["ultimo_fluxo"] = None
+                estado.pop("corrigindo_cat_fixa_atual", None)
+                estado.pop("categorias_fixas_a_definir", None)
+
                 resposta_lembrete = "\n\nGostaria de ativar lembretes automáticos para ser avisado *um dia antes e também no dia do vencimento*? (Sim/Não)"
                 send_message(from_number, mensagens.estilo_msg(resposta_lembrete))
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
-            else:
-                # Resposta não reconhecida, pede novamente
-                logging.warning(f"{from_number} respondeu algo inesperado à decisão de correção: {incoming_msg}")
-                send_message(from_number, mensagens.estilo_msg("Não entendi. Quer ajustar as categorias pendentes agora? (Sim/Não)"))
-                # Mantém o estado aguardando_decisao_correcao_cat_fixa
-                estado_modificado_fluxo = True # Salva ultima_msg
-                mensagem_tratada = True
 
+            estado_modificado_fluxo = True
+            mensagem_tratada = True
             salvar_estado(from_number, estado)
-            return {"status": "decisão sobre correção de categorias fixas processada"}
-
-        # --- FLUXO: RECEBENDO CATEGORIA PARA CORREÇÃO (GASTO FIXO) --- 
-        elif estado.get("ultimo_fluxo") == "aguardando_categoria_para_correcao_fixa":
-            gasto_atual = estado.get("corrigindo_cat_fixa_atual")
-            categorias_pendentes = estado.get("categorias_fixas_a_definir", [])
-            categoria_informada = incoming_msg.strip().capitalize()
-
-            if not gasto_atual:
-                logging.error(f"Erro: {from_number} está em aguardando_categoria_para_correcao_fixa sem gasto atual no estado.")
-                estado["ultimo_fluxo"] = None; estado_modificado_fluxo = True; mensagem_tratada = False # Reseta e deixa fluxo geral tratar
-            # Valida se a categoria informada é conhecida (opcional, mas bom)
-            elif categoria_informada not in CATEGORIAS_VALIDAS:
-                 logging.warning(f"{from_number} informou categoria inválida '{categoria_informada}' para correção.")
-                 send_message(from_number, mensagens.estilo_msg(f"'{categoria_informada}' não parece ser uma categoria válida. Por favor, informe uma categoria como 'Moradia', 'Alimentação', 'Educação', etc."))
-                 # Mantém o estado aguardando_categoria_para_correcao_fixa
-                 estado_modificado_fluxo = True # Salva ultima_msg
-                 mensagem_tratada = True
-            else:
-                # Tenta atualizar a categoria na planilha
-                try:
-                    sucesso_update = atualizar_categoria_gasto_fixo(from_number, gasto_atual['descricao'], gasto_atual['dia'], categoria_informada)
-                    if sucesso_update:
-                        logging.info(f"Categoria do gasto fixo '{gasto_atual['descricao']}' (dia {gasto_atual['dia']}) atualizada para '{categoria_informada}' para {from_number}.")
-                        # Remove o item corrigido da lista de pendentes
-                        categorias_pendentes.pop(0)
-                        estado["categorias_fixas_a_definir"] = categorias_pendentes
-                        
-                        # Verifica se ainda há itens pendentes
-                        if categorias_pendentes:
-                            proximo_gasto = categorias_pendentes[0]
-                            estado["corrigindo_cat_fixa_atual"] = proximo_gasto
-                            msg_proximo = f"✅ Categoria atualizada! Agora, qual categoria para '{proximo_gasto['descricao']}' (venc. dia {proximo_gasto['dia']})?"
-                            send_message(from_number, mensagens.estilo_msg(msg_proximo))
-                            estado["ultimo_fluxo"] = "aguardando_categoria_para_correcao_fixa"
-                        else:
-                            # Todos corrigidos
-                            logging.info(f"Todas as categorias fixas pendentes foram corrigidas por {from_number}.")
-                            send_message(from_number, mensagens.estilo_msg("✅ Ótimo! Todas as categorias pendentes foram ajustadas."))
-                            estado["ultimo_fluxo"] = None # Limpa o fluxo de correção
-                            if "corrigindo_cat_fixa_atual" in estado: del estado["corrigindo_cat_fixa_atual"]
-                            if "categorias_fixas_a_definir" in estado: del estado["categorias_fixas_a_definir"]
-                            # Pergunta sobre lembretes
-                            resposta_lembrete = "\n\nGostaria de ativar lembretes automáticos para ser avisado *um dia antes e também no dia do vencimento*? (Sim/Não)"
-                            send_message(from_number, mensagens.estilo_msg(resposta_lembrete))
-                            estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
-                            
-                        estado_modificado_fluxo = True
-                        mensagem_tratada = True
-                    else:
-                        logging.error(f"Falha ao atualizar categoria fixa '{gasto_atual['descricao']}' para {from_number} na planilha.")
-                        send_message(from_number, mensagens.estilo_msg(f"❌ Tive um problema ao atualizar a categoria de '{gasto_atual['descricao']}'. Vamos tentar de novo mais tarde."))
-                        # Decide se mantém o item na lista ou não - por segurança, mantém por enquanto
-                        estado["ultimo_fluxo"] = None # Sai do fluxo de correção
-                        estado_modificado_fluxo = True
-                        mensagem_tratada = True
-                except Exception as e:
-                    logging.error(f"Exceção ao chamar atualizar_categoria_gasto_fixo para {from_number}: {e}")
-                    send_message(from_number, mensagens.estilo_msg(f"❌ Ocorreu um erro inesperado ao tentar atualizar a categoria de '{gasto_atual['descricao']}'."))
-                    estado["ultimo_fluxo"] = None # Sai do fluxo de correção
-                    estado_modificado_fluxo = True
-                    mensagem_tratada = True
-            
-            salvar_estado(from_number, estado)
-            return {"status": "processamento de correção de categoria fixa concluído"}
+            return {"status": "correções múltiplas de categorias fixas processadas"}
 
         # --- FLUXO: CONFIRMAÇÃO DE LEMBRETES (Gastos Fixos) --- 
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_lembretes_fixos":
