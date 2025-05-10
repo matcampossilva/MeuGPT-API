@@ -630,7 +630,9 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: CONFIRMAÇÃO E REGISTRO EFETIVO NA PLANILHA ---
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_gastos_fixos":
-            if incoming_msg.lower() in ["sim", "confirmo"]:
+            resposta_usuario_lower = incoming_msg.lower().strip()
+            
+            if resposta_usuario_lower in ["sim", "confirmo", "ok", "confirmado", "certo"]:
                 gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
                 sucesso = []
                 falha = []
@@ -642,18 +644,19 @@ async def whatsapp_webhook(request: Request):
                     else:
                         falha.append(gasto["descricao"])
 
-                resposta = "✅ Gastos fixos registrados:\n" + "\n".join(sucesso)
+                resposta = "✅ Registrei seus gastos fixos com sucesso:\n" + "\n".join(f"- {desc}" for desc in sucesso)
                 if falha:
-                    resposta += "\n\n❌ Falha em:\n" + "\n".join(falha)
+                    resposta += "\n\n⚠️ Não consegui registrar estes itens:\n" + "\n".join(f"- {desc}" for desc in falha)
 
-                resposta += "\n\nQuer ativar lembretes automáticos? (Sim/Não)"
+                resposta += "\n\nVocê quer ativar lembretes automáticos para esses gastos? (Sim/Não)"
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
 
-            elif incoming_msg.lower() in ["editar", "corrigir"]:
-                resposta = "Envie os gastos corrigidos novamente, por favor."
+            elif resposta_usuario_lower in ["editar", "corrigir", "quero editar", "quero corrigir", "preciso corrigir", "preciso editar", "vou editar", "vou corrigir"]:
+                resposta = "Claro! Me envie agora os gastos corrigidos, por favor."
                 estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
+            
             else:
-                resposta = "Resposta inválida. Responda com 'Sim' ou 'Editar'."
+                resposta = "🤔 Não entendi bem... Por favor, responda apenas com 'Sim' para confirmar ou 'Editar' para corrigir algo."
 
             send_message(from_number, mensagens.estilo_msg(resposta))
             salvar_estado(from_number, estado)
