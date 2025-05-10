@@ -577,7 +577,7 @@ async def whatsapp_webhook(request: Request):
              logging.info(f"Instruções para definir limites enviadas para {from_number}. Estado definido como 'aguardando_definicao_limites'. Retornando.")
              return {"status": "instruções de limite enviadas, aguardando lista"}
 
-        # --- FLUXO: REGISTRAR E CONFIRMAR GASTOS FIXOS (ROBUSTO E FLEXÍVEL) ---
+        # --- FLUXO: REGISTRAR E CONFIRMAR GASTOS FIXOS (OTIMIZADO E REVISADO) ---
         elif estado.get("ultimo_fluxo") == "aguardando_registro_gastos_fixos":
             linhas = incoming_msg.strip().split("\n")
             gastos_fixos_pendentes = []
@@ -585,22 +585,16 @@ async def whatsapp_webhook(request: Request):
 
             for linha in linhas:
                 try:
-                    linha = re.sub(r"^\\s*\\d+\\s*[\\.\\-)]\\s*", "", linha)
-                    partes = re.split(r"\\s*[-–:]\\s*", linha)
+                    # Regex revisada: trata espaços e diferentes tipos de hífen
+                    descricao, valor, dia = [parte.strip() for parte in re.split(r"\s*[-–—]\s*", linha)]
+                    
+                    # Tratamento aprimorado do valor (removendo 'R$', pontos e vírgulas)
+                    valor = float(valor.replace("R$", "").replace(".", "").replace(",", "."))
+                    
+                    # Tratamento do dia (extrai apenas o número)
+                    dia = int(re.search(r'\d+', dia).group())
 
-                    if len(partes) != 3:
-                        raise ValueError("Formato incorreto")
-
-                    descricao, valor_str, dia_str = [p.strip() for p in partes]
-
-                    valor_limpo = re.sub(r"[^\\d,]", "", valor_str).replace(".", "").replace(",", ".")
-                    valor = float(valor_limpo)
-
-                    dia_match = re.search(r'\\b(\\d{1,2})\\b', dia_str)
-                    if not dia_match:
-                        raise ValueError("Dia inválido")
-                    dia = int(dia_match.group(1))
-
+                    # Categoria identificada automaticamente
                     categoria = categorizar(descricao)
 
                     gastos_fixos_pendentes.append({
@@ -609,18 +603,16 @@ async def whatsapp_webhook(request: Request):
                         "dia": dia,
                         "categoria_status": categoria
                     })
-
                 except Exception as e:
-                    erros.append(f"Linha com erro: '{linha}' ({str(e)})")
+                    erros.append(f"Linha com erro: '{linha}' ({e})")
 
             if erros:
-                resposta = "⚠️ Alguns erros encontrados:\n" + "\n".join(erros) + "\nCorrija e envie novamente."
+                resposta = "⚠️ Alguns erros encontrados:\n" + "\n".join(erros) + "\n\nCorrija e envie novamente."
                 send_message(from_number, mensagens.estilo_msg(resposta))
             else:
                 resposta = "Confirme os gastos fixos:\n"
                 for idx, gasto in enumerate(gastos_fixos_pendentes, 1):
-                    valor_fmt = f"R${gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - {valor_fmt} - dia {gasto['dia']}\n"
+                    resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - R${gasto['valor']:.2f} - dia {gasto['dia']}\n"
                 resposta += "\nConfirma? (Sim/Editar)"
                 send_message(from_number, mensagens.estilo_msg(resposta))
 
@@ -629,7 +621,6 @@ async def whatsapp_webhook(request: Request):
 
             salvar_estado(from_number, estado)
             return {"status": "processado gastos fixos pendentes"}
-
 
         # --- FLUXO: CONFIRMAÇÃO E REGISTRO EFETIVO NA PLANILHA ---
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_gastos_fixos":
