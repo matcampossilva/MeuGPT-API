@@ -831,7 +831,7 @@ async def whatsapp_webhook(request: Request):
             erros_categorias = []
 
             for linha in linhas:
-                match = re.match(r"(\d+), a categoria é ([\w\s]+)\.", linha.strip(), re.IGNORECASE)
+                match = re.match(r"(\d+)[.,:\-]?\s*(?:a )?categoria(?: é| será| sera| pra| para)?\s*([\w\sáàãâéèêíìóòõôúùç]+)\.?$", linha.strip(), re.IGNORECASE)
                 if match:
                     indice_str, categoria_informada = match.groups()
                     indice = int(indice_str) - 1
