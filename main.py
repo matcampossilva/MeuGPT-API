@@ -585,24 +585,28 @@ async def whatsapp_webhook(request: Request):
 
             for linha in linhas:
                 try:
-                    # Regex revisada: trata espaços e diferentes tipos de hífen
-                    descricao, valor, dia = [parte.strip() for parte in re.split(r"\s*[-–—]\s*", linha)]
-                    
-                    # Tratamento aprimorado do valor (removendo 'R$', pontos e vírgulas)
-                    valor = float(valor.replace("R$", "").replace(".", "").replace(",", "."))
-                    
-                    # Tratamento do dia (extrai apenas o número)
-                    dia = int(re.search(r'\d+', dia).group())
+                    match_linha = re.match(
+                        r"(?:\d+[.,:\-]?\s*)?(.*?)\s*[-–—]\s*R?\$?\s*([\d\.,]+)\s*[-–—]\s*dia\s*(\d+)",
+                        linha.strip(),
+                        re.IGNORECASE
+                    )
+                    if match_linha:
+                        descricao, valor, dia = match_linha.groups()
+                        descricao = descricao.strip()
+                        valor = float(valor.replace(".", "").replace(",", "."))
+                        dia = int(dia.strip())
+                    else:
+                        raise ValueError(f"Formato inválido")
 
-                    # Categoria identificada automaticamente
                     categoria = categorizar(descricao)
 
                     gastos_fixos_pendentes.append({
                         "descricao": descricao,
                         "valor": valor,
                         "dia": dia,
-                        "categoria_status": categoria
+                        "categoria_status": categoria if categoria in CATEGORIAS_VALIDAS else "A definir"
                     })
+
                 except Exception as e:
                     erros.append(f"Linha com erro: '{linha}' ({e})")
 
@@ -612,7 +616,9 @@ async def whatsapp_webhook(request: Request):
             else:
                 resposta = "Confirme os gastos fixos:\n"
                 for idx, gasto in enumerate(gastos_fixos_pendentes, 1):
-                    resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - R${gasto['valor']:.2f} - dia {gasto['dia']}\n"
+                    valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    categoria_display = gasto['categoria_status']
+                    resposta += f"{idx}. {gasto['descricao']} ({categoria_display}) - {valor_fmt} - dia {gasto['dia']}\n"
                 resposta += "\nConfirma? (Sim/Editar)"
                 send_message(from_number, mensagens.estilo_msg(resposta))
 
