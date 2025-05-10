@@ -491,28 +491,21 @@ async def whatsapp_webhook(request: Request):
             salvar_estado(from_number, estado)
             return {"status": "menu controle gastos enviado"}
 
-        # --- FLUXO: INICIAR REGISTRO DE GASTOS FIXOS ---
-        elif any(term in msg_lower for term in ["gastos fixos", "fixos mensais", "relacionar gastos", "opção 1", "primeira opção"]) and not mensagem_tratada:
-             # Check if the user is likely responding to the menu or explicitly asking
-             if estado.get("ultimo_fluxo") == "menu_controle_gastos" or "gasto" in msg_lower: # Basic check
-                 logging.info(f"{from_number} pediu para registrar gastos fixos.")
-                 # !!! GET THIS MESSAGE FROM mensagens.py LATER !!!
-                 msg_instrucao_gastos_fixos = (
-                     "Ótimo! Para registrar seus gastos fixos mensais, me envie a lista com a descrição, o valor e o dia do vencimento, um por linha, separados por hífen.\n\n"
-                     "*Exemplo:*\n"
-                     "Aluguel - 1500 - dia 10\n"
-                     "Condomínio - 500 - dia 5\n"
-                     "Escola Crianças - 2000 - dia 15\n\n"
-                     "Eu tentarei identificar a categoria automaticamente. Se não conseguir, pedirei sua ajuda!\n\n"
-                     "Tô com você! 👍"
-                 )
-                 send_message(from_number, mensagens.estilo_msg(msg_instrucao_gastos_fixos))
-                 estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos" # Define o estado
-                 estado_modificado_fluxo = True
-                 mensagem_tratada = True
-                 salvar_estado(from_number, estado)
-                 logging.info(f"Instruções para registrar gastos fixos enviadas para {from_number}. Estado definido como 'aguardando_registro_gastos_fixos'. Retornando.")
-                 return {"status": "instruções de gastos fixos enviadas, aguardando lista"}
+        # --- FLUXO: INICIAR REGISTRO DE GASTOS FIXOS (AJUSTADO) ---
+        elif any(term in msg_lower for term in ["gastos fixos", "fixos mensais", "relacionar gastos"]) and not mensagem_tratada:
+            logging.info(f"{from_number} pediu para registrar gastos fixos.")
+
+            msg_instrucao_gastos_fixos = (
+                "Perfeito! Mande seus gastos fixos assim:\n"
+                "Descrição - Valor - Dia\n\n"
+                "Exemplo:\n"
+                "Aluguel - 1500 - dia 10"
+            )
+            send_message(from_number, mensagens.estilo_msg(msg_instrucao_gastos_fixos))
+
+            estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando_registro_gastos_fixos"}
 
         # --- FLUXO: DEFINIR LIMITES --- 
         if estado.get("ultimo_fluxo") == "aguardando_definicao_limites":
@@ -584,228 +577,75 @@ async def whatsapp_webhook(request: Request):
              logging.info(f"Instruções para definir limites enviadas para {from_number}. Estado definido como 'aguardando_definicao_limites'. Retornando.")
              return {"status": "instruções de limite enviadas, aguardando lista"}
 
-        # --- FLUXO: REGISTRAR GASTOS FIXOS (Interpretação e Confirmação) --- 
+        # --- FLUXO: REGISTRAR E CONFIRMAR GASTOS FIXOS (OTIMIZADO) ---
         elif estado.get("ultimo_fluxo") == "aguardando_registro_gastos_fixos":
-            logging.info(f"Processando lista de gastos fixos enviada por {from_number}.")
             linhas = incoming_msg.strip().split("\n")
-            gastos_fixos_pendentes = [] # Lista para armazenar gastos interpretados para confirmação
-            gastos_fixos_erro_parse = [] # Erros durante a interpretação inicial
+            gastos_fixos_pendentes = []
+            erros = []
 
             for linha in linhas:
-                partes = [p.strip() for p in re.split(r'[-–]', linha)] # Divide por hífen ou travessão
-                
-                if len(partes) == 3:
-                    descricao = partes[0]
-                    valor_str = partes[1].replace("R$", "").replace(".", "").replace(",", ".")
-                    dia_str = partes[2].lower().replace("dia", "").strip()
-                    
-                    try:
-                        valor = float(valor_str)
-                        if valor < 0: raise ValueError("Valor negativo")
-                        dia = int(dia_str)
-                        if not 1 <= dia <= 31: raise ValueError("Dia inválido")
-                        
-                        # Tenta extrair categoria da descrição e depois categorizar
-                        match_categoria_parenteses = re.match(r"^(.*?)(?:\s*\((.*?)\))?$", descricao.strip())
-                        descricao_principal = descricao.strip() # Default para descrição completa
-                        categoria_extraida_parenteses = None
+                try:
+                    descricao, valor, dia = [parte.strip() for parte in linha.split('-')]
+                    valor = float(valor.replace("R$", "").replace(",", "."))
+                    dia = int(re.findall(r'\d+', dia)[0])
 
-                        if match_categoria_parenteses:
-                            # group(1) é a descrição antes dos parênteses (ou a string toda se não houver parênteses)
-                            descricao_principal = match_categoria_parenteses.group(1).strip()
-                            if not descricao_principal: # Caso a descrição seja SÓ a categoria, ex: "(Moradia)"
-                                descricao_principal = match_categoria_parenteses.group(2).strip() if match_categoria_parenteses.group(2) else descricao.strip()
+                    categoria = categorizar(descricao)
 
-                            if match_categoria_parenteses.group(2):
-                                # group(2) é a categoria dentro dos parênteses
-                                categoria_extraida_parenteses = match_categoria_parenteses.group(2).strip().capitalize()
-                        
-                        categoria_final = None
-                        if categoria_extraida_parenteses:
-                            if categoria_extraida_parenteses in CATEGORIAS_VALIDAS:
-                                categoria_final = categoria_extraida_parenteses
-                            else:
-                                logging.warning(f"Categoria fornecida entre parênteses 	'{categoria_extraida_parenteses}	' para 	'{descricao_principal}	' não é uma categoria válida. Tentando categorizar a descrição.")
-                                # Deixa categoria_final como None para que categorizar(descricao_principal) seja chamado
+                    gastos_fixos_pendentes.append({
+                        "descricao": descricao,
+                        "valor": valor,
+                        "dia": dia,
+                        "categoria_status": categoria
+                    })
+                except Exception as e:
+                    erros.append(f"Linha com erro: {linha}")
 
-                        if not categoria_final: # Se não foi extraída uma categoria válida dos parênteses ou não havia parênteses
-                            categoria_final = categorizar(descricao_principal) # Tenta categorizar a descrição limpa
-                        
-                        gasto_interpretado = {
-                            "descricao": descricao_principal, # Salva a descrição limpa
-                            "valor": valor,
-                            "dia": dia,
-                            "categoria_status": categoria_final # Pode ser 'A definir', 'AMBIGUO:...' ou a categoria
-                        }
-                        gastos_fixos_pendentes.append(gasto_interpretado)
-                        
-                    except ValueError as e:
-                        gastos_fixos_erro_parse.append(f"❌ Formato inválido: '{linha}' (Valor ou Dia inválido: {e})")
-                    except Exception as e:
-                        gastos_fixos_erro_parse.append(f"❌ Erro inesperado ao processar '{linha}': {str(e)}")
-                        logging.error(f"Erro ao interpretar linha de gasto fixo '{linha}' para {from_number}: {e}")
-                else:
-                    if linha.strip(): # Ignora linhas vazias
-                        gastos_fixos_erro_parse.append(f"❌ Formato inválido: '{linha}' (Use: Descrição - Valor - dia Dia)")
+            if erros:
+                resposta = "⚠️ Alguns erros:\n" + "\n".join(erros) + "\nCorrija e envie novamente."
+                send_message(from_number, mensagens.estilo_msg(resposta))
+            else:
+                resposta = "Confirme os gastos fixos:\n"
+                for idx, gasto in enumerate(gastos_fixos_pendentes, 1):
+                    resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - R${gasto['valor']:.2f} - dia {gasto['dia']}\n"
+                resposta += "\nConfirma? (Sim/Editar)"
+                send_message(from_number, mensagens.estilo_msg(resposta))
 
-            # Monta a mensagem de confirmação
-            resposta_confirmacao = "" # Inicializa vazia
-            linhas_confirmacao = []
-            algum_para_confirmar = False
-            
-            if gastos_fixos_pendentes:
-                resposta_confirmacao = "Ok, entendi os seguintes gastos fixos:\n"
-                for gasto in gastos_fixos_pendentes:
-                    cat_status = gasto['categoria_status']
-                    cat_display = ""
-                    if cat_status.startswith("AMBIGUO:"):
-                        partes_amb = cat_status.split(":")
-                        opcoes = partes_amb[2]
-                        cat_display = f"❓ ({opcoes}?)" # Indica ambiguidade
-                    elif cat_status != "A definir":
-                        cat_display = f"({cat_status})" # Mostra categoria encontrada
-                    else:
-                        cat_display = "(A definir)" # Indica que não foi encontrada
-                    
-                    valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    linhas_confirmacao.append(f"- {gasto['descricao']} {cat_display} - {valor_fmt} - dia {gasto['dia']}")
-                    algum_para_confirmar = True
-                
-                resposta_confirmacao += "\n".join(linhas_confirmacao)
-                resposta_confirmacao += "\n\nConfirma o registro? (Sim / Editar)"
                 estado["gastos_fixos_pendentes_confirmacao"] = gastos_fixos_pendentes
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos"
-                estado_modificado_fluxo = True
-            else:
-                # Se não entendeu NENHUM gasto válido
-                resposta_confirmacao = "Não consegui entender nenhum gasto fixo na sua mensagem." 
-                estado["ultimo_fluxo"] = None # Limpa o fluxo
-                estado_modificado_fluxo = True
-                
-            # Adiciona erros de parse, se houver
-            if gastos_fixos_erro_parse:
-                 if algum_para_confirmar:
-                     resposta_confirmacao += "\n\n⚠️ *Além disso, algumas linhas tiveram erro:*\n" + "\n".join(gastos_fixos_erro_parse)
-                 else:
-                     # Se SÓ deu erro de parse
-                     resposta_confirmacao += "\n\n*Linhas com erro:*\n" + "\n".join(gastos_fixos_erro_parse)
-            
-            send_message(from_number, mensagens.estilo_msg(resposta_confirmacao))
-            mensagem_tratada = True
-            logging.info(f"Pedido de confirmação/erros para gastos fixos enviado para {from_number}.")
+
             salvar_estado(from_number, estado)
-            return {"status": "aguardando confirmação de gastos fixos ou lista corrigida"}
+            return {"status": "processado gastos fixos pendentes"}
 
-        # --- FLUXO: CONFIRMAÇÃO DE GASTOS FIXOS (Registro ou Edição) --- 
+        # --- FLUXO: CONFIRMAÇÃO E REGISTRO EFETIVO NA PLANILHA ---
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_gastos_fixos":
-            gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
-            resposta_usuario_lower = incoming_msg.lower()
-
-            # VERIFICA SE O USUÁRIO QUER SAIR DO FLUXO OU MUDAR DE ASSUNTO
-            if (any(keyword in resposta_usuario_lower for keyword in ["voltar", "menu", "cancelar", "outro assunto", "parar", "sair"])
-                or any(comando_chave in resposta_usuario_lower for comando_chave in ["gastos diários", "gasto diário", "registrar gasto diário", "item 2", "opção 2", "segunda opção"])):
-                logging.info(f"{from_number} solicitou sair do fluxo de confirmação de gastos fixos. Resetando fluxo.")
-                send_message(from_number, mensagens.estilo_msg("Ok! Voltando ao menu anterior ou aguardando seu novo comando."))
-                estado["ultimo_fluxo"] = None
-                if "gastos_fixos_pendentes_confirmacao" in estado: del estado["gastos_fixos_pendentes_confirmacao"]
-                mensagem_tratada = False # Para reprocessar a mensagem original e pegar o novo comando
-                estado_modificado_fluxo = True # Indica que o estado foi modificado
-            
-            elif "sim" in resposta_usuario_lower or "yes" in resposta_usuario_lower or "confirmo" in resposta_usuario_lower:
-                gastos_fixos_salvos = []
-                gastos_fixos_erro = []
-                categorias_pendentes_definir = [] # Guarda descrição e dia para correção
-                algum_sucesso = False
+            if incoming_msg.lower() in ["sim", "confirmo"]:
+                gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
+                sucesso = []
+                falha = []
 
                 for gasto in gastos_pendentes:
-                    categoria_final = gasto['categoria_status']
-                    # Se ambíguo ou a definir, salva como 'A definir' e marca para correção
-                    if categoria_final.startswith("AMBIGUO:") or categoria_final == "A definir":
-                        categoria_final = "A definir"
-                        # Guarda descrição e dia para identificar o gasto depois
-                        categorias_pendentes_definir.append({"descricao": gasto['descricao'], "dia": gasto['dia']})
+                    resultado = salvar_gasto_fixo(from_number, gasto["descricao"], gasto["valor"], gasto["dia"], gasto["categoria_status"])
+                    if resultado["status"] == "ok":
+                        sucesso.append(gasto["descricao"])
+                    else:
+                        falha.append(gasto["descricao"])
 
-                    try:
-                        # Chama a função para salvar o gasto fixo individualmente
-                        resultado_save = salvar_gasto_fixo(from_number, gasto['descricao'], gasto['valor'], gasto['dia'], categoria_final)
-                        if resultado_save["status"] == "ok":
-                            valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                            cat_display = f"({categoria_final})" if categoria_final != "A definir" else "(A definir)"
-                            gastos_fixos_salvos.append(f"✅ {gasto['descricao']} {cat_display} - {valor_fmt} - dia {gasto['dia']}")
-                            algum_sucesso = True
-                        else:
-                            gastos_fixos_erro.append(f"❌ Erro ao salvar {gasto['descricao']}: {resultado_save.get('mensagem', 'Erro desconhecido')}")
-                    except Exception as e:
-                        gastos_fixos_erro.append(f"❌ Erro inesperado ao salvar {gasto['descricao']}: {str(e)}")
-                        logging.error(f"Erro ao salvar gasto fixo {gasto['descricao']} para {from_number}: {e}")
-                
-                # Monta a resposta final
-                resposta = ""
-                if gastos_fixos_salvos:
-                    resposta += "\n📝 *Gastos Fixos Registrados:*\n" + "\n".join(gastos_fixos_salvos)
-                if gastos_fixos_erro:
-                    resposta += "\n❌ *Erros ao registrar:*\n" + "\n".join(gastos_fixos_erro)
-                
-                if not resposta:
-                    resposta = "Houve um problema e nenhum gasto fixo pôde ser registrado." 
-                
-                # Oferece correção se houver categorias pendentes
-                if categorias_pendentes_definir:
-                    resposta += "\n\n⚠️ Notei que alguns gastos ficaram com categoria 'A definir'. Gostaria de defini-las agora? (Sim/Não)"
-                    estado["categorias_fixas_a_definir"] = categorias_pendentes_definir # Salva a lista para o próximo passo
-                    estado["ultimo_fluxo"] = "aguardando_decisao_correcao_cat_fixa"
-                # Se não há pendentes, pergunta sobre lembretes (se algo foi salvo)
-                elif algum_sucesso:
-                    resposta += "\n\n👍 Gastos fixos registrados! Gostaria de ativar lembretes automáticos para ser avisado *um dia antes e também no dia do vencimento*? (Sim/Não)"
-                    estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
-                else:
-                    # Se só deu erro, reseta o fluxo
-                    estado["ultimo_fluxo"] = None
-                
-                # Limpa os gastos pendentes do estado
-                if "gastos_fixos_pendentes_confirmacao" in estado: del estado["gastos_fixos_pendentes_confirmacao"]
-                estado_modificado_fluxo = True
-                mensagem_tratada = True
-                send_message(from_number, mensagens.estilo_msg(resposta))
-                logging.info(f"Registro de gastos fixos finalizado para {from_number}. Sucessos: {len(gastos_fixos_salvos)}, Erros: {len(gastos_fixos_erro)}")
+                resposta = "✅ Gastos fixos registrados:\n" + "\n".join(sucesso)
+                if falha:
+                    resposta += "\n\n❌ Falha em:\n" + "\n".join(falha)
 
-            elif "editar" in resposta_usuario_lower or "corrigir" in resposta_usuario_lower:
-                logging.info(f"{from_number} pediu para editar os gastos fixos pendentes.")
-                # Monta a lista novamente para referência
-                linhas_para_editar = []
-                for i, gasto_item in enumerate(gastos_pendentes):
-                    cat_status = gasto_item["categoria_status"]
-                    cat_display = f"({cat_status})" if cat_status != "A definir" and not cat_status.startswith("AMBIGUO:") else "(A DEFINIR)"
-                    if cat_status.startswith("AMBIGUO:"):
-                        opcoes_ambiguas = cat_status.split(":")[2]
-                        cat_display = f"? ({opcoes_ambiguas})"
-                    
-                    gasto_valor = gasto_item["valor"]
-                    gasto_descricao = gasto_item["descricao"]
-                    gasto_dia = gasto_item["dia"]
-                    valor_fmt = f"R$ {gasto_valor:.2f}".replace(".", ",") # Formato BRL
-                    linhas_para_editar.append(f"{i+1}. {gasto_descricao} {cat_display} - {valor_fmt} - dia {gasto_dia}")
-                
-                texto_itens_para_editar = "\n".join(linhas_para_editar)
-                msg_editar = (
-                    f"Ok, vamos corrigir! Qual item você quer alterar?\n\n"
-                    f"{texto_itens_para_editar}\n\n"
-                    f"Você pode me dizer o número do item e o que corrigir (ex: \"1, o valor é 1600\", \"2, a categoria é Moradia\") ou enviar a linha inteira corrigida."
-                )
-                send_message(from_number, mensagens.estilo_msg(msg_editar))
-                estado["ultimo_fluxo"] = "aguardando_edicao_gasto_fixo" # Novo estado
-                # Mantém gastos_fixos_pendentes_confirmacao no estado
-                estado_modificado_fluxo = True
-                mensagem_tratada = True
+                resposta += "\n\nQuer ativar lembretes automáticos? (Sim/Não)"
+                estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
+
+            elif incoming_msg.lower() in ["editar", "corrigir"]:
+                resposta = "Envie os gastos corrigidos novamente, por favor."
+                estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
             else:
-                # Resposta não reconhecida, pede novamente
-                logging.warning(f"{from_number} respondeu algo inesperado à confirmação de gastos fixos: {incoming_msg}")
-                send_message(from_number, mensagens.estilo_msg("Não entendi sua resposta. Por favor, diga 'Sim' para confirmar o registro, ou 'Editar' para fazer alterações."))
-                estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos" 
-                estado_modificado_fluxo = True 
-                mensagem_tratada = True
+                resposta = "Resposta inválida. Responda com 'Sim' ou 'Editar'."
+
+            send_message(from_number, mensagens.estilo_msg(resposta))
             salvar_estado(from_number, estado)
-            return {"status": "confirmação de gastos fixos processada"}
+            return {"status": "confirmação finalizada"}
 
         # --- FLUXO: PROCESSANDO EDIÇÃO DE GASTO FIXO ---
         elif estado.get("ultimo_fluxo") == "aguardando_edicao_gasto_fixo":
