@@ -677,14 +677,17 @@ async def whatsapp_webhook(request: Request):
             confirmacoes = [
                 "sim", "confirmo", "confirmar", "isso", "ok", "perfeito", "correto",
                 "positivo", "vai", "segue", "manda ver", "tudo certo", "confirmado",
-                "claro", "exato", "certinho", "é isso mesmo", "pode seguir", "pode confirmar"
+                "claro", "exato", "certinho", "é isso mesmo", "pode seguir", "pode confirmar",
+                "correta", "corretas", "esta correto", "estao corretas" "tudo ok", "esta certo", "beleza",
+                "estao corretos","tudo bem", "vamos em frente"
             ]
 
             correcoes = [
                 "editar", "corrigir", "alterar", "mudar", "errado", "nao", "não",
                 "incorreto", "calma", "pera", "espera", "voltar", "ainda não", 
                 "peraí", "espera aí", "tem erro", "preciso ajustar", "revisar", 
-                "rever", "não confirma", "não é isso"
+                "rever", "não confirma", "não é isso", "quero alterar", "quero corrigir",
+                "quero editar", "vou corrigir", "vou editar", "faltou um item" "esqeci"
             ]
 
             if any(palavra in resposta_usuario for palavra in confirmacoes):
