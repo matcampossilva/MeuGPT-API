@@ -581,39 +581,35 @@ async def whatsapp_webhook(request: Request):
         elif estado.get("ultimo_fluxo") == "aguardando_registro_gastos_fixos":
             linhas = incoming_msg.strip().split("\n")
             gastos_fixos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
-            categorias_alteradas = False
             erros = []
 
-            if gastos_fixos_pendentes and all(re.match(r"\d+\s*[,:-]?\s*a?\s*categoria", linha, re.I) for linha in linhas):
-                # Fluxo de correção de categorias
+            correcao_categorias = all(re.match(r"^\d+[,:-]?\s*(?:a )?categoria", linha, re.IGNORECASE) for linha in linhas)
+
+            if gastos_fixos_pendentes and correcao_categorias:
                 for linha in linhas:
-                    match_categoria = re.match(r"(\d+)[,:-]?\s*a?\s*categoria\s*(?:é|sera|será|para|pra)?\s*(.+)\.?$", linha.strip(), re.I)
+                    match_categoria = re.match(r"(\d+)[,:-]?\s*(?:a )?categoria(?: é| sera| será| pra| para)?\s*(.+)\.?$", linha.strip(), re.IGNORECASE)
                     if match_categoria:
                         idx, nova_categoria = match_categoria.groups()
                         idx = int(idx) - 1
-                        nova_categoria = nova_categoria.capitalize().strip()
+                        nova_categoria = nova_categoria.strip().capitalize()
                         if 0 <= idx < len(gastos_fixos_pendentes) and nova_categoria in CATEGORIAS_VALIDAS:
                             gastos_fixos_pendentes[idx]["categoria_status"] = nova_categoria
-                            categorias_alteradas = True
                         else:
                             erros.append(f"Linha com erro: '{linha}' (índice ou categoria inválidos)")
                     else:
                         erros.append(f"Linha com erro: '{linha}' (formato inválido para categoria)")
-                
+
                 if erros:
                     resposta = "⚠️ Alguns erros encontrados:\n" + "\n".join(erros) + "\n\nCorrija e envie novamente."
-                    send_message(from_number, mensagens.estilo_msg(resposta))
                 else:
                     resposta = "✅ Categorias atualizadas! Confira agora:\n"
                     for idx, gasto in enumerate(gastos_fixos_pendentes, 1):
                         valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                         resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - {valor_fmt} - dia {gasto['dia']}\n"
                     resposta += "\nTudo certo agora? (Sim/Editar)"
-                    send_message(from_number, mensagens.estilo_msg(resposta))
                     estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos"
                     estado["gastos_fixos_pendentes_confirmacao"] = gastos_fixos_pendentes
             else:
-                # Fluxo original de registro de gastos
                 gastos_fixos_pendentes = []
                 for linha in linhas:
                     try:
@@ -628,7 +624,7 @@ async def whatsapp_webhook(request: Request):
                             valor = float(valor.replace(".", "").replace(",", "."))
                             dia = int(dia.strip())
                         else:
-                            raise ValueError(f"Formato inválido")
+                            raise ValueError("Formato inválido")
 
                         categoria = categorizar(descricao)
 
@@ -644,19 +640,16 @@ async def whatsapp_webhook(request: Request):
 
                 if erros:
                     resposta = "⚠️ Alguns erros encontrados:\n" + "\n".join(erros) + "\n\nCorrija e envie novamente."
-                    send_message(from_number, mensagens.estilo_msg(resposta))
                 else:
                     resposta = "Confirme os gastos fixos:\n"
                     for idx, gasto in enumerate(gastos_fixos_pendentes, 1):
                         valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        categoria_display = gasto['categoria_status']
-                        resposta += f"{idx}. {gasto['descricao']} ({categoria_display}) - {valor_fmt} - dia {gasto['dia']}\n"
+                        resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - {valor_fmt} - dia {gasto['dia']}\n"
                     resposta += "\nConfirma? (Sim/Editar)"
-                    send_message(from_number, mensagens.estilo_msg(resposta))
-
-                    estado["gastos_fixos_pendentes_confirmacao"] = gastos_fixos_pendentes
                     estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos"
+                    estado["gastos_fixos_pendentes_confirmacao"] = gastos_fixos_pendentes
 
+            send_message(from_number, mensagens.estilo_msg(resposta))
             salvar_estado(from_number, estado)
             return {"status": "processado gastos fixos pendentes"}
 
