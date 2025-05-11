@@ -85,6 +85,21 @@ mensagens_gpt_base = [
 ]
 
 # === FUNÇÃO PARA INTERPRETAR GASTOS (SIMPLIFICADA - Regex) ===
+
+def identificar_gasto_na_mensagem(mensagem):
+    padrao = r"(\d+[.,]?\d*)\s*(reais|R\$)?\s*[-,]?\s*([\w\s]+)?\s*(crédito|débito|pix|dinheiro)?"
+    match = re.search(padrao, mensagem.lower())
+    if match:
+        valor = match.group(1).replace(",", ".")
+        descricao = match.group(3).strip() if match.group(3) else "Sem descrição"
+        forma_pagamento = match.group(4) if match.group(4) else "não informada"
+        return {
+            "descricao": descricao,
+            "valor": float(valor),
+            "forma_pagamento": forma_pagamento
+        }
+    return None
+
 def interpretar_gasto_simples(mensagem_usuario):
     """Tenta extrair detalhes de um gasto usando Regex."""
     # Padrão: Descrição (qualquer coisa) - Valor (com R$, ',', '.') - Forma Pgto (palavra)
@@ -1106,6 +1121,30 @@ async def whatsapp_webhook(request: Request):
             mensagem_tratada = True
             salvar_estado(from_number, estado)
             return {"status": "lista de comandos enviada"}
+
+        # NOVO BLOCO PARA IDENTIFICAR GASTOS AUTOMATICAMENTE
+        gasto_identificado = identificar_gasto_na_mensagem(incoming_msg)
+
+        if gasto_identificado:
+            registrar_gasto(
+                from_number, 
+                gasto_identificado["descricao"], 
+                gasto_identificado["valor"], 
+                gasto_identificado["forma_pagamento"],
+                categoria=None
+            )
+
+            total_categoria, limite_categoria = verificar_limites(from_number, gasto_identificado["descricao"])
+            
+            resposta = (
+                f"Gasto registrado: {gasto_identificado['descricao']} - "
+                f"R${gasto_identificado['valor']:.2f} ({gasto_identificado['forma_pagamento']}).\n"
+                f"Total gasto na categoria '{gasto_identificado['descricao']}': R${total_categoria:.2f} "
+                f"de um limite definido de R${limite_categoria:.2f}."
+            )
+
+            send_message(from_number, mensagens.estilo_msg(resposta))
+            mensagem_tratada = True  # Importante marcar como tratada aqui para não chamar GPT
 
         # --- FLUXO GERAL (GPT) --- 
         if not mensagem_tratada:
