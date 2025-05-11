@@ -660,7 +660,9 @@ async def whatsapp_webhook(request: Request):
                     for idx, gasto in enumerate(gastos_fixos_pendentes, 1):
                         valor_fmt = f"R$ {gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                         resposta += f"{idx}. {gasto['descricao']} ({gasto['categoria_status']}) - {valor_fmt} - dia {gasto['dia']}\n"
-                    resposta += "\nConfirma? (Sim/Editar)"
+            
+                    resposta += "\nEssas informações estão corretas ou precisa ajustar algo?"
+
                     estado["ultimo_fluxo"] = "aguardando_confirmacao_gastos_fixos"
                     estado["gastos_fixos_pendentes_confirmacao"] = gastos_fixos_pendentes
 
@@ -670,12 +672,23 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: CONFIRMAÇÃO E REGISTRO EFETIVO NA PLANILHA ---
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_gastos_fixos":
-            resposta_usuario = incoming_msg.lower().strip()
+            resposta_usuario = incoming_msg.lower().strip().replace(".", "").replace("!", "")
 
-            confirmacoes = ["sim", "confirmo", "confirmar", "isso", "ok", "perfeito", "correto", "positivo", "vai", "segue", "manda ver"]
-            correcoes = ["editar", "corrigir", "alterar", "mudar", "errado", "nao", "não", "incorreto", "calma", "pera", "espera", "voltar"]
+            confirmacoes = [
+                "sim", "confirmo", "confirmar", "isso", "ok", "perfeito", "correto",
+                "positivo", "vai", "segue", "manda ver", "tudo certo", "confirmado",
+                "claro", "exato", "certinho", "é isso mesmo", "pode seguir", "pode confirmar"
+            ]
 
-            if resposta_usuario in confirmacoes:
+            correcoes = [
+                "editar", "corrigir", "alterar", "mudar", "errado", "nao", "não",
+                "incorreto", "calma", "pera", "espera", "voltar", "ainda não", 
+                "peraí", "espera aí", "tem erro", "preciso ajustar", "revisar", 
+                "rever", "não confirma", "não é isso"
+            ]
+
+            if any(palavra in resposta_usuario for palavra in confirmacoes):
+
                 gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
                 sucesso = []
                 falha = []
