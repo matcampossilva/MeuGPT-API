@@ -144,3 +144,15 @@ def ler_gastos_usuario_periodo(numero_usuario, data_inicio):
     except Exception as e:
         print(f"[ERROR] Erro ao ler gastos para {numero_usuario} desde {data_inicio}: {e}")
         return []
+
+def salvar_gasto_fixo(numero_usuario, descricao, valor, dia, categoria, lembrete_ativo=False):
+    try:
+        aba_gastos_fixos = get_gastos_fixos()
+        lembrete = "SIM" if lembrete_ativo else "NÃO"
+        nova_linha = [numero_usuario, descricao, valor, "", categoria, dia, lembrete]
+        aba_gastos_fixos.append_row(nova_linha)
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"[ERRO] ao salvar gasto fixo: {e}")
+        return {"status": "erro", "detalhe": str(e)}
+    

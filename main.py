@@ -587,11 +587,11 @@ async def whatsapp_webhook(request: Request):
 
             if gastos_fixos_pendentes and correcao_categorias:
                 for linha in linhas:
-                    match_categoria = re.match(r"(\d+)[,:-]?\s*(?:a )?categoria(?: é| sera| será| pra| para)?\s*(.+)\.?$", linha.strip(), re.IGNORECASE)
+                    match_categoria = re.match(r"^(\d+)[,:-]?\s*(?:a )?categoria(?:\s*(?:é|eh|sera|será|pra|para))?\s*(.+?)\.?$", linha.strip(), re.IGNORECASE)
                     if match_categoria:
                         idx, nova_categoria = match_categoria.groups()
                         idx = int(idx) - 1
-                        nova_categoria = nova_categoria.strip().capitalize()
+                        nova_categoria = nova_categoria.strip().title()
                         if 0 <= idx < len(gastos_fixos_pendentes) and nova_categoria in CATEGORIAS_VALIDAS:
                             gastos_fixos_pendentes[idx]["categoria_status"] = nova_categoria
                         else:
@@ -655,9 +655,12 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: CONFIRMAÇÃO E REGISTRO EFETIVO NA PLANILHA ---
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_gastos_fixos":
-            resposta_usuario_lower = incoming_msg.lower().strip()
-            
-            if resposta_usuario_lower in ["sim", "confirmo", "ok", "confirmado", "certo"]:
+            resposta_usuario = incoming_msg.lower().strip()
+
+            confirmacoes = ["sim", "confirmo", "confirmar", "isso", "ok", "perfeito", "correto", "positivo", "vai", "segue", "manda ver"]
+            correcoes = ["editar", "corrigir", "alterar", "mudar", "errado", "nao", "não", "incorreto", "calma", "pera", "espera", "voltar"]
+
+            if resposta_usuario in confirmacoes:
                 gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
                 sucesso = []
                 falha = []
@@ -669,23 +672,23 @@ async def whatsapp_webhook(request: Request):
                     else:
                         falha.append(gasto["descricao"])
 
-                resposta = "✅ Registrei seus gastos fixos com sucesso:\n" + "\n".join(f"- {desc}" for desc in sucesso)
+                resposta = "✅ Prontinho! Seus gastos fixos já foram registrados:\n" + "\n".join(f"• {desc}" for desc in sucesso)
                 if falha:
-                    resposta += "\n\n⚠️ Não consegui registrar estes itens:\n" + "\n".join(f"- {desc}" for desc in falha)
+                    resposta += "\n\n⚠️ Opa, tive dificuldade nesses aqui:\n" + "\n".join(f"• {desc}" for desc in falha)
 
-                resposta += "\n\nVocê quer ativar lembretes automáticos para esses gastos? (Sim/Não)"
+                resposta += "\n\nQuer que eu ative lembretes automáticos pra você não esquecer nenhuma dessas contas?"
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
 
-            elif resposta_usuario_lower in ["editar", "corrigir", "quero editar", "quero corrigir", "preciso corrigir", "preciso editar", "vou editar", "vou corrigir"]:
-                resposta = "Claro! Me envie agora os gastos corrigidos, por favor."
+            elif resposta_usuario in correcoes:
+                resposta = "Tranquilo! Me mande o que precisa ser ajustado."
                 estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
-            
+
             else:
-                resposta = "🤔 Não entendi bem... Por favor, responda apenas com 'Sim' para confirmar ou 'Editar' para corrigir algo."
+                resposta = "🤔 Não entendi perfeitamente. Pode confirmar pra mim ou indicar se precisa corrigir algo?"
 
             send_message(from_number, mensagens.estilo_msg(resposta))
             salvar_estado(from_number, estado)
-            return {"status": "confirmação finalizada"}
+            return {"status": "confirmação de gastos fixos finalizada"}
 
         # --- FLUXO: PROCESSANDO EDIÇÃO DE GASTO FIXO ---
         elif estado.get("ultimo_fluxo") == "aguardando_edicao_gasto_fixo":
@@ -928,86 +931,70 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: CONFIRMAÇÃO DE LEMBRETES (Gastos Fixos) --- 
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_lembretes_fixos":
-            resposta_usuario_lower = incoming_msg.lower()
-            if "sim" in resposta_usuario_lower or "yes" in resposta_usuario_lower:
-                logging.info(f"{from_number} confirmou ativação de lembretes para gastos fixos.")
-                # AQUI - Implementar a lógica para ATIVAR os lembretes (talvez marcar na planilha?)
-                # Por enquanto, apenas confirma
-                send_message(from_number, mensagens.estilo_msg("Ótimo! Lembretes ativados. 👍"))
-                estado["ultimo_fluxo"] = None # Finaliza o fluxo específico
-                estado["lembretes_fixos_ativos"] = True # Marca no estado
-                estado_modificado_fluxo = True
-                mensagem_tratada = True
-            elif "não" in resposta_usuario_lower or "nao" in resposta_usuario_lower:
-                logging.info(f"{from_number} não quis ativar lembretes para gastos fixos.")
-                send_message(from_number, mensagens.estilo_msg("Entendido. Sem lembretes por enquanto."))
-                estado["ultimo_fluxo"] = None # Finaliza o fluxo específico
-                estado["lembretes_fixos_ativos"] = False # Marca no estado
-                estado_modificado_fluxo = True
-                mensagem_tratada = True
-            else:
-                # Resposta não é Sim/Não - Assume que o usuário quer fazer outra coisa (FLEXIBILIDADE)
-                logging.info(f"{from_number} enviou msg não relacionada à confirmação de lembretes: {incoming_msg}. Saindo do fluxo de lembretes.")
-                estado["ultimo_fluxo"] = None # Sai do fluxo específico
-                estado_modificado_fluxo = True
-                # IMPORTANTE: Não marca mensagem_tratada = True, para que a mensagem atual seja reprocessada pelo fluxo geral abaixo
-                # Salva o estado imediatamente para refletir a saída do fluxo
-                salvar_estado(from_number, estado)
-                # Continua o processamento da mensagem atual no fluxo geral
-                pass # Deixa o código continuar para o fluxo geral
+            resposta_usuario = incoming_msg.lower().strip()
 
-        # --- FLUXO: REGISTRO DE GASTO DIÁRIO (Interpretação e Confirmação) --- 
-        # Verifica se a mensagem PARECE um gasto diário E não foi tratada por fluxos anteriores
-        # E não está em um fluxo específico que espera outra coisa (exceto aguardando gasto)
+            respostas_sim = ["sim", "claro", "pode ativar", "ativa", "ativar", "com certeza", "isso", "quero", "positivo", "por favor"]
+            respostas_nao = ["não", "nao", "dispenso", "deixa", "nada", "negativo", "melhor não", "melhor nao", "não precisa", "tranquilo"]
+
+            if resposta_usuario in respostas_sim:
+                send_message(from_number, mensagens.estilo_msg("✅ Maravilha! Lembretes automáticos ativados. Vou te avisar sempre no dia anterior e também no dia do vencimento, beleza? 😉"))
+                estado["lembretes_fixos_ativos"] = True
+
+            elif resposta_usuario in respostas_nao:
+                send_message(from_number, mensagens.estilo_msg("Combinado! Sem lembretes por enquanto. Se precisar depois é só me avisar. 😉"))
+                estado["lembretes_fixos_ativos"] = False
+
+            else:
+                resposta = "🤔 Não consegui entender exatamente. Quer que eu ative os lembretes automáticos pra você não esquecer das contas fixas?"
+                send_message(from_number, mensagens.estilo_msg(resposta))
+                return {"status": "aguardando resposta clara sobre lembretes"}
+
+            estado["ultimo_fluxo"] = None
+            salvar_estado(from_number, estado)
+            return {"status": "finalizado fluxo lembretes automáticos"}
+
+# --- FLUXO: REGISTRO DE GASTO DIÁRIO (Interpretação e Confirmação) ---
+        # Verifica se a mensagem parece um gasto diário
         elif not mensagem_tratada and estado.get("ultimo_fluxo") in [None, "aguardando_registro_gasto", "cadastro_completo", "saudacao_realizada"]:
             dados_gasto = interpretar_gasto_simples(incoming_msg)
-            
+
             if dados_gasto:
-                logging.info(f"Gasto diário interpretado para {from_number}: {dados_gasto}")
-                
-                # Tenta categorizar
                 categoria_status = categorizar(dados_gasto["descricao"])
                 dados_gasto["categoria_status"] = categoria_status
-                
-                # Monta mensagem de confirmação
-                cat_display = ""
-                pergunta_categoria = ""
+
                 if categoria_status.startswith("AMBIGUO:"):
-                    partes_amb = categoria_status.split(":")
-                    opcoes = partes_amb[2]
-                    cat_display = f"❓ Categoria: {opcoes}?" 
-                    pergunta_categoria = f"Notei que '{dados_gasto['descricao']}' pode ser {opcoes}. Qual devo usar?"
-                    dados_gasto["categoria_final_prov"] = "A definir" # Categoria temporária
-                elif categoria_status != "A definir":
-                    cat_display = f"Categoria: {categoria_status}"
-                    dados_gasto["categoria_final_prov"] = categoria_status
-                else:
-                    cat_display = "Categoria: (A definir)" 
-                    pergunta_categoria = "Não consegui definir a categoria. Qual devo usar?"
+                    opcoes = categoria_status.split(":")[2]
+                    pergunta_categoria = f"'{dados_gasto['descricao']}' pode ser {opcoes}. Me diga qual usar."
                     dados_gasto["categoria_final_prov"] = "A definir"
-                
+                    cat_display = f"❓ Categoria: {opcoes}?"
+                elif categoria_status != "A definir":
+                    pergunta_categoria = ""
+                    dados_gasto["categoria_final_prov"] = categoria_status
+                    cat_display = f"Categoria: {categoria_status}"
+                else:
+                    pergunta_categoria = "Não consegui definir a categoria. Me informe, por favor."
+                    dados_gasto["categoria_final_prov"] = "A definir"
+                    cat_display = "Categoria: (A definir)"
+
                 valor_fmt = f"R$ {dados_gasto['valor']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 msg_confirmacao = (
-                    f"Confirma o registro?\n\n"
-                    f"- Descrição: {dados_gasto['descricao']}\n"
-                    f"- Valor: {valor_fmt}\n"
-                    f"- {cat_display}\n"
-                    f"- Forma Pgto: {dados_gasto['forma_pagamento']}\n\n"
-                    f"{pergunta_categoria}"
-                    f"(Sim / Editar / [Nome da Categoria])"
+                    f"Confirme este gasto:\n\n"
+                    f"Descrição: {dados_gasto['descricao']}\n"
+                    f"Valor: {valor_fmt}\n"
+                    f"{cat_display}\n"
+                    f"Forma Pgto: {dados_gasto['forma_pagamento']}\n\n"
+                    f"{pergunta_categoria}\n"
+                    f"Envie 'Sim' para confirmar, 'Editar' para alterar ou informe a categoria correta diretamente."
                 )
-                
+
                 estado["gasto_diario_pendente_confirmacao"] = dados_gasto
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_gasto_diario"
                 estado_modificado_fluxo = True
                 mensagem_tratada = True
                 send_message(from_number, mensagens.estilo_msg(msg_confirmacao))
-                logging.info(f"Pedido de confirmação para gasto diário enviado para {from_number}.")
                 salvar_estado(from_number, estado)
                 return {"status": "aguardando confirmação de gasto diário"}
             else:
-                # Se não interpretou como gasto, deixa seguir para o fluxo geral/GPT
-                logging.info(f"Mensagem de {from_number} não interpretada como gasto diário simples.")
                 pass 
 
         # --- FLUXO: CONFIRMAÇÃO DE GASTO DIÁRIO --- 
