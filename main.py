@@ -971,11 +971,14 @@ async def whatsapp_webhook(request: Request):
                 send_message(from_number, mensagens.estilo_msg("✅ Maravilha! Lembretes automáticos ativados. Vou te avisar sempre no dia anterior e também no dia do vencimento, beleza? 😉"))
                 estado["lembretes_fixos_ativos"] = True
                 gastos_fixos_aba = get_aba(SHEET_ID_GASTOS, "Gastos Fixos")
-                celulas = gastos_fixos_aba.findall(from_number)
+                celulas = gastos_fixos_aba.findall(str(from_number))
 
-                for celula in celulas:
-                    linha = celula.row
-                    gastos_fixos_aba.update_cell(linha, 7, "SIM")  # Coluna 7 é "LEMBRETE_ATIVO"
+                if celulas:
+                    for celula in celulas:
+                        linha = celula.row
+                        gastos_fixos_aba.update_cell(linha, 7, "SIM")  # Coluna G (LEMBRETE_ATIVO)
+                else:
+                    logging.warning(f"Nenhuma célula encontrada para o número {from_number} em Gastos Fixos.")
 
             elif resposta_usuario in respostas_nao:
                 send_message(from_number, mensagens.estilo_msg("Combinado! Sem lembretes por enquanto. Se precisar depois é só me avisar. 😉"))
