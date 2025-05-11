@@ -31,10 +31,33 @@ CATEGORIAS_AUTOMATICAS = {
 
 # === CATEGORIZAÇÃO INTELIGENTE ===
 def categorizar(descricao):
-    descricao = descricao.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ç", "c")
-    for chave, categoria in CATEGORIAS_AUTOMATICAS.items():
-        if chave in descricao:
-            return categoria
+    descricao_original = descricao.lower()
+    descricao = descricao_original.replace("á", "a").replace("à", "a").replace("ã", "a").replace("â", "a") \
+                                 .replace("é", "e").replace("ê", "e").replace("í", "i") \
+                                 .replace("ó", "o").replace("ô", "o").replace("õ", "o").replace("ú", "u") \
+                                 .replace("ç", "c")
+
+    termos_categoria = {
+        "Alimentação": ["almoco", "jantar", "cafe", "ifood", "padaria", "lanche", "restaurante"],
+        "Saúde": ["farmacia", "remedio", "consulta", "medico", "hospital", "exame", "plano saude"],
+        "Transporte": ["combustivel", "gasolina", "uber", "taxi", "transporte", "estacionamento"],
+        "Moradia": ["agua", "luz", "internet", "aluguel", "condominio", "iptu", "prestacao", "energia"],
+        "Lazer": ["shopping", "cinema", "netflix", "viagem", "hobby", "passeio", "entretenimento"],
+        "Educação": ["escola", "curso", "faculdade", "colegio", "livro", "mensalidade", "educacao"],
+        "Vestuário": ["roupa", "sapato", "tenis", "vestuario", "camisa", "calca", "loja"],
+        "Serviços": ["faxina", "diarista", "servico", "manutencao", "conserto", "reparo"],
+        "Impostos e taxas": ["imposto", "taxa", "tributo", "licenciamento", "multa"],
+        "Doações": ["doacao", "igreja", "dizimo", "caridade"],
+        "Investimentos": ["investimento", "aplicacao", "aporte", "poupanca"],
+        "Cuidados pessoais": ["barbearia", "cabeleireiro", "salão", "beleza", "higiene"],
+        "Outros": ["outros", "diversos"]
+    }
+
+    for categoria, termos in termos_categoria.items():
+        for termo in termos:
+            if termo in descricao:
+                return categoria
+
     return "A DEFINIR"
 
 # === GERA ID ÚNICO ===
