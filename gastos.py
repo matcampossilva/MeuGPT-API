@@ -38,19 +38,20 @@ def categorizar(descricao):
                                  .replace("ç", "c")
 
     termos_categoria = {
-        "Alimentação": ["almoco", "jantar", "cafe", "ifood", "padaria", "lanche", "restaurante"],
-        "Saúde": ["farmacia", "remedio", "consulta", "medico", "hospital", "exame", "plano saude"],
+        "Alimentação": ["supermercado", "almoco", "jantar", "cafe", "ifood", "padaria", "lanche", "restaurante"],
+        "Saúde": ["farmacia", "remedio", "consulta", "medico", "hospital", "exame", "plano de saude", "seguro saude", "unimed", "saude"],
         "Transporte": ["combustivel", "gasolina", "uber", "taxi", "transporte", "estacionamento"],
-        "Moradia": ["agua", "luz", "internet", "aluguel", "condominio", "iptu", "prestacao", "energia"],
-        "Lazer": ["shopping", "cinema", "netflix", "viagem", "hobby", "passeio", "entretenimento"],
+        "Moradia": ["agua", "luz", "internet", "aluguel", "condominio", "iptu", "prestacao", "energia", "faxina", "diarista", "empregada domestica", "funcionaria domestica", "servico", "jardineiro", "piscineiro", "manutencao", "conserto", "reparo"],
+        "Lazer": ["shopping", "cinema", "netflix", "viagem", "hobby", "passeio", "entretenimento", "restauratne"],
         "Educação": ["escola", "curso", "faculdade", "colegio", "livro", "mensalidade", "educacao"],
         "Vestuário": ["roupa", "sapato", "tenis", "vestuario", "camisa", "calca", "loja"],
-        "Serviços": ["faxina", "diarista", "servico", "manutencao", "conserto", "reparo"],
         "Impostos e taxas": ["imposto", "taxa", "tributo", "licenciamento", "multa"],
-        "Doações": ["doacao", "igreja", "dizimo", "caridade"],
+        "Doações": ["doacao", "igreja", "dizimo", "caridade", "esmola"],
         "Investimentos": ["investimento", "aplicacao", "aporte", "poupanca"],
-        "Cuidados pessoais": ["barbearia", "cabeleireiro", "salão", "beleza", "higiene"],
-        "Outros": ["outros", "diversos"]
+        "Cuidados pessoais": ["barbearia", "cabeleireiro", "salão", "beleza", "higiene", "manicure", "botox", "dermato"],
+        "Outros": ["outros", "diversos", "cartao", "cartao de credito"],
+        "Presentes": ["presente"],
+        "Viagens": ["viagem"]
     }
 
     for categoria, termos in termos_categoria.items():
