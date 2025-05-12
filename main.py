@@ -671,7 +671,7 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: CONFIRMAÇÃO E REGISTRO EFETIVO NA PLANILHA ---
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_gastos_fixos":
-            resposta_usuario = incoming_msg.lower().strip().replace(".", "").replace("!", "")
+            resposta_usuario = incoming_msg.lower().strip().replace(".", "").replace("!", "").replace('"', "")
 
             confirmacoes = [
                 "sim", "confirmo", "confirmar", "isso", "ok", "perfeito", "correto",
@@ -688,7 +688,9 @@ async def whatsapp_webhook(request: Request):
                 "peraí", "espera aí", "tem erro", "preciso ajustar", "revisar",
                 "rever", "não confirma", "não é isso", "quero alterar", "quero corrigir",
                 "quero editar", "vou corrigir", "vou editar", "faltou um item", "esqueci",
-                "gostaria de corrigir", "gostaria de editar", "gostaria de alterar"
+                "gostaria de corrigir", "gostaria de editar", "gostaria de alterar", "ajuste", "ajustar",
+                "categoria", "valor errado", "descrição errada", "mude", "ajuste a categoria", "ajuste o valor",
+                "corrija", "corrige"
             ]
 
             if any(palavra in resposta_usuario for palavra in confirmacoes):
@@ -726,7 +728,7 @@ async def whatsapp_webhook(request: Request):
 
             elif any(palavra in resposta_usuario for palavra in correcoes):
                 resposta = "Tranquilo! Me mande o que precisa ser ajustado."
-                estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
+                estado["ultimo_fluxo"] = "aguardando_edicao_gasto_fixo"
 
             else:
                 resposta = "🤔 Não entendi perfeitamente. Pode confirmar pra mim ou indicar se precisa corrigir algo?"
