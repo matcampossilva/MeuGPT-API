@@ -678,7 +678,8 @@ async def whatsapp_webhook(request: Request):
                 "positivo", "vai", "segue", "manda ver", "tudo certo", "confirmado",
                 "claro", "exato", "certinho", "é isso mesmo", "pode seguir", "pode confirmar",
                 "correta", "corretas", "esta correto", "estao corretas", "tudo ok", "esta certo",
-                "beleza", "estao corretos", "tudo bem", "vamos em frente"
+                "beleza", "estao corretos", "tudo bem", "vamos em frente", "ok tudo certo",
+                "sim tudo certo", "confirmado tudo certo", "ok correto", "ok certinho"
             ]
 
             correcoes = [
@@ -708,7 +709,7 @@ async def whatsapp_webhook(request: Request):
                             break
 
                     if duplicado:
-                        continue  # pula gastos duplicados
+                        continue
 
                     resultado = salvar_gasto_fixo(
                         from_number, gasto["descricao"], gasto["valor"], gasto["dia"], gasto["categoria_status"]
