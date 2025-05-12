@@ -592,6 +592,7 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: REGISTRAR E CONFIRMAR GASTOS FIXOS (OTIMIZADO E REVISADO) ---
         elif estado.get("ultimo_fluxo") == "aguardando_registro_gastos_fixos":
+            estado["gastos_fixos_pendentes_confirmacao"] = []
             linhas = incoming_msg.strip().split("\n")
             gastos_fixos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
             erros = []
@@ -676,27 +677,43 @@ async def whatsapp_webhook(request: Request):
                 "sim", "confirmo", "confirmar", "isso", "ok", "perfeito", "correto",
                 "positivo", "vai", "segue", "manda ver", "tudo certo", "confirmado",
                 "claro", "exato", "certinho", "é isso mesmo", "pode seguir", "pode confirmar",
-                "correta", "corretas", "esta correto", "estao corretas" "tudo ok", "esta certo", "beleza",
-                "estao corretos","tudo bem", "vamos em frente"
+                "correta", "corretas", "esta correto", "estao corretas", "tudo ok", "esta certo",
+                "beleza", "estao corretos", "tudo bem", "vamos em frente"
             ]
 
             correcoes = [
                 "editar", "corrigir", "alterar", "mudar", "errado", "nao", "não",
-                "incorreto", "calma", "pera", "espera", "voltar", "ainda não", 
-                "peraí", "espera aí", "tem erro", "preciso ajustar", "revisar", 
+                "incorreto", "calma", "pera", "espera", "voltar", "ainda não",
+                "peraí", "espera aí", "tem erro", "preciso ajustar", "revisar",
                 "rever", "não confirma", "não é isso", "quero alterar", "quero corrigir",
-                "quero editar", "vou corrigir", "vou editar", "faltou um item" "esqeci"
+                "quero editar", "vou corrigir", "vou editar", "faltou um item", "esqueci",
                 "gostaria de corrigir", "gostaria de editar", "gostaria de alterar"
             ]
 
             if any(palavra in resposta_usuario for palavra in confirmacoes):
-
                 gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
                 sucesso = []
                 falha = []
 
+                aba_gastos_fixos = get_aba(SHEET_ID_GASTOS, "Gastos Fixos")
+
                 for gasto in gastos_pendentes:
-                    resultado = salvar_gasto_fixo(from_number, gasto["descricao"], gasto["valor"], gasto["dia"], gasto["categoria_status"])
+                    celulas_existentes = aba_gastos_fixos.findall(str(from_number))
+                    duplicado = False
+
+                    for cel in celulas_existentes:
+                        linha_atual = aba_gastos_fixos.row_values(cel.row)
+                        if gasto["descricao"].strip().lower() == linha_atual[1].strip().lower():
+                            duplicado = True
+                            break
+
+                    if duplicado:
+                        continue  # pula gastos duplicados
+
+                    resultado = salvar_gasto_fixo(
+                        from_number, gasto["descricao"], gasto["valor"], gasto["dia"], gasto["categoria_status"]
+                    )
+
                     if resultado["status"] == "ok":
                         sucesso.append(gasto["descricao"])
                     else:
@@ -709,7 +726,7 @@ async def whatsapp_webhook(request: Request):
                 resposta += "\n\nQuer que eu ative lembretes automáticos pra você não esquecer nenhuma dessas contas?"
                 estado["ultimo_fluxo"] = "aguardando_confirmacao_lembretes_fixos"
 
-            elif resposta_usuario in correcoes:
+            elif any(palavra in resposta_usuario for palavra in correcoes):
                 resposta = "Tranquilo! Me mande o que precisa ser ajustado."
                 estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
 
@@ -721,6 +738,7 @@ async def whatsapp_webhook(request: Request):
             return {"status": "confirmação de gastos fixos finalizada"}
 
         # --- FLUXO: PROCESSANDO EDIÇÃO DE GASTO FIXO ---
+
         elif estado.get("ultimo_fluxo") == "aguardando_edicao_gasto_fixo":
             logging.info(f"Processando edição de gasto fixo solicitada por {from_number}.")
             gastos_pendentes = estado.get("gastos_fixos_pendentes_confirmacao", [])
