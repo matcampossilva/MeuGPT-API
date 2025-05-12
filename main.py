@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import openai
 import requests
@@ -12,8 +11,7 @@ import datetime
 import re
 import json 
 import logging 
-import mensagens # Importa o módulo mensagens
-# Importa funções de gastos.py (categorizar foi atualizada)
+import mensagens
 from gastos import registrar_gasto, categorizar, corrigir_gasto, atualizar_categoria, parsear_gastos_em_lote 
 from estado_usuario import salvar_estado, carregar_estado, resetar_estado, resposta_enviada_recentemente, salvar_ultima_resposta
 from gerar_resumo import gerar_resumo
@@ -23,14 +21,13 @@ from armazenar_mensagem import armazenar_mensagem
 from definir_limite import salvar_limite_usuario
 from memoria_usuario import resumo_do_mes, verificar_limites, contexto_principal_usuario
 from emocional import detectar_emocao, aumento_pos_emocao
-# Importa função de registrar_gastos_fixos.py - Renomeada para clareza
 from registrar_gastos_fixos import salvar_gasto_fixo, atualizar_categoria_gasto_fixo 
-from planilhas import get_pagantes, get_gratuitos
+from planilhas import get_pagantes, get_gratuitos, get_aba
 from engajamento import avaliar_engajamento
 from indicadores import get_indicadores
 from enviar_alertas import verificar_alertas
 from enviar_lembretes import enviar_lembretes
-from consultas import consultar_status_limites # Importa a nova função
+from consultas import consultar_status_limites
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -962,7 +959,7 @@ async def whatsapp_webhook(request: Request):
 
         # --- FLUXO: CONFIRMAÇÃO DE LEMBRETES (Gastos Fixos) --- 
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_lembretes_fixos":
-            resposta_usuario = incoming_msg.lower().strip()
+            resposta_usuario = incoming_msg.lower().strip().replace(".", "").replace("!", "").replace("?", "")
 
             respostas_sim = ["sim", "claro", "pode ativar", "ativa", "ativar", "com certeza", "isso", "quero", "positivo", "por favor"]
             respostas_nao = ["não", "nao", "dispenso", "deixa", "nada", "negativo", "melhor não", "melhor nao", "não precisa", "tranquilo"]
