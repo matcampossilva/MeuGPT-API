@@ -686,6 +686,7 @@ async def whatsapp_webhook(request: Request):
                 "peraí", "espera aí", "tem erro", "preciso ajustar", "revisar", 
                 "rever", "não confirma", "não é isso", "quero alterar", "quero corrigir",
                 "quero editar", "vou corrigir", "vou editar", "faltou um item" "esqeci"
+                "gostaria de corrigir", "gostaria de editar", "gostaria de alterar"
             ]
 
             if any(palavra in resposta_usuario for palavra in confirmacoes):
@@ -962,8 +963,8 @@ async def whatsapp_webhook(request: Request):
         elif estado.get("ultimo_fluxo") == "aguardando_confirmacao_lembretes_fixos":
             resposta_usuario = incoming_msg.lower().strip().replace(".", "").replace("!", "").replace("?", "")
 
-            respostas_sim = ["sim", "claro", "pode ativar", "ativa", "ativar", "com certeza", "isso", "quero", "positivo", "por favor"]
-            respostas_nao = ["não", "nao", "dispenso", "deixa", "nada", "negativo", "melhor não", "melhor nao", "não precisa", "tranquilo"]
+            respostas_sim = ["sim", "claro", "pode ativar", "ativa", "ativar", "com certeza", "isso", "quero", "positivo", "por favor", "quero sim", "gostaria"]
+            respostas_nao = ["não", "nao", "dispenso", "deixa", "nada", "negativo", "melhor não", "melhor nao", "não precisa", "tranquilo", "prefiro nao"]
 
             if resposta_usuario in respostas_sim:
                 send_message(from_number, mensagens.estilo_msg("✅ Maravilha! Lembretes automáticos ativados. Vou te avisar sempre no dia anterior e também no dia do vencimento, beleza? 😉"))
