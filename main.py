@@ -1188,6 +1188,42 @@ async def whatsapp_webhook(request: Request):
             send_message(from_number, mensagens.estilo_msg(resposta))
             mensagem_tratada = True  # Importante marcar como tratada aqui para não chamar GPT
 
+        msg_limpa = incoming_msg.strip().lower()
+
+        # Registro de despesa fixa
+        if ("despesa fixa" in msg_limpa or "gasto fixo" in msg_limpa) and any(palavra in msg_limpa for palavra in ["registrar", "relacionar", "adicionar", "lançar", "incluir", "colocar", "cadastrar", "anotar"]):
+            resposta = "Claro! Me envie os detalhes da despesa fixa no formato: Descrição – Valor – Dia."
+            send_message(from_number, mensagens.estilo_msg(resposta))
+            estado["ultimo_fluxo"] = "aguardando_registro_gastos_fixos"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando detalhes despesa fixa"}
+
+        # Registro de despesa variável (gastos diários)
+        elif ("gasto" in msg_limpa or "despesa" in msg_limpa) and any(palavra in msg_limpa for palavra in ["registrar", "relacionar", "anotar", "adicionar", "lançar", "incluir", "gastei"]):
+            resposta = "Perfeito! Me envie o gasto diário assim: Descrição – Valor – Forma de Pagamento – Categoria (opcional)."
+            send_message(from_number, mensagens.estilo_msg(resposta))
+            estado["ultimo_fluxo"] = "aguardando_gasto_diario"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando detalhes gasto diário"}
+
+        # Definição de limite de gastos
+        elif ("limite" in msg_limpa or "orçamento" in msg_limpa) and any(palavra in msg_limpa for palavra in ["definir", "colocar", "ajustar", "mudar", "alterar", "estabelecer"]):
+            resposta = "Vamos definir os limites! Me envie no formato: Categoria – Valor."
+            send_message(from_number, mensagens.estilo_msg(resposta))
+            estado["ultimo_fluxo"] = "aguardando_definicao_limites"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando definição de limites"}
+
+        # Ativação de lembretes automáticos para gastos fixos
+        elif ("lembrete" in msg_limpa or "alerta" in msg_limpa or "notificação" in msg_limpa) and any(palavra in msg_limpa for palavra in ["ativar", "ligar", "colocar", "habilitar", "quero"]):
+            resposta = "Maravilha! Ativarei lembretes automáticos. Deseja que eu envie um lembrete no dia anterior, no dia do vencimento ou em ambos?"
+            send_message(from_number, mensagens.estilo_msg(resposta))
+            estado["ultimo_fluxo"] = "aguardando_ativacao_lembretes"
+            salvar_estado(from_number, estado)
+            return {"status": "aguardando ativação lembretes"}
+
+        # Caso não tenha identificado a intenção, prossegue normalmente.
+
         # --- FLUXO GERAL (GPT) --- 
         if not mensagem_tratada:
             logging.info(f"Mensagem de {from_number} não tratada por fluxos específicos. Enviando para GPT.")
