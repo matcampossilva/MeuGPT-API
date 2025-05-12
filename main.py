@@ -697,18 +697,15 @@ async def whatsapp_webhook(request: Request):
                 falha = []
 
                 aba_gastos_fixos = get_aba(SHEET_ID_GASTOS, "Gastos Fixos")
+                celulas_existentes = aba_gastos_fixos.findall(str(from_number))
+
+                descricoes_existentes = set()
+                for cel in celulas_existentes:
+                    linha_atual = aba_gastos_fixos.row_values(cel.row)
+                    descricoes_existentes.add(linha_atual[1].strip().lower())
 
                 for gasto in gastos_pendentes:
-                    celulas_existentes = aba_gastos_fixos.findall(str(from_number))
-                    duplicado = False
-
-                    for cel in celulas_existentes:
-                        linha_atual = aba_gastos_fixos.row_values(cel.row)
-                        if gasto["descricao"].strip().lower() == linha_atual[1].strip().lower():
-                            duplicado = True
-                            break
-
-                    if duplicado:
+                    if gasto["descricao"].strip().lower() in descricoes_existentes:
                         continue
 
                     resultado = salvar_gasto_fixo(
